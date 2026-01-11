@@ -263,9 +263,10 @@ serve(async (req) => {
           );
         }
 
+        // LIAM API expects 'transactionNumber' not 'memoryId'
         const forgetBody: Record<string, any> = {
           userKey,
-          memoryId,
+          transactionNumber: memoryId,
         };
         
         if (permanent !== undefined) {
