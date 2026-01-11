@@ -1,9 +1,8 @@
-import { BottomNav } from "@/components/BottomNav";
 import { PageHeader } from "@/components/PageHeader";
 
 export default function Profile() {
   return (
-    <div className="min-h-screen bg-background pb-nav">
+    <div className="pb-nav">
       <div className="px-5 pt-14">
         <PageHeader 
           title="Profile" 
@@ -18,8 +17,6 @@ export default function Profile() {
           </div>
         </div>
       </div>
-      
-      <BottomNav />
     </div>
   );
 }

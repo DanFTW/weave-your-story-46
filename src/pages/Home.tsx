@@ -1,9 +1,8 @@
-import { BottomNav } from "@/components/BottomNav";
 import { PageHeader } from "@/components/PageHeader";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background pb-nav">
+    <div className="pb-nav">
       <div className="px-5 pt-14">
         <PageHeader 
           title="Welcome to Weave" 
@@ -19,8 +18,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-      
-      <BottomNav />
     </div>
   );
 }
