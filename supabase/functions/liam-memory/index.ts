@@ -206,7 +206,7 @@ serve(async (req) => {
     console.log('Private key imported successfully');
 
     // Parse request
-    const { action, content, tag } = await req.json();
+    const { action, content, tag, memoryId, permanent } = await req.json();
     console.log(`LIAM Memory action: ${action}`);
 
     let response: Response;
@@ -249,6 +249,33 @@ serve(async (req) => {
           '/memory/list',
           'POST',
           listBody,
+          apiKey,
+          privateKey
+        );
+        break;
+      }
+
+      case 'forget': {
+        if (!memoryId) {
+          return new Response(
+            JSON.stringify({ error: 'memoryId is required for forget action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const forgetBody: Record<string, any> = {
+          userKey,
+          memoryId,
+        };
+        
+        if (permanent !== undefined) {
+          forgetBody.permanent = permanent;
+        }
+
+        response = await makeAuthenticatedRequest(
+          '/memory/forget',
+          'POST',
+          forgetBody,
           apiKey,
           privateKey
         );

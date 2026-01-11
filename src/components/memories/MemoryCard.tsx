@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { ArrowRight, Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2 } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -59,6 +60,7 @@ function parseTags(memory: Memory): string[] {
 }
 
 export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps) {
+  const navigate = useNavigate();
   const config = getCategoryConfig(memory.category, memory.tag);
   const Icon = config.icon;
   const description = memory.content;
@@ -73,12 +75,17 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
     }
   })();
 
+  const handleClick = () => {
+    navigate(`/memory/${memory.id}`);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: isStacked ? 0 : index * 0.02 }}
-      className="rounded-2xl bg-card overflow-hidden border border-border/30 shadow-sm"
+      onClick={handleClick}
+      className="rounded-2xl bg-card overflow-hidden border border-border/30 shadow-sm cursor-pointer transition-shadow hover:shadow-md active:scale-[0.99]"
     >
       {/* Compact Header */}
       <div className={cn("px-3 py-2", config.gradient)}>
@@ -116,7 +123,7 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
         )}
         
         {/* Footer */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-start">
           <span className={cn(
             "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
             isSynced 
@@ -135,10 +142,6 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
               </>
             )}
           </span>
-          
-          <button className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 active:scale-95">
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
     </motion.div>
