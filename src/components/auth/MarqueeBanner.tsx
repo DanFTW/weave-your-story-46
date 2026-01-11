@@ -4,11 +4,11 @@ export function MarqueeBanner() {
   const items = [...Array(30)].map((_, i) => (
     <span
       key={i}
-      className="flex items-center gap-6 mx-8 text-sm font-medium tracking-wide whitespace-nowrap text-foreground/90"
+      className="flex items-center text-sm font-medium tracking-wide whitespace-nowrap text-foreground/90"
     >
-      <span>Weave Corp Prototype</span>
+      <span className="px-6">Weave Corp Prototype</span>
       <span className="text-[2.5rem] leading-none -mt-1">·</span>
-      <span>Fabric</span>
+      <span className="px-6">Fabric</span>
       <span className="text-[2.5rem] leading-none -mt-1">·</span>
     </span>
   ));
