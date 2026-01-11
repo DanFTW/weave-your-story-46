@@ -66,7 +66,7 @@ export default function Auth() {
         <div className="relative">
           <div 
             style={{
-              WebkitBoxReflect: 'below -10px linear-gradient(to bottom, transparent 50%, rgba(10, 10, 10, 0.15) 70%, rgba(10, 10, 10, 0.4) 100%)',
+              WebkitBoxReflect: 'below -5px linear-gradient(to bottom, transparent 35%, rgba(10, 10, 10, 0.12) 60%, rgba(10, 10, 10, 0.35) 100%)',
             }}
           >
             <LiquidMetal
