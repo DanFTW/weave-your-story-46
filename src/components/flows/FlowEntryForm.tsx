@@ -5,13 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 interface FlowEntryFormProps {
@@ -29,24 +22,51 @@ const gradientClasses: Record<string, string> = {
   pink: "thread-gradient-pink",
 };
 
+// Quick select options for common relationships
+const quickRelationships = [
+  { label: "Mom", value: "Mom" },
+  { label: "Dad", value: "Dad" },
+  { label: "Sister", value: "Sister" },
+  { label: "Brother", value: "Brother" },
+  { label: "Spouse", value: "Spouse" },
+  { label: "Child", value: "Child" },
+  { label: "Grandma", value: "Grandma" },
+  { label: "Grandpa", value: "Grandpa" },
+  { label: "Other", value: "Other" },
+];
+
 export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryFormProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
+  const [showOtherInput, setShowOtherInput] = useState(false);
 
   useEffect(() => {
     if (entry) {
       setFormData(entry.data);
+      // Check if relationship is custom
+      const isQuickRelationship = quickRelationships.some(r => r.value === entry.data.relationship);
+      setShowOtherInput(!isQuickRelationship && !!entry.data.relationship);
     } else {
-      // Initialize with empty strings
       const initial: Record<string, string> = {};
       config.fields.forEach(field => {
         initial[field.id] = '';
       });
       setFormData(initial);
+      setShowOtherInput(false);
     }
   }, [entry, config.fields]);
 
   const handleChange = (fieldId: string, value: string) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
+  };
+
+  const handleRelationshipSelect = (value: string) => {
+    if (value === "Other") {
+      setShowOtherInput(true);
+      handleChange('relationship', '');
+    } else {
+      setShowOtherInput(false);
+      handleChange('relationship', value);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -59,6 +79,104 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
     .every(f => formData[f.id]?.trim());
 
   const Icon = config.icon;
+
+  const renderField = (field: typeof config.fields[0]) => {
+    // Special handling for relationship field - use quick select chips
+    if (field.id === 'relationship') {
+      return (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {quickRelationships.map(rel => (
+              <button
+                key={rel.value}
+                type="button"
+                onClick={() => handleRelationshipSelect(rel.value)}
+                className={cn(
+                  "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                  (formData.relationship === rel.value || (rel.value === "Other" && showOtherInput))
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                )}
+              >
+                {rel.label}
+              </button>
+            ))}
+          </div>
+          {showOtherInput && (
+            <Input
+              placeholder="Enter relationship"
+              value={formData.relationship || ''}
+              onChange={(e) => handleChange('relationship', e.target.value)}
+              className="h-12"
+              autoFocus
+            />
+          )}
+        </div>
+      );
+    }
+
+    if (field.type === 'text') {
+      return (
+        <Input
+          id={field.id}
+          placeholder={field.placeholder}
+          value={formData[field.id] || ''}
+          onChange={(e) => handleChange(field.id, e.target.value)}
+          className="h-12"
+        />
+      );
+    }
+
+    if (field.type === 'textarea') {
+      return (
+        <Textarea
+          id={field.id}
+          placeholder={field.placeholder}
+          value={formData[field.id] || ''}
+          onChange={(e) => handleChange(field.id, e.target.value)}
+          className="min-h-[100px] resize-none"
+        />
+      );
+    }
+
+    if (field.type === 'date') {
+      return (
+        <Input
+          id={field.id}
+          type="date"
+          placeholder={field.placeholder}
+          value={formData[field.id] || ''}
+          onChange={(e) => handleChange(field.id, e.target.value)}
+          className="h-12"
+        />
+      );
+    }
+
+    // Default select for other select fields
+    if (field.type === 'select' && field.options) {
+      return (
+        <div className="flex flex-wrap gap-2">
+          {field.options.map(option => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleChange(field.id, option)}
+              className={cn(
+                "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                formData[field.id] === option
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -85,7 +203,7 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex-1 px-5 py-6 pb-32">
+      <form onSubmit={handleSubmit} className="flex-1 px-5 py-5 pb-32">
         <div className="space-y-5">
           {config.fields.map(field => (
             <div key={field.id} className="space-y-2">
@@ -93,55 +211,7 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
                 {field.label}
                 {field.required && <span className="text-destructive ml-1">*</span>}
               </Label>
-              
-              {field.type === 'text' && (
-                <Input
-                  id={field.id}
-                  placeholder={field.placeholder}
-                  value={formData[field.id] || ''}
-                  onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="h-12"
-                />
-              )}
-              
-              {field.type === 'textarea' && (
-                <Textarea
-                  id={field.id}
-                  placeholder={field.placeholder}
-                  value={formData[field.id] || ''}
-                  onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="min-h-[100px] resize-none"
-                />
-              )}
-              
-              {field.type === 'date' && (
-                <Input
-                  id={field.id}
-                  type="date"
-                  placeholder={field.placeholder}
-                  value={formData[field.id] || ''}
-                  onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="h-12"
-                />
-              )}
-              
-              {field.type === 'select' && field.options && (
-                <Select
-                  value={formData[field.id] || ''}
-                  onValueChange={(value) => handleChange(field.id, value)}
-                >
-                  <SelectTrigger className="h-12">
-                    <SelectValue placeholder={field.placeholder} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {field.options.map(option => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              {renderField(field)}
             </div>
           ))}
         </div>

@@ -42,7 +42,7 @@ export function FlowEntryList({
         gradient={config.gradient}
       />
       
-      <div className="flex-1 px-5 -mt-2 pb-32">
+      <div className="flex-1 px-5 pt-4 pb-32">
         {/* Entry Cards */}
         <div className="space-y-3">
           {entries.map((entry, index) => (
