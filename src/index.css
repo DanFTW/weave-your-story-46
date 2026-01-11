@@ -50,14 +50,17 @@
     /* Thread card gradients */
     --thread-blue-from: 210 70% 55%;
     --thread-blue-to: 195 65% 50%;
-    --thread-teal-from: 160 50% 45%;
-    --thread-teal-to: 150 45% 50%;
+    --thread-teal-from: 155 45% 35%;
+    --thread-teal-to: 165 40% 40%;
     --thread-purple-from: 270 45% 55%;
     --thread-purple-to: 280 50% 60%;
-    --thread-orange-from: 30 75% 55%;
-    --thread-orange-to: 25 70% 50%;
+    --thread-orange-from: 20 85% 55%;
+    --thread-orange-to: 25 80% 50%;
     --thread-pink-from: 340 70% 60%;
     --thread-pink-to: 330 65% 55%;
+
+    /* CTA colors */
+    --thread-orange: 20 85% 55%;
 
     /* Bottom nav */
     --nav-background: 0 0% 100%;
