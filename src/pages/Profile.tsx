@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileSettingsCard, SettingsRow } from "@/components/profile/ProfileSettingsCard";
 import { MailIcon, BellIcon, EyeIcon, SparkleIcon } from "@/components/profile/ProfileIcons";
+import { SwipeToUnlock } from "@/components/profile/SwipeToUnlock";
 
 export default function Profile() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -11,7 +12,8 @@ export default function Profile() {
     name: "Mari Kondo",
     handle: "DoesItBringJoy",
     email: "jonapple@gmail.com",
-    avatarUrl: undefined as string | undefined, // Set to undefined to show default gradient
+    avatarUrl: undefined as string | undefined,
+    mcpUrl: "mcp://liam.memory/user/abc123",
   };
 
   return (
@@ -66,6 +68,9 @@ export default function Profile() {
             onClick={() => {}}
           />
         </ProfileSettingsCard>
+
+        {/* MCP URL Swipe to Unlock */}
+        <SwipeToUnlock mcpUrl={user.mcpUrl} />
       </div>
     </div>
   );
