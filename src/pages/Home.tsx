@@ -1,6 +1,17 @@
+import { useState } from 'react';
 import { PageHeader } from "@/components/PageHeader";
+import { QuickMemoryFAB } from "@/components/home/QuickMemoryFAB";
+import { QuickMemoryDrawer } from "@/components/home/QuickMemoryDrawer";
+import { useLiamMemory } from "@/hooks/useLiamMemory";
 
 export default function Home() {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { createMemory, isCreating } = useLiamMemory();
+
+  const handleSaveMemory = async (content: string) => {
+    return await createMemory(content, 'quick-note');
+  };
+
   return (
     <div className="pb-nav">
       <div className="px-5 pt-14">
@@ -18,6 +29,15 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <QuickMemoryFAB onClick={() => setDrawerOpen(true)} />
+      
+      <QuickMemoryDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        onSave={handleSaveMemory}
+        isSaving={isCreating}
+      />
     </div>
   );
 }
