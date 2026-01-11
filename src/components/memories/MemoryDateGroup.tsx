@@ -17,7 +17,9 @@ function groupByCategory(memories: Memory[]): CategoryGroup[] {
   const groups: Record<string, Memory[]> = {};
   
   memories.forEach((memory) => {
-    const category = memory.category?.toLowerCase().replace(/\s+/g, '_') || 'default';
+    // Use category first, then fall back to tag for categorization
+    const rawCategory = memory.category || memory.tag || 'default';
+    const category = rawCategory.toLowerCase().replace(/\s+/g, '_');
     if (!groups[category]) {
       groups[category] = [];
     }

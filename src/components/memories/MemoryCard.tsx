@@ -28,14 +28,24 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
 };
 
 export function getCategoryConfig(category?: string, tag?: string) {
+  // Normalize and check category first
   if (category) {
     const lowerCategory = category.toLowerCase().replace(/\s+/g, '_');
     if (categoryConfig[lowerCategory]) return categoryConfig[lowerCategory];
   }
+  // Then check tag
   if (tag) {
     const lowerTag = tag.toLowerCase().replace(/\s+/g, '_');
     if (categoryConfig[lowerTag]) return categoryConfig[lowerTag];
   }
+  // Check if category or tag contains known keywords
+  const combined = `${category || ''} ${tag || ''}`.toLowerCase();
+  if (combined.includes('family')) return categoryConfig.family;
+  if (combined.includes('work')) return categoryConfig.work;
+  if (combined.includes('food')) return categoryConfig.food;
+  if (combined.includes('shopping')) return categoryConfig.shopping;
+  if (combined.includes('personal')) return categoryConfig.personal;
+  
   return categoryConfig.default;
 }
 
