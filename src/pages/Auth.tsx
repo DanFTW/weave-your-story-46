@@ -57,37 +57,46 @@ export default function Auth() {
 
       {/* Main content */}
       <motion.div 
-        className="flex-1 flex flex-col items-center justify-center px-6 relative z-20"
+        className="flex-1 flex flex-col items-center pt-16 px-6 relative z-20"
         initial={{ opacity: 0 }}
         animate={{ opacity: contentVisible ? 1 : 0 }}
         transition={{ duration: 0.5 }}
       >
         {/* Liquid Metal Logo with Reflection */}
-        <div 
-          className="relative"
-          style={{
-            WebkitBoxReflect: 'below 0px linear-gradient(to bottom, transparent 40%, rgba(0, 0, 0, 0.3) 100%)',
-          }}
-        >
-          <LiquidMetal
-            speed={0.57}
-            softness={0.3}
-            repetition={4.95}
-            shiftRed={0.3}
-            shiftBlue={0.3}
-            distortion={0.16}
-            contour={0.92}
-            scale={1}
-            rotation={0}
-            shape="metaballs"
-            image="https://workers.paper.design/file-assets/01KCTK5DKMZ598450709A32YA1/01KCTK9DDYZVHR98C6HJJ9CVR0.svg"
-            colorBack="#00000000"
-            colorTint="#1050C5"
+        <div className="relative">
+          <div 
             style={{
-              backgroundColor: 'transparent',
-              borderRadius: '47px',
-              height: '320px',
-              width: '320px',
+              WebkitBoxReflect: 'below -10px linear-gradient(to bottom, transparent 50%, rgba(10, 10, 10, 0.15) 70%, rgba(10, 10, 10, 0.4) 100%)',
+            }}
+          >
+            <LiquidMetal
+              speed={0.57}
+              softness={0.3}
+              repetition={4.95}
+              shiftRed={0.3}
+              shiftBlue={0.3}
+              distortion={0.16}
+              contour={0.92}
+              scale={1}
+              rotation={0}
+              shape="metaballs"
+              image="https://workers.paper.design/file-assets/01KCTK5DKMZ598450709A32YA1/01KCTK9DDYZVHR98C6HJJ9CVR0.svg"
+              colorBack="#00000000"
+              colorTint="#1050C5"
+              style={{
+                backgroundColor: 'transparent',
+                borderRadius: '47px',
+                height: '280px',
+                width: '280px',
+              }}
+            />
+          </div>
+          {/* Fade overlay for reflection */}
+          <div 
+            className="absolute -bottom-32 left-0 right-0 h-32 pointer-events-none"
+            style={{
+              background: 'linear-gradient(to bottom, transparent, hsl(var(--background)) 60%)',
+              filter: 'blur(8px)',
             }}
           />
         </div>
