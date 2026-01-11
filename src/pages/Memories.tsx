@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { MemoryFilterBar } from "@/components/memories/MemoryFilterBar";
 import { MemoryList } from "@/components/memories/MemoryList";
@@ -9,17 +10,31 @@ export default function Memories() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const { listMemories, isListing } = useLiamMemory();
+  const location = useLocation();
+
+  // Handle deleted memory ID passed from MemoryDetail page
+  useEffect(() => {
+    const state = location.state as { deletedMemoryId?: string } | null;
+    if (state?.deletedMemoryId) {
+      setDeletedIds(prev => new Set(prev).add(state.deletedMemoryId!));
+      // Clear the state so it doesn't persist on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     async function fetchMemories() {
       const result = await listMemories();
       if (result) {
-        setMemories(result);
+        // Filter out any memories that were just deleted (handles API eventual consistency)
+        const filteredResult = result.filter(m => !deletedIds.has(m.id));
+        setMemories(filteredResult);
       }
     }
     fetchMemories();
-  }, []);
+  }, [deletedIds]);
 
   return (
     <div className="pb-nav">

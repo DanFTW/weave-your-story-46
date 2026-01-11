@@ -35,7 +35,9 @@ export default function MemoryDetail() {
     // Use permanent: true to actually remove from memory list
     const success = await forgetMemory(memoryId, true);
     if (success) {
-      navigate("/memories", { replace: true });
+      // Pass the deleted memory ID to the memories page so it can filter it out
+      // (handles LIAM API eventual consistency - list may return stale data briefly)
+      navigate("/memories", { replace: true, state: { deletedMemoryId: memoryId } });
     }
   };
 
