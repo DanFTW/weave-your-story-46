@@ -1,6 +1,25 @@
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/PageHeader";
+import { MemoryFilterBar } from "@/components/memories/MemoryFilterBar";
+import { MemoryList } from "@/components/memories/MemoryList";
+import { useLiamMemory } from "@/hooks/useLiamMemory";
+import { Memory } from "@/types/memory";
 
 export default function Memories() {
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const { listMemories, isListing } = useLiamMemory();
+
+  useEffect(() => {
+    async function fetchMemories() {
+      const result = await listMemories();
+      if (result) {
+        setMemories(result);
+      }
+    }
+    fetchMemories();
+  }, []);
+
   return (
     <div className="pb-nav">
       <div className="px-5 pt-14">
@@ -9,13 +28,20 @@ export default function Memories() {
           subtitle="All your saved memories" 
         />
         
-        <div className="mt-8 space-y-4">
-          <div className="rounded-2xl bg-card p-6 border border-border/50 text-center">
-            <p className="text-sm text-muted-foreground">
-              Your memories will appear here once you start creating them.
-            </p>
-          </div>
+        {/* Filter Bar */}
+        <div className="mt-6 mb-8">
+          <MemoryFilterBar 
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+          />
         </div>
+        
+        {/* Memory List */}
+        <MemoryList 
+          memories={memories}
+          isLoading={isListing}
+          activeFilter={activeFilter}
+        />
       </div>
     </div>
   );
