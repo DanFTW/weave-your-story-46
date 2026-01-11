@@ -287,6 +287,38 @@ serve(async (req) => {
         break;
       }
 
+      case 'changeTag': {
+        if (!memoryId) {
+          return new Response(
+            JSON.stringify({ error: 'memoryId is required for changeTag action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (!tag) {
+          return new Response(
+            JSON.stringify({ error: 'tag is required for changeTag action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const changeTagBody = {
+          userKey,
+          transactionNumber: memoryId,
+          notesKey: tag.toUpperCase().replace(/\s+/g, '_'),
+        };
+
+        console.log('ChangeTag request body:', JSON.stringify(changeTagBody));
+
+        response = await makeAuthenticatedRequest(
+          '/memory/changeTag',
+          'POST',
+          changeTagBody,
+          apiKey,
+          privateKey
+        );
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),
