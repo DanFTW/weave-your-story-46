@@ -89,7 +89,21 @@ export function useLiamMemory(): UseLiamMemoryReturn {
       }
 
       console.log('Memories retrieved:', data);
-      return data.memories || data;
+      
+      // Extract memories from nested API response structure
+      const rawMemories = data?.data?.memories || data?.memories || [];
+      
+      // Transform API response to our Memory interface
+      const memories: Memory[] = rawMemories.map((m: any, index: number) => ({
+        id: m.transactionNumber || m.queryHash || `memory-${index}`,
+        content: m.memory || m.content || '',
+        tag: m.notesKey || m.tag || undefined,
+        createdAt: parseApiDate(m.date),
+        category: m.category,
+        sensitivity: m.sensitivity,
+      }));
+      
+      return memories;
     } catch (err) {
       console.error('Unexpected error listing memories:', err);
       toast({
@@ -102,6 +116,21 @@ export function useLiamMemory(): UseLiamMemoryReturn {
       setIsListing(false);
     }
   };
+  
+  // Parse API date format "MM/DD/YYYY HH:mm:ss" to ISO string
+  function parseApiDate(dateStr: string): string {
+    if (!dateStr) return new Date().toISOString();
+    
+    try {
+      // Handle "01/11/2026 17:15:11" format
+      const [datePart, timePart] = dateStr.split(' ');
+      const [month, day, year] = datePart.split('/');
+      const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart || '00:00:00'}Z`;
+      return new Date(isoDate).toISOString();
+    } catch {
+      return new Date().toISOString();
+    }
+  }
 
   return {
     createMemory,
