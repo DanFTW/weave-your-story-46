@@ -1,16 +1,44 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FlowState, FlowPhase, FlowEntry, GeneratedMemory } from "@/types/flows";
 
-const initialState: FlowState = {
-  phase: 'overview',
-  entries: [],
-  editingEntryId: null,
-  generatedMemories: [],
-  savedMemoryIds: [],
+const STORAGE_KEY = 'flow-entries';
+
+const getInitialState = (flowId?: string): FlowState => {
+  if (flowId && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(`${STORAGE_KEY}-${flowId}`);
+      if (stored) {
+        const entries = JSON.parse(stored) as FlowEntry[];
+        return {
+          phase: entries.length > 0 ? 'list' : 'overview',
+          entries,
+          editingEntryId: null,
+          generatedMemories: [],
+          savedMemoryIds: [],
+        };
+      }
+    } catch (e) {
+      console.error('Failed to load flow entries:', e);
+    }
+  }
+  return {
+    phase: 'overview',
+    entries: [],
+    editingEntryId: null,
+    generatedMemories: [],
+    savedMemoryIds: [],
+  };
 };
 
-export function useFlowState() {
-  const [state, setState] = useState<FlowState>(initialState);
+export function useFlowState(flowId?: string) {
+  const [state, setState] = useState<FlowState>(() => getInitialState(flowId));
+
+  // Persist entries to localStorage
+  useEffect(() => {
+    if (flowId && state.entries.length > 0) {
+      localStorage.setItem(`${STORAGE_KEY}-${flowId}`, JSON.stringify(state.entries));
+    }
+  }, [flowId, state.entries]);
 
   const setPhase = useCallback((phase: FlowPhase) => {
     setState(prev => ({ ...prev, phase }));
@@ -114,8 +142,11 @@ export function useFlowState() {
   }, []);
 
   const reset = useCallback(() => {
-    setState(initialState);
-  }, []);
+    setState(getInitialState(flowId));
+    if (flowId) {
+      localStorage.removeItem(`${STORAGE_KEY}-${flowId}`);
+    }
+  }, [flowId]);
 
   const getEditingEntry = useCallback(() => {
     if (!state.editingEntryId) return null;

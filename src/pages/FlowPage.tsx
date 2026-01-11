@@ -37,7 +37,7 @@ export default function FlowPage() {
     setSavedMemoryIds,
     goToList,
     getEditingEntry,
-  } = useFlowState();
+  } = useFlowState(flowId);
 
   const [isConfirming, setIsConfirming] = useState(false);
 
