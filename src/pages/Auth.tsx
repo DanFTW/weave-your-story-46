@@ -125,17 +125,6 @@ export default function Auth() {
         </Button>
       </motion.div>
 
-      {/* Domain badge */}
-      <motion.div 
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: contentVisible ? 1 : 0 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
-      >
-        <div className="px-4 py-2 rounded-full bg-card border border-border/50 text-xs font-medium text-muted-foreground">
-          weave.lovable.app
-        </div>
-      </motion.div>
 
       {/* Auth Drawers */}
       <AuthDrawer 
