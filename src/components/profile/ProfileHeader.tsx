@@ -56,9 +56,8 @@ export function ProfileHeader({ name, handle, avatarUrl }: ProfileHeaderProps) {
             </div>
           </div>
           
-          {/* Name and handle */}
-          <h2 className="text-[26px] font-bold text-white drop-shadow-md mb-1 tracking-tight">{name}</h2>
-          <p className="text-white/65 text-[15px] font-medium">@{handle}</p>
+          {/* Name */}
+          <h2 className="text-[26px] font-bold text-white drop-shadow-md tracking-tight">{name}</h2>
         </div>
       </div>
       
