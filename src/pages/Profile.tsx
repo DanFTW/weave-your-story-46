@@ -1,42 +1,52 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileSettingsCard, SettingsRow } from "@/components/profile/ProfileSettingsCard";
 import { MailIcon, BellIcon, EyeIcon, SparkleIcon } from "@/components/profile/ProfileIcons";
 import { SwipeToUnlock } from "@/components/profile/SwipeToUnlock";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserApiKeys } from "@/hooks/useUserApiKeys";
 
 export default function Profile() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { hasKeys } = useUserApiKeys();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   
-  // Mock user data - replace with real data later
-  const user = {
-    name: "Mari Kondo",
-    handle: "DoesItBringJoy",
-    email: "jonapple@gmail.com",
-    avatarUrl: undefined as string | undefined,
-    mcpUrl: "mcp://liam.memory/user/abc123",
+  // User data from auth
+  const userData = {
+    name: user?.user_metadata?.full_name || "User",
+    handle: user?.email?.split('@')[0] || "user",
+    email: user?.email || "Not set",
+    avatarUrl: user?.user_metadata?.avatar_url,
+    mcpUrl: `mcp://liam.memory/user/${user?.id?.slice(0, 8) || 'guest'}`,
+  };
+
+  const handleEmailClick = () => {
+    navigate('/profile/api-keys');
   };
 
   return (
     <div className="min-h-screen bg-background pb-nav">
       {/* Header with blurred background */}
       <ProfileHeader 
-        name={user.name}
-        handle={user.handle}
-        avatarUrl={user.avatarUrl}
+        name={userData.name}
+        handle={userData.handle}
+        avatarUrl={userData.avatarUrl}
       />
       
       {/* Settings cards */}
       <div className="px-5 -mt-4 space-y-4 relative z-20">
-        {/* Email card */}
+        {/* Email card - navigates to API key config */}
         <ProfileSettingsCard>
           <SettingsRow
             icon={<MailIcon className="w-5 h-5 text-muted-foreground" />}
             iconBgColor="bg-muted"
-            label="Email"
-            value={user.email}
+            label="API Configuration"
+            value={hasKeys ? "Configured" : "Not set"}
             hasChevron
             isLast
-            onClick={() => {}}
+            onClick={handleEmailClick}
           />
         </ProfileSettingsCard>
         
@@ -70,7 +80,7 @@ export default function Profile() {
         </ProfileSettingsCard>
 
         {/* MCP URL Swipe to Unlock */}
-        <SwipeToUnlock mcpUrl={user.mcpUrl} />
+        <SwipeToUnlock mcpUrl={userData.mcpUrl} />
       </div>
     </div>
   );
