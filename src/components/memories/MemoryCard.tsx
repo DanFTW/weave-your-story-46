@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils";
 interface MemoryCardProps {
   memory: Memory;
   index: number;
+  isStacked?: boolean;
+  stackPosition?: number;
 }
 
 // Map categories to icons and gradients
-const categoryConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; gradient: string; label: string }> = {
+export const categoryConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; gradient: string; label: string }> = {
   quick_note: { icon: NotebookPen, gradient: "bg-gradient-to-r from-indigo-500 to-blue-600", label: "Quick Note" },
   family: { icon: Users, gradient: "bg-gradient-to-r from-fuchsia-500 to-purple-500", label: "Family Memory" },
   family_memory: { icon: Users, gradient: "bg-gradient-to-r from-fuchsia-500 to-purple-500", label: "Family Memory" },
@@ -25,7 +27,7 @@ const categoryConfig: Record<string, { icon: React.ComponentType<{ className?: s
   default: { icon: NotebookPen, gradient: "bg-gradient-to-r from-blue-400 to-indigo-500", label: "Memory" },
 };
 
-function getCategoryConfig(category?: string, tag?: string) {
+export function getCategoryConfig(category?: string, tag?: string) {
   if (category) {
     const lowerCategory = category.toLowerCase().replace(/\s+/g, '_');
     if (categoryConfig[lowerCategory]) return categoryConfig[lowerCategory];
@@ -37,76 +39,58 @@ function getCategoryConfig(category?: string, tag?: string) {
   return categoryConfig.default;
 }
 
-// Extract a title from memory content (first line or first N words)
-function extractTitle(content: string): string {
-  const firstLine = content.split('\n')[0];
-  const words = firstLine.split(' ');
-  if (words.length <= 6) return firstLine;
-  return words.slice(0, 6).join(' ') + '...';
-}
-
 // Parse tags from various formats
 function parseTags(memory: Memory): string[] {
   const tags: string[] = [];
   
-  // Add tag if present
   if (memory.tag) {
-    // Split by comma or space if multiple tags
     const tagParts = memory.tag.split(/[,\s]+/).filter(Boolean);
     tags.push(...tagParts);
   }
   
-  // Add category as a tag too if different from tag
-  if (memory.category && memory.category !== memory.tag) {
-    tags.push(memory.category);
-  }
-  
-  return tags.slice(0, 3); // Limit to 3 tags for display
+  return tags.slice(0, 3);
 }
 
-export function MemoryCard({ memory, index }: MemoryCardProps) {
+export function MemoryCard({ memory, index, isStacked = false, stackPosition = 0 }: MemoryCardProps) {
   const config = getCategoryConfig(memory.category, memory.tag);
   const Icon = config.icon;
-  const title = extractTitle(memory.content);
-  const description = memory.content.length > 100 
-    ? memory.content.substring(0, 100) + '...' 
+  const description = memory.content.length > 120 
+    ? memory.content.substring(0, 120) + '...' 
     : memory.content;
   const tags = parseTags(memory);
-  const isSynced = true; // All loaded memories are synced
+  const isSynced = true;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.3 }}
-      className="rounded-2xl bg-card overflow-hidden border border-border/30 shadow-sm"
+      transition={{ delay: index * 0.03, duration: 0.25 }}
+      className={cn(
+        "rounded-2xl bg-card overflow-hidden border border-border/30",
+        isStacked ? "shadow-sm" : "shadow-sm"
+      )}
     >
-      {/* Gradient Header with Icon and Title */}
+      {/* Compact Header with Category Icon and Label */}
       <div className={cn("px-4 py-3", config.gradient)}>
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
             <Icon className="h-4 w-4 text-white" />
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-white leading-snug truncate">
-              {title}
-            </h3>
-            <p className="text-xs text-white/80 font-medium">
-              {config.label}
-            </p>
-          </div>
+          <span className="text-sm font-semibold text-white">
+            {config.label}
+          </span>
         </div>
       </div>
       
       {/* Content Body */}
-      <div className="px-4 py-4">
-        <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+      <div className="px-4 py-3.5">
+        <p className="text-sm text-foreground leading-relaxed mb-3">
           {description}
         </p>
         
         {/* Tags row */}
         {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-4">
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {tags.map((tag, i) => (
               <span 
                 key={i}
@@ -120,28 +104,26 @@ export function MemoryCard({ memory, index }: MemoryCardProps) {
         
         {/* Footer with Sync Status and Action */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-              isSynced 
-                ? "bg-emerald-100 text-emerald-700" 
-                : "bg-amber-100 text-amber-700"
-            )}>
-              {isSynced ? (
-                <>
-                  <Check className="h-3 w-3" />
-                  Synced
-                </>
-              ) : (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Syncing
-                </>
-              )}
-            </span>
-          </div>
+          <span className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+            isSynced 
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" 
+              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+          )}>
+            {isSynced ? (
+              <>
+                <Check className="h-3 w-3" />
+                Synced
+              </>
+            ) : (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Syncing
+              </>
+            )}
+          </span>
           
-          <button className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 active:scale-95">
+          <button className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 active:scale-95">
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
