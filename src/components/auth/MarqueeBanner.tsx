@@ -4,11 +4,11 @@ export function MarqueeBanner() {
   const items = [...Array(30)].map((_, i) => (
     <span
       key={i}
-      className="flex items-center text-sm font-medium tracking-wide whitespace-nowrap text-foreground/90"
+      className="flex items-center text-sm tracking-wide whitespace-nowrap text-foreground/90"
     >
-      <span className="px-6">Weave Corp Prototype</span>
+      <span className="px-6 font-normal">Weave Corp Prototype</span>
       <span className="text-[2.5rem] leading-none -mt-1">·</span>
-      <span className="px-6">Fabric</span>
+      <span className="px-6 font-bold uppercase">Fabric</span>
       <span className="text-[2.5rem] leading-none -mt-1">·</span>
     </span>
   ));
@@ -22,7 +22,7 @@ export function MarqueeBanner() {
           x: {
             repeat: Infinity,
             repeatType: "loop",
-            duration: 90,
+            duration: 120,
             ease: "linear",
           },
         }}

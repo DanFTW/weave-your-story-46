@@ -93,10 +93,10 @@ export default function Auth() {
           </div>
           {/* Fade overlay for reflection - positioned below the logo */}
           <div 
-            className="absolute left-0 right-0 h-40 pointer-events-none"
+            className="absolute left-0 right-0 h-48 pointer-events-none"
             style={{
-              top: '280px',
-              background: 'linear-gradient(to bottom, transparent 20%, hsl(var(--background)) 80%)',
+              top: '260px',
+              background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 50%)',
             }}
           />
         </div>
