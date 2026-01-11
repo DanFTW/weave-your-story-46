@@ -126,8 +126,7 @@ export default function FlowPage() {
     }
   };
 
-  const handleViewMemories = (entryId: string) => {
-    // Navigate to memories page with filter
+  const handleViewMemories = () => {
     navigate('/memories');
   };
 
@@ -199,9 +198,9 @@ export default function FlowPage() {
         <FlowConfigured
           config={config}
           entries={state.entries}
+          savedMemories={state.generatedMemories}
           onAddEntry={startAdding}
           onEditEntry={startEditing}
-          onViewMemories={handleViewMemories}
         />
       );
 
