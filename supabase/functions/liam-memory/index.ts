@@ -263,15 +263,19 @@ serve(async (req) => {
           );
         }
 
-        // LIAM API requires 'transactionNumber' field - memoryId contains the transactionNumber value
+        // LIAM API documentation shows 'memoryId' but validation expects 'transactionNumber'
+        // Send both to ensure compatibility
         const forgetBody: Record<string, any> = {
           userKey,
+          memoryId,
           transactionNumber: memoryId,
         };
         
         if (permanent !== undefined) {
           forgetBody.permanent = permanent;
         }
+        
+        console.log('Forget request body:', JSON.stringify(forgetBody));
 
         response = await makeAuthenticatedRequest(
           '/memory/forget',
