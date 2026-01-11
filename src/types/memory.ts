@@ -3,6 +3,8 @@ export interface Memory {
   content: string;
   tag?: string;
   createdAt: string;
+  category?: string;
+  sensitivity?: string;
 }
 
 export interface MemoryCategory {
