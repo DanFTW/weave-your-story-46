@@ -62,29 +62,32 @@ export default function Auth() {
         animate={{ opacity: contentVisible ? 1 : 0 }}
         transition={{ duration: 0.5 }}
       >
-        {/* Liquid Metal Logo */}
-        <div className="relative w-72 h-72 md:w-80 md:h-80 mb-8">
-          <div className="absolute inset-0 rounded-3xl overflow-hidden">
-            <LiquidMetal
-              style={{ width: '100%', height: '100%' }}
-              speed={0.3}
-              colorBack="#0a0a0a"
-              colorTint="#0066ff"
-              repetition={3}
-              distortion={0.5}
-              contour={0.6}
-              softness={0.4}
-              shiftRed={0.2}
-              shiftBlue={-0.2}
-              shape="daisy"
-            />
-          </div>
-
-          {/* Glow effect */}
-          <div 
-            className="absolute -inset-8 rounded-full opacity-40 blur-3xl -z-10"
+        {/* Liquid Metal Logo with Reflection */}
+        <div 
+          className="relative"
+          style={{
+            WebkitBoxReflect: 'below 0px linear-gradient(to bottom, transparent 40%, rgba(0, 0, 0, 0.3) 100%)',
+          }}
+        >
+          <LiquidMetal
+            speed={0.57}
+            softness={0.3}
+            repetition={4.95}
+            shiftRed={0.3}
+            shiftBlue={0.3}
+            distortion={0.16}
+            contour={0.92}
+            scale={1}
+            rotation={0}
+            shape="metaballs"
+            image="https://workers.paper.design/file-assets/01KCTK5DKMZ598450709A32YA1/01KCTK9DDYZVHR98C6HJJ9CVR0.svg"
+            colorBack="#00000000"
+            colorTint="#1050C5"
             style={{
-              background: 'radial-gradient(circle, rgba(0, 102, 255, 0.5) 0%, rgba(0, 204, 255, 0.2) 50%, transparent 70%)'
+              backgroundColor: 'transparent',
+              borderRadius: '47px',
+              height: '320px',
+              width: '320px',
             }}
           />
         </div>
