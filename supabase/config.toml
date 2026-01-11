@@ -2,3 +2,6 @@ project_id = "ttanhgbtdyatzacxhxjj"
 
 [functions.liam-memory]
 verify_jwt = false
+
+[functions.generate-memories]
+verify_jwt = false

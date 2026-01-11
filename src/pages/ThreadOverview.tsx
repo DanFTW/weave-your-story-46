@@ -24,8 +24,14 @@ export default function ThreadOverview() {
   };
 
   const handleGetStarted = () => {
-    // Navigate to first step or start flow
-    console.log("Get started clicked for:", config.id);
+    // Navigate to flow page for supported flows
+    const flowEnabledThreads = ['family', 'food-preferences', 'music-taste', 'shopping-preferences'];
+    if (flowEnabledThreads.includes(config.id)) {
+      const flowId = config.id === 'food-preferences' ? 'food' : config.id;
+      navigate(`/flow/${flowId}`);
+    } else {
+      console.log("Get started clicked for:", config.id);
+    }
   };
 
   return (
