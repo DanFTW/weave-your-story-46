@@ -125,6 +125,15 @@ export function useFlowState(flowId?: string) {
     }));
   }, []);
 
+  const updateGeneratedMemoryTag = useCallback((memoryId: string, tag: string) => {
+    setState(prev => ({
+      ...prev,
+      generatedMemories: prev.generatedMemories.map(m =>
+        m.id === memoryId ? { ...m, tag } : m
+      ),
+    }));
+  }, []);
+
   const setSavedMemoryIds = useCallback((ids: string[]) => {
     setState(prev => ({
       ...prev,
@@ -164,6 +173,7 @@ export function useFlowState(flowId?: string) {
     setGeneratedMemories,
     deleteGeneratedMemory,
     updateGeneratedMemory,
+    updateGeneratedMemoryTag,
     toggleEditingMemory,
     setSavedMemoryIds,
     goToList,
