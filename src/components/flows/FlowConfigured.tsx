@@ -1,23 +1,38 @@
-import { Plus, ChevronRight, Pencil } from "lucide-react";
-import { FlowConfig, FlowEntry } from "@/types/flows";
-import { ThreadSplash } from "@/components/thread/ThreadSplash";
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { Plus, ChevronDown, ChevronUp, Pencil, Check } from "lucide-react";
+import { FlowConfig, FlowEntry, GeneratedMemory } from "@/types/flows";
+import { ThreadGradient } from "@/types/threads";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { ChevronLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface FlowConfiguredProps {
   config: FlowConfig;
   entries: FlowEntry[];
+  savedMemories: GeneratedMemory[];
   onAddEntry: () => void;
   onEditEntry: (entryId: string) => void;
-  onViewMemories: (entryId: string) => void;
 }
+
+const gradientClasses: Record<ThreadGradient, string> = {
+  blue: "thread-gradient-blue",
+  teal: "thread-gradient-teal",
+  purple: "thread-gradient-purple",
+  orange: "thread-gradient-orange",
+  pink: "thread-gradient-pink",
+};
 
 export function FlowConfigured({
   config,
   entries,
+  savedMemories,
   onAddEntry,
   onEditEntry,
-  onViewMemories,
 }: FlowConfiguredProps) {
+  const navigate = useNavigate();
+  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+
   const getEntryTitle = (entry: FlowEntry) => {
     const titleField = config.fields.find(f => f.type === 'text');
     return titleField ? entry.data[titleField.id] || 'Untitled' : 'Untitled';
@@ -29,74 +44,123 @@ export function FlowConfigured({
     return subtitleField ? entry.data[subtitleField.id] : '';
   };
 
+  const getMemoriesForEntry = (entryId: string) => {
+    return savedMemories.filter(m => m.entryId === entryId);
+  };
+
+  const toggleExpanded = (entryId: string) => {
+    setExpandedEntryId(prev => prev === entryId ? null : entryId);
+  };
+
+  const Icon = config.icon;
+
   return (
     <div className="min-h-screen bg-background">
-      <ThreadSplash
-        title={config.title}
-        icon={config.icon}
-        gradient={config.gradient}
-      />
-      
-      <div className="px-5 -mt-2 pb-8">
-        {/* Success Message */}
-        <div className="bg-card rounded-2xl p-5 shadow-sm border border-border mb-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-lg font-semibold text-foreground">
-              Memories Saved
-            </h2>
+      {/* Header with success message */}
+      <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
+        <button
+          onClick={() => navigate('/threads')}
+          className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-4"
+        >
+          <ChevronLeft className="w-6 h-6 text-white" />
+        </button>
+        
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />
           </div>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Your {config.entryNamePlural} have been added to your memory. You can update them anytime.
-          </p>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-white">
+              {config.title}
+            </h1>
+            <p className="text-white/70 text-sm">
+              {savedMemories.length} memories saved
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+            <Check className="w-5 h-5 text-white" />
+          </div>
         </div>
 
+        <p className="text-white/80 text-sm">
+          Your {config.entryNamePlural} have been added to memory. You can update them anytime.
+        </p>
+      </div>
+      
+      <div className="px-5 pt-4 pb-8">
         {/* Entry Cards */}
-        <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide">
-          Your {config.entryNamePlural}
-        </h3>
-        
         <div className="space-y-3">
-          {entries.map((entry, index) => (
-            <motion.div
-              key={entry.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden"
-            >
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground truncate">
-                    {getEntryTitle(entry)}
-                  </h3>
-                  {getEntrySubtitle(entry) && (
+          {entries.map((entry, index) => {
+            const entryMemories = getMemoriesForEntry(entry.id);
+            const isExpanded = expandedEntryId === entry.id;
+
+            return (
+              <motion.div
+                key={entry.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden"
+              >
+                {/* Entry Header */}
+                <button
+                  onClick={() => toggleExpanded(entry.id)}
+                  className="w-full p-4 flex items-center justify-between text-left"
+                >
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-foreground truncate">
+                      {getEntryTitle(entry)}
+                    </h3>
                     <p className="text-sm text-muted-foreground mt-0.5">
-                      {getEntrySubtitle(entry)}
+                      {getEntrySubtitle(entry)} • {entryMemories.length} memories
                     </p>
+                  </div>
+                  <div className="flex items-center gap-1 ml-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditEntry(entry.id);
+                      }}
+                      className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
+                    >
+                      <Pencil className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Memories List */}
+                <AnimatePresence>
+                  {isExpanded && entryMemories.length > 0 && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 pb-4 pt-0 space-y-2">
+                        {entryMemories.map((memory) => (
+                          <div
+                            key={memory.id}
+                            className="bg-muted/50 rounded-xl px-3 py-2"
+                          >
+                            <p className="text-sm text-foreground">
+                              {memory.content}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
                   )}
-                </div>
-                <div className="flex items-center gap-1 ml-3">
-                  <button
-                    onClick={() => onEditEntry(entry.id)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                  >
-                    <Pencil className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => onViewMemories(entry.id)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                  >
-                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          ))}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
 
           {/* Add Another Card */}
           <motion.button

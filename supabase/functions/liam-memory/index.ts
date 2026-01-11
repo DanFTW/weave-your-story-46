@@ -226,7 +226,8 @@ serve(async (req) => {
         };
         
         if (tag) {
-          createBody.tag = tag;
+          // Convert tag to uppercase format (e.g., "family" -> "FAMILY")
+          createBody.tag = tag.toUpperCase().replace(/\s+/g, '_');
         }
 
         response = await makeAuthenticatedRequest(

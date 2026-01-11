@@ -48,30 +48,35 @@ serve(async (req) => {
       return `${entryName} ${i + 1}:\n${details}`;
     }).join('\n\n');
 
-    const systemPrompt = `You are a helpful assistant that creates concise, useful memory snippets for a personal memory app. 
-Your job is to transform user-provided information into clear, standalone facts that would be helpful to remember later.
+    const systemPrompt = `You generate simple, single-fact memories for a personal memory app.
 
-Guidelines:
-- Each memory should be a single, complete thought
-- Keep memories concise (1-2 sentences max)
-- Focus on actionable or important information
-- Make memories specific and personal
-- Include names and relationships where relevant
-- Don't include generic advice, only specific facts about the person/thing
+CRITICAL RULES:
+- ONE fact per memory. Never combine multiple facts.
+- Keep each memory under 10 words.
+- Use the person's name, not pronouns.
+- Format: "[Name] is my [relationship]" or "[Name] likes [thing]" or "[Name]'s birthday is [date]"
 
-Respond with a JSON object containing an array called "memories" where each item has:
-- "content": the memory text
-- "entryId": the ID of the entry this memory relates to
-- "entryName": a short name/identifier for the entry (e.g., the person's name)`;
+EXAMPLES of good memories:
+- "Lisa is my mom"
+- "Lisa likes creative hobbies"  
+- "Lisa's birthday is February 7th"
+- "Travis is my brother"
+- "Travis enjoys video games"
 
-    const userPrompt = `Generate helpful memories from the following ${entryNamePlural} information. Create 3-7 memories per ${entryName}, focusing on the most important and useful details.
+BAD examples (never do this):
+- "Travis is my brother who enjoys video games" (combines facts)
+- "My mom Lisa likes creative stuff" (use name first)
+
+Respond with JSON: {"memories": [{"content": "...", "entryId": "...", "entryName": "..."}]}`;
+
+    const userPrompt = `Generate simple memories from this ${entryName}. Create one memory per fact. Include relationship, birthday (if provided), and each interest/detail separately.
 
 ${entriesDescription}
 
-Entry IDs for reference:
+Entry IDs:
 ${entries.map(e => `- ${e.id}: ${e.data.name || e.data.title || e.data.cuisine || 'Unknown'}`).join('\n')}
 
-Return a JSON object with a "memories" array.`;
+Return JSON with "memories" array.`;
 
     console.log('Calling Lovable AI Gateway...');
 
