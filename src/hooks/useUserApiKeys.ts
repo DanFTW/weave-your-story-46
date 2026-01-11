@@ -71,41 +71,34 @@ export function useUserApiKeys(): UseUserApiKeysReturn {
       return false;
     }
 
+    // Validate private key format
+    if (!newKeys.private_key.includes('-----BEGIN') || !newKeys.private_key.includes('-----END')) {
+      toast({
+        title: 'Invalid private key format',
+        description: 'Private key must be in PEM format with BEGIN/END headers.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
     setIsSaving(true);
 
     try {
-      // Check if keys already exist
-      const { data: existing } = await supabase
+      // Use upsert for cleaner insert-or-update logic
+      const { error } = await supabase
         .from('user_api_keys')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      let error;
-
-      if (existing) {
-        // Update existing keys
-        const result = await supabase
-          .from('user_api_keys')
-          .update({
-            api_key: newKeys.api_key,
-            private_key: newKeys.private_key,
-            user_key: newKeys.user_key,
-          })
-          .eq('user_id', user.id);
-        error = result.error;
-      } else {
-        // Insert new keys
-        const result = await supabase
-          .from('user_api_keys')
-          .insert({
+        .upsert(
+          {
             user_id: user.id,
             api_key: newKeys.api_key,
             private_key: newKeys.private_key,
             user_key: newKeys.user_key,
-          });
-        error = result.error;
-      }
+          },
+          { 
+            onConflict: 'user_id',
+            ignoreDuplicates: false 
+          }
+        );
 
       if (error) {
         console.error('Error saving API keys:', error);

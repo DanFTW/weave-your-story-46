@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Key } from "lucide-react";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileSettingsCard, SettingsRow } from "@/components/profile/ProfileSettingsCard";
-import { MailIcon, BellIcon, EyeIcon, SparkleIcon } from "@/components/profile/ProfileIcons";
+import { BellIcon, EyeIcon, SparkleIcon } from "@/components/profile/ProfileIcons";
 import { SwipeToUnlock } from "@/components/profile/SwipeToUnlock";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserApiKeys } from "@/hooks/useUserApiKeys";
@@ -40,7 +41,7 @@ export default function Profile() {
         {/* Email card - navigates to API key config */}
         <ProfileSettingsCard>
           <SettingsRow
-            icon={<MailIcon className="w-5 h-5 text-muted-foreground" />}
+            icon={<Key className="w-5 h-5 text-muted-foreground" />}
             iconBgColor="bg-muted"
             label="API Configuration"
             value={hasKeys ? "Configured" : "Not set"}

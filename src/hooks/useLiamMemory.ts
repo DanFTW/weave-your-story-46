@@ -49,9 +49,12 @@ export function useLiamMemory(): UseLiamMemoryReturn {
 
       if (error) {
         console.error('Error creating memory:', error);
+        const errorMessage = error.message || 'Failed to save memory';
+        const isConfigError = errorMessage.includes('API keys not configured') || errorMessage.includes('API keys incomplete');
+        
         toast({
-          title: 'Failed to save memory',
-          description: error.message,
+          title: isConfigError ? 'API keys required' : 'Failed to save memory',
+          description: isConfigError ? 'Please configure your API keys in Profile → API Configuration.' : errorMessage,
           variant: 'destructive',
         });
         return false;
@@ -88,9 +91,12 @@ export function useLiamMemory(): UseLiamMemoryReturn {
 
       if (error) {
         console.error('Error listing memories:', error);
+        const errorMessage = error.message || 'Failed to load memories';
+        const isConfigError = errorMessage.includes('API keys not configured') || errorMessage.includes('API keys incomplete');
+        
         toast({
-          title: 'Failed to load memories',
-          description: error.message,
+          title: isConfigError ? 'API keys required' : 'Failed to load memories',
+          description: isConfigError ? 'Please configure your API keys in Profile → API Configuration.' : errorMessage,
           variant: 'destructive',
         });
         return null;
