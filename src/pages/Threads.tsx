@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { PageHeader } from "@/components/PageHeader";
 import { ThreadCard } from "@/components/ThreadCard";
-import { BottomNav, NavItem } from "@/components/BottomNav";
+import { BottomNav } from "@/components/BottomNav";
 import { sampleThreads } from "@/data/threads";
 import { Thread } from "@/types/threads";
 import { toast } from "sonner";
@@ -23,8 +22,6 @@ const item = {
 };
 
 export default function Threads() {
-  const [activeNav, setActiveNav] = useState<NavItem>("threads");
-
   const handleThreadClick = (thread: Thread) => {
     if (thread.status === "setup") {
       toast.info(`Setting up ${thread.title}...`);
@@ -35,31 +32,32 @@ export default function Threads() {
     }
   };
 
-  const handleNavClick = (navItem: NavItem) => {
-    setActiveNav(navItem);
-  };
-
   return (
-    <div className="min-h-screen bg-background pb-32">
-      <PageHeader title="Threads" />
+    <div className="min-h-screen bg-background pb-nav">
+      <div className="px-5 pt-14">
+        <PageHeader 
+          title="Threads" 
+          subtitle="Create memories through automated connections" 
+        />
 
-      <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="px-4 space-y-4"
-      >
-        {sampleThreads.map((thread) => (
-          <motion.div key={thread.id} variants={item}>
-            <ThreadCard
-              thread={thread}
-              onClick={() => handleThreadClick(thread)}
-            />
-          </motion.div>
-        ))}
-      </motion.div>
+        <motion.div
+          variants={container}
+          initial="hidden"
+          animate="show"
+          className="mt-6 grid grid-cols-2 gap-3"
+        >
+          {sampleThreads.map((thread) => (
+            <motion.div key={thread.id} variants={item}>
+              <ThreadCard
+                thread={thread}
+                onClick={() => handleThreadClick(thread)}
+              />
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
 
-      <BottomNav activeItem={activeNav} onItemClick={handleNavClick} />
+      <BottomNav />
     </div>
   );
 }
