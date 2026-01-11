@@ -67,11 +67,11 @@ export function MemoryFilterBar({
   return (
     <div className="flex items-center gap-3">
       {/* Scrollable filter area with fades */}
-      <div className="relative flex-1 min-w-0">
+      <div className="relative flex-1 min-w-0 overflow-hidden">
         {/* Left fade */}
         <div 
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none transition-opacity duration-200",
+            "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-200",
             showLeftFade ? "opacity-100" : "opacity-0"
           )}
         />
@@ -79,7 +79,7 @@ export function MemoryFilterBar({
         {/* Scrollable container */}
         <div 
           ref={scrollRef}
-          className="flex items-center gap-3 overflow-x-auto scrollbar-hide"
+          className="flex items-center gap-3 overflow-x-auto px-1 py-1"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {filters.map((filter) => {
@@ -126,7 +126,7 @@ export function MemoryFilterBar({
         {/* Right fade */}
         <div 
           className={cn(
-            "absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none transition-opacity duration-200",
+            "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-200",
             showRightFade ? "opacity-100" : "opacity-0"
           )}
         />
