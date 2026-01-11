@@ -22,15 +22,18 @@ interface UseLiamMemoryReturn {
   createMemory: (content: string, tag?: string) => Promise<boolean>;
   listMemories: () => Promise<Memory[] | null>;
   forgetMemory: (memoryId: string, permanent?: boolean) => Promise<boolean>;
+  changeTag: (memoryId: string, newTag: string) => Promise<boolean>;
   isCreating: boolean;
   isListing: boolean;
   isForgetting: boolean;
+  isChangingTag: boolean;
 }
 
 export function useLiamMemory(): UseLiamMemoryReturn {
   const [isCreating, setIsCreating] = useState(false);
   const [isListing, setIsListing] = useState(false);
   const [isForgetting, setIsForgetting] = useState(false);
+  const [isChangingTag, setIsChangingTag] = useState(false);
 
   const createMemory = async (content: string, tag?: string): Promise<boolean> => {
     setIsCreating(true);
@@ -178,12 +181,55 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     }
   };
 
+  const changeTag = async (memoryId: string, newTag: string): Promise<boolean> => {
+    setIsChangingTag(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('liam-memory', {
+        body: {
+          action: 'changeTag',
+          memoryId,
+          tag: newTag,
+        },
+      });
+
+      if (error) {
+        console.error('Error changing tag:', error);
+        toast({
+          title: 'Failed to update tag',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      console.log('Tag changed successfully:', data);
+      toast({
+        title: 'Tag updated',
+        description: 'Memory tag has been updated.',
+      });
+      return true;
+    } catch (err) {
+      console.error('Unexpected error changing tag:', err);
+      toast({
+        title: 'Failed to update tag',
+        description: 'An unexpected error occurred.',
+        variant: 'destructive',
+      });
+      return false;
+    } finally {
+      setIsChangingTag(false);
+    }
+  };
+
   return {
     createMemory,
     listMemories,
     forgetMemory,
+    changeTag,
     isCreating,
     isListing,
     isForgetting,
+    isChangingTag,
   };
 }

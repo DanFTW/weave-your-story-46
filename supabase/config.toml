@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.generate-memories]
 verify_jwt = false
+
+[functions.generate-tags]
+verify_jwt = false

@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock } from "lucide-react";
+import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock, Pencil } from "lucide-react";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { Memory } from "@/types/memory";
-import { getCategoryConfig } from "@/components/memories/MemoryCard";
+import { getTagById } from "@/data/tagConfig";
+import { TagSelectionSheet } from "@/components/memories/TagSelectionSheet";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 
 export default function MemoryDetail() {
   const { memoryId } = useParams<{ memoryId: string }>();
   const navigate = useNavigate();
-  const { listMemories, forgetMemory, isListing, isForgetting } = useLiamMemory();
+  const { listMemories, forgetMemory, changeTag, isListing, isForgetting, isChangingTag } = useLiamMemory();
   const { addDeletedId, isDeleted } = useDeletedMemories();
   const [memory, setMemory] = useState<Memory | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [tagSheetOpen, setTagSheetOpen] = useState(false);
 
   useEffect(() => {
     async function fetchMemory() {
@@ -46,8 +48,6 @@ export default function MemoryDetail() {
     
     if (success) {
       // Mark as deleted locally (persists to localStorage)
-      // This ensures the memory won't appear in the list even if the API
-      // has eventual consistency issues and still returns it
       addDeletedId(memoryId);
       navigate("/memories", { replace: true });
     }
@@ -55,6 +55,17 @@ export default function MemoryDetail() {
 
   const handleBack = () => {
     navigate("/memories");
+  };
+
+  const handleChangeTag = async (newTag: string) => {
+    if (!memoryId) return;
+    
+    const success = await changeTag(memoryId, newTag);
+    
+    if (success && memory) {
+      // Optimistically update the local state
+      setMemory({ ...memory, tag: newTag });
+    }
   };
 
   if (isListing) {
@@ -82,8 +93,8 @@ export default function MemoryDetail() {
     );
   }
 
-  const config = getCategoryConfig(memory.category, memory.tag);
-  const Icon = config.icon;
+  const tagConfig = getTagById(memory.tag || memory.category);
+  const Icon = tagConfig.icon;
 
   // Format date for display
   const formattedDate = (() => {
@@ -114,7 +125,7 @@ export default function MemoryDetail() {
           transition={{ duration: 0.3 }}
           className={cn(
             "rounded-2xl overflow-hidden p-5 relative",
-            config.gradient
+            tagConfig.gradient
           )}
           style={{ minHeight: "160px" }}
         >
@@ -133,7 +144,7 @@ export default function MemoryDetail() {
 
           {/* Category Label */}
           <h2 className="text-xl font-bold text-white relative z-10">
-            {config.label}
+            {tagConfig.label}
           </h2>
         </motion.div>
 
@@ -166,21 +177,31 @@ export default function MemoryDetail() {
               </div>
             )}
 
-            {/* Category */}
-            {memory.category && (
-              <div className="flex items-center gap-3 text-sm">
-                <Tag className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Category:</span>
-                <span className="text-foreground capitalize">{memory.category}</span>
-              </div>
-            )}
+            {/* Tag - Editable */}
+            <div className="flex items-center gap-3 text-sm">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Tag:</span>
+              <button
+                onClick={() => setTagSheetOpen(true)}
+                disabled={isChangingTag}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all",
+                  tagConfig.gradient,
+                  "text-white hover:opacity-90",
+                  isChangingTag && "opacity-50"
+                )}
+              >
+                <span>{tagConfig.label}</span>
+                <Pencil className="h-3 w-3" />
+              </button>
+            </div>
 
-            {/* Tag */}
-            {memory.tag && (
+            {/* Category */}
+            {memory.category && memory.category !== memory.tag && (
               <div className="flex items-center gap-3 text-sm">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Tag:</span>
-                <span className="text-foreground">{memory.tag}</span>
+                <span className="text-muted-foreground">Category:</span>
+                <span className="text-foreground capitalize">{memory.category}</span>
               </div>
             )}
 
@@ -218,6 +239,16 @@ export default function MemoryDetail() {
           </button>
         </div>
       </div>
+
+      {/* Tag Selection Sheet */}
+      <TagSelectionSheet
+        open={tagSheetOpen}
+        onOpenChange={setTagSheetOpen}
+        currentTag={memory.tag}
+        memoryContent={memory.content}
+        onSelectTag={handleChangeTag}
+        isLoading={isChangingTag}
+      />
     </div>
   );
 }

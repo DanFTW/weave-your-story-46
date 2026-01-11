@@ -8,8 +8,8 @@ export default function Home() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { createMemory, isCreating } = useLiamMemory();
 
-  const handleSaveMemory = async (content: string) => {
-    return await createMemory(content, 'quick-note');
+  const handleSaveMemory = async (content: string, tag?: string) => {
+    return await createMemory(content, tag || 'quick_note');
   };
 
   return (
