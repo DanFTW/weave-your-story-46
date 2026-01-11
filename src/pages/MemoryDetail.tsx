@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Sparkles } from "lucide-react";
+import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock } from "lucide-react";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { Memory } from "@/types/memory";
-import { getCategoryConfig, categoryConfig } from "@/components/memories/MemoryCard";
+import { getCategoryConfig } from "@/components/memories/MemoryCard";
 import { cn } from "@/lib/utils";
+import { format, parseISO } from "date-fns";
 
 export default function MemoryDetail() {
   const { memoryId } = useParams<{ memoryId: string }>();
@@ -37,8 +38,8 @@ export default function MemoryDetail() {
     }
   };
 
-  const handleDone = () => {
-    navigate(-1);
+  const handleBack = () => {
+    navigate("/memories");
   };
 
   if (isListing) {
@@ -53,10 +54,10 @@ export default function MemoryDetail() {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <header className="flex items-center h-14 px-4 border-b border-border/30">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2">
+          <button onClick={handleBack} className="p-2 -ml-2">
             <ChevronLeft className="h-6 w-6 text-foreground" />
           </button>
-          <h1 className="flex-1 text-center text-lg font-semibold">Activity detail</h1>
+          <h1 className="flex-1 text-center text-lg font-semibold">Memory</h1>
           <div className="w-10" />
         </header>
         <div className="flex-1 flex items-center justify-center">
@@ -69,19 +70,23 @@ export default function MemoryDetail() {
   const config = getCategoryConfig(memory.category, memory.tag);
   const Icon = config.icon;
 
-  // Extract title from content (first line or first sentence)
-  const contentLines = memory.content.split('\n').filter(Boolean);
-  const title = contentLines[0]?.substring(0, 60) || "Memory";
-  const fullContent = memory.content;
+  // Format date for display
+  const formattedDate = (() => {
+    try {
+      return format(parseISO(memory.createdAt), "MMM d, yyyy 'at' h:mm a");
+    } catch {
+      return "";
+    }
+  })();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="flex items-center h-14 px-4">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2">
+        <button onClick={handleBack} className="p-2 -ml-2">
           <ChevronLeft className="h-6 w-6 text-foreground" />
         </button>
-        <h1 className="flex-1 text-center text-lg font-semibold">Activity detail</h1>
+        <h1 className="flex-1 text-center text-lg font-semibold">Memory</h1>
         <div className="w-10" />
       </header>
 
@@ -130,22 +135,49 @@ export default function MemoryDetail() {
             <span className="text-xs font-medium text-violet-700 dark:text-violet-300">New</span>
           </div>
 
-          {/* Title */}
-          <h3 className="text-xl font-bold text-foreground mt-4">
-            {title}
-          </h3>
-
-          {/* From label if tag exists */}
-          {memory.tag && (
-            <p className="text-sm text-muted-foreground mt-2">
-              From: <span className="text-foreground font-medium">{memory.tag}</span>
-            </p>
-          )}
-
-          {/* Full Content */}
-          <p className="text-base leading-relaxed text-foreground mt-3">
-            {fullContent}
+          {/* Memory Content */}
+          <p className="text-base leading-relaxed text-foreground mt-4">
+            {memory.content}
           </p>
+
+          {/* Memory Details */}
+          <div className="mt-6 space-y-3">
+            {/* Date */}
+            {formattedDate && (
+              <div className="flex items-center gap-3 text-sm">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Created:</span>
+                <span className="text-foreground">{formattedDate}</span>
+              </div>
+            )}
+
+            {/* Category */}
+            {memory.category && (
+              <div className="flex items-center gap-3 text-sm">
+                <Tag className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Category:</span>
+                <span className="text-foreground capitalize">{memory.category}</span>
+              </div>
+            )}
+
+            {/* Tag */}
+            {memory.tag && (
+              <div className="flex items-center gap-3 text-sm">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Tag:</span>
+                <span className="text-foreground">{memory.tag}</span>
+              </div>
+            )}
+
+            {/* Sensitivity */}
+            {memory.sensitivity && (
+              <div className="flex items-center gap-3 text-sm">
+                <Shield className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Sensitivity:</span>
+                <span className="text-foreground capitalize">{memory.sensitivity}</span>
+              </div>
+            )}
+          </div>
         </motion.div>
       </div>
 
@@ -164,7 +196,7 @@ export default function MemoryDetail() {
             {isForgetting ? "Forgetting..." : "Forget Memory"}
           </button>
           <button
-            onClick={handleDone}
+            onClick={handleBack}
             className="flex-1 h-12 rounded-xl font-semibold bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-300 transition-all hover:bg-gray-400 dark:hover:bg-gray-600"
           >
             Done
