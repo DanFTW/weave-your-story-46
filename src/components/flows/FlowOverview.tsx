@@ -15,6 +15,7 @@ export function FlowOverview({ config, onAddEntry }: FlowOverviewProps) {
         title={config.title}
         icon={config.icon}
         gradient={config.gradient}
+        subtitle={config.subtitle}
       />
       
       <div className="px-5 pt-4">
