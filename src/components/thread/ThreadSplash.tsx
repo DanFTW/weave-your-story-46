@@ -8,6 +8,7 @@ interface ThreadSplashProps {
   title: string;
   icon: LucideIcon;
   gradient: ThreadGradient;
+  subtitle?: string;
 }
 
 const gradientClasses: Record<ThreadGradient, string> = {
@@ -18,7 +19,7 @@ const gradientClasses: Record<ThreadGradient, string> = {
   pink: "thread-gradient-pink",
 };
 
-export function ThreadSplash({ title, icon: Icon, gradient }: ThreadSplashProps) {
+export function ThreadSplash({ title, icon: Icon, gradient, subtitle }: ThreadSplashProps) {
   const navigate = useNavigate();
 
   return (
@@ -40,6 +41,13 @@ export function ThreadSplash({ title, icon: Icon, gradient }: ThreadSplashProps)
       <h1 className="text-[28px] font-bold text-white leading-tight">
         {title}
       </h1>
+
+      {/* Subtitle */}
+      {subtitle && (
+        <p className="text-white/80 text-sm mt-2 leading-relaxed">
+          {subtitle}
+        </p>
+      )}
     </div>
   );
 }
