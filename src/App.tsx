@@ -7,6 +7,7 @@ import { Layout } from "@/components/Layout";
 import Home from "./pages/Home";
 import Threads from "./pages/Threads";
 import ThreadOverview from "./pages/ThreadOverview";
+import FlowPage from "./pages/FlowPage";
 import Memories from "./pages/Memories";
 import Integrations from "./pages/Integrations";
 import Profile from "./pages/Profile";
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/profile" element={<Profile />} />
           </Route>
           <Route path="/thread/:threadId" element={<ThreadOverview />} />
+          <Route path="/flow/:flowId" element={<FlowPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
