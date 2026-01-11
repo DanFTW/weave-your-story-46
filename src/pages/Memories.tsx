@@ -7,6 +7,7 @@ import { Memory } from "@/types/memory";
 
 export default function Memories() {
   const [activeFilter, setActiveFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [memories, setMemories] = useState<Memory[]>([]);
   const { listMemories, isListing } = useLiamMemory();
 
@@ -32,7 +33,9 @@ export default function Memories() {
         <div className="mt-6 mb-8">
           <MemoryFilterBar 
             activeFilter={activeFilter}
+            statusFilter={statusFilter}
             onFilterChange={setActiveFilter}
+            onStatusFilterChange={setStatusFilter}
           />
         </div>
         

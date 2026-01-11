@@ -50,10 +50,11 @@ function groupMemoriesByDate(memories: Memory[]): GroupedMemories[] {
 
 function filterMemories(memories: Memory[], filter: string): Memory[] {
   if (filter === "all") return memories;
-  
-  return memories.filter((memory) => {
-    if (!memory.tag) return false;
-    return memory.tag.toLowerCase().includes(filter.toLowerCase());
+  const lowerFilter = filter.toLowerCase().replace(/_/g, ' ');
+  return memories.filter(m => {
+    const categoryMatch = m.category?.toLowerCase().replace(/_/g, ' ').includes(lowerFilter);
+    const tagMatch = m.tag?.toLowerCase().replace(/_/g, ' ').includes(lowerFilter);
+    return categoryMatch || tagMatch;
   });
 }
 
