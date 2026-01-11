@@ -17,7 +17,7 @@ export function FlowOverview({ config, onAddEntry }: FlowOverviewProps) {
         gradient={config.gradient}
       />
       
-      <div className="px-5 -mt-2">
+      <div className="px-5 pt-4">
         {/* Description */}
         <div className="bg-card rounded-2xl p-5 shadow-sm border border-border mb-4">
           <h2 className="text-lg font-semibold text-foreground mb-2">
