@@ -32,7 +32,8 @@ export default function MemoryDetail() {
 
   const handleForget = async () => {
     if (!memoryId) return;
-    const success = await forgetMemory(memoryId, false);
+    // Use permanent: true to actually remove from memory list
+    const success = await forgetMemory(memoryId, true);
     if (success) {
       navigate("/memories", { replace: true });
     }
