@@ -38,11 +38,25 @@ export default function ApiKeyConfig() {
     }
   }, [keys]);
 
+  const validatePrivateKey = (key: string): boolean => {
+    const trimmed = key.trim();
+    return trimmed.includes('-----BEGIN') && trimmed.includes('-----END');
+  };
+
   const handleSave = async () => {
     if (!apiKey.trim() || !privateKey.trim() || !userKey.trim()) {
       toast({
         title: 'All fields required',
         description: 'Please fill in all API key fields.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!validatePrivateKey(privateKey)) {
+      toast({
+        title: 'Invalid private key',
+        description: 'Private key must be in PEM format with BEGIN/END headers.',
         variant: 'destructive',
       });
       return;

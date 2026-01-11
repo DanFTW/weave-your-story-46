@@ -239,13 +239,37 @@ serve(async (req) => {
 
     const { api_key: apiKey, private_key: privateKeyPem, user_key: userKey } = userKeys;
 
-    console.log('User API keys loaded successfully');
-    console.log('API Key (first 10 chars):', apiKey.substring(0, 10) + '...');
-    console.log('User Key (first 10 chars):', userKey.substring(0, 10) + '...');
+    // Validate keys are not empty
+    if (!apiKey || !privateKeyPem || !userKey) {
+      console.error('User API keys are incomplete');
+      return new Response(
+        JSON.stringify({ 
+          error: 'API keys incomplete',
+          message: 'One or more API keys are missing. Please update your configuration.'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    // Import private key
-    const privateKey = await importPrivateKey(privateKeyPem);
-    console.log('Private key imported successfully');
+    console.log('User API keys loaded successfully');
+    console.log('API Key (first 10 chars):', apiKey.substring(0, Math.min(10, apiKey.length)) + '...');
+    console.log('User Key (first 10 chars):', userKey.substring(0, Math.min(10, userKey.length)) + '...');
+
+    // Import private key with error handling
+    let privateKey: CryptoKey;
+    try {
+      privateKey = await importPrivateKey(privateKeyPem);
+      console.log('Private key imported successfully');
+    } catch (keyError) {
+      console.error('Failed to import private key:', keyError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid private key',
+          message: 'The private key format is invalid. Please check your configuration.'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Parse request
     const { action, content, tag, memoryId, permanent } = await req.json();
