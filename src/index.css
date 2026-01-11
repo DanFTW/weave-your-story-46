@@ -1,88 +1,113 @@
+@import url('https://fonts.cdnfonts.com/css/pp-telegraf');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Weave Design System - Mobile-First Memory App */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Core backgrounds */
+    --background: 40 20% 98%;
+    --foreground: 240 10% 10%;
 
+    /* Card surfaces */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 10% 10%;
 
+    /* Popover */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 240 10% 10%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Deep indigo */
+    --primary: 240 50% 25%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Soft gray */
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 10% 30%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted surfaces */
+    --muted: 240 5% 94%;
+    --muted-foreground: 240 5% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent */
+    --accent: 240 5% 92%;
+    --accent-foreground: 240 10% 20%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders & inputs */
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 240 50% 50%;
 
-    --radius: 0.5rem;
+    --radius: 1rem;
 
+    /* Thread card gradients */
+    --thread-blue-from: 210 70% 55%;
+    --thread-blue-to: 195 65% 50%;
+    --thread-teal-from: 160 50% 45%;
+    --thread-teal-to: 150 45% 50%;
+    --thread-purple-from: 270 45% 55%;
+    --thread-purple-to: 280 50% 60%;
+    --thread-orange-from: 30 75% 55%;
+    --thread-orange-to: 25 70% 50%;
+    --thread-pink-from: 340 70% 60%;
+    --thread-pink-to: 330 65% 55%;
+
+    /* Bottom nav */
+    --nav-background: 0 0% 100%;
+    --nav-active: 240 50% 25%;
+    --nav-inactive: 240 5% 60%;
+
+    /* Sidebar */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 240 10% 8%;
+    --foreground: 0 0% 98%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 240 10% 12%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 240 10% 12%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 240 50% 70%;
+    --primary-foreground: 240 10% 10%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 240 5% 18%;
+    --secondary-foreground: 0 0% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 240 5% 20%;
+    --muted-foreground: 240 5% 65%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 240 5% 22%;
+    --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 240 5% 22%;
+    --input: 240 5% 22%;
+    --ring: 240 50% 60%;
+
+    --nav-background: 240 10% 12%;
+    --nav-active: 240 50% 70%;
+    --nav-inactive: 240 5% 50%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -99,7 +124,46 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-family: 'PP Telegraf', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Thread card gradient backgrounds */
+@layer utilities {
+  .thread-gradient-blue {
+    background: linear-gradient(135deg, hsl(var(--thread-blue-from)) 0%, hsl(var(--thread-blue-to)) 100%);
+  }
+
+  .thread-gradient-teal {
+    background: linear-gradient(135deg, hsl(var(--thread-teal-from)) 0%, hsl(var(--thread-teal-to)) 100%);
+  }
+
+  .thread-gradient-purple {
+    background: linear-gradient(135deg, hsl(var(--thread-purple-from)) 0%, hsl(var(--thread-purple-to)) 100%);
+  }
+
+  .thread-gradient-orange {
+    background: linear-gradient(135deg, hsl(var(--thread-orange-from)) 0%, hsl(var(--thread-orange-to)) 100%);
+  }
+
+  .thread-gradient-pink {
+    background: linear-gradient(135deg, hsl(var(--thread-pink-from)) 0%, hsl(var(--thread-pink-to)) 100%);
+  }
+
+  /* Safe area handling for mobile */
+  .safe-bottom {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .pb-nav {
+    padding-bottom: 6rem;
   }
 }
