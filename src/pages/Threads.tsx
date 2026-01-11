@@ -1,18 +1,14 @@
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { ThreadCard } from "@/components/ThreadCard";
 import { sampleThreads } from "@/data/threads";
 import { Thread } from "@/types/threads";
-import { toast } from "sonner";
 
 export default function Threads() {
+  const navigate = useNavigate();
+
   const handleThreadClick = (thread: Thread) => {
-    if (thread.status === "setup") {
-      toast.info(`Setting up ${thread.title}...`);
-    } else if (thread.status === "active") {
-      toast.success(`Viewing ${thread.title}`);
-    } else {
-      toast.info(`Try: ${thread.title}`);
-    }
+    navigate(`/thread/${thread.id}`);
   };
 
   return (

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import Home from "./pages/Home";
 import Threads from "./pages/Threads";
+import ThreadOverview from "./pages/ThreadOverview";
 import Memories from "./pages/Memories";
 import Integrations from "./pages/Integrations";
 import Profile from "./pages/Profile";
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/integrations" element={<Integrations />} />
             <Route path="/profile" element={<Profile />} />
           </Route>
+          <Route path="/thread/:threadId" element={<ThreadOverview />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
