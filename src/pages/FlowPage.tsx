@@ -20,6 +20,7 @@ export default function FlowPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { createMemory } = useLiamMemory();
+  const [isConfirming, setIsConfirming] = useState(false);
   
   const config = flowId ? getFlowConfig(flowId) : undefined;
   const {
@@ -33,14 +34,14 @@ export default function FlowPage() {
     setGeneratedMemories,
     deleteGeneratedMemory,
     updateGeneratedMemory,
+    updateGeneratedMemoryTag,
     toggleEditingMemory,
     setSavedMemoryIds,
     goToList,
     getEditingEntry,
   } = useFlowState(flowId);
 
-  const [isConfirming, setIsConfirming] = useState(false);
-
+  // Early return AFTER all hooks have been called
   if (!config) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -186,6 +187,7 @@ export default function FlowPage() {
           memories={state.generatedMemories}
           onDelete={deleteGeneratedMemory}
           onUpdate={updateGeneratedMemory}
+          onUpdateTag={updateGeneratedMemoryTag}
           onToggleEdit={toggleEditingMemory}
           onConfirm={handleConfirmMemories}
           onBack={() => setPhase('list')}

@@ -10,6 +10,7 @@ interface FlowPreviewProps {
   memories: GeneratedMemory[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, content: string) => void;
+  onUpdateTag?: (id: string, tag: string) => void;
   onToggleEdit: (id: string, isEditing: boolean) => void;
   onConfirm: () => void;
   onBack: () => void;
@@ -29,6 +30,7 @@ export function FlowPreview({
   memories,
   onDelete,
   onUpdate,
+  onUpdateTag,
   onToggleEdit,
   onConfirm,
   onBack,
@@ -80,6 +82,7 @@ export function FlowPreview({
                 memory={memory}
                 onDelete={onDelete}
                 onUpdate={onUpdate}
+                onUpdateTag={onUpdateTag}
                 onToggleEdit={onToggleEdit}
               />
             </motion.div>
