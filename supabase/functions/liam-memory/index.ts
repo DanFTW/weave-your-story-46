@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 /**
  * LIAM Memory Edge Function
@@ -11,13 +12,17 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
  * Supported actions:
  * - create: Create a new memory
  * - list: List all memories for the user
+ * - forget: Remove a memory
+ * - changeTag: Update a memory's tag
  * 
  * Authentication Flow:
- * 1. Parse PEM private key using Web Crypto API
- * 2. Sign JSON.stringify(requestBody) with ECDSA SHA-256
- * 3. Convert raw 64-byte signature to DER format
- * 4. Base64 encode the DER signature
- * 5. Send request with apiKey and signature headers
+ * 1. Verify user is authenticated via Supabase
+ * 2. Fetch user's API keys from user_api_keys table
+ * 3. Parse PEM private key using Web Crypto API
+ * 4. Sign JSON.stringify(requestBody) with ECDSA SHA-256
+ * 5. Convert raw 64-byte signature to DER format
+ * 6. Base64 encode the DER signature
+ * 7. Send request with apiKey and signature headers
  */
 
 const corsHeaders = {
@@ -27,6 +32,10 @@ const corsHeaders = {
 
 // API base URL from documentation quick start example
 const LIAM_API_BASE = 'https://web.askbuddy.ai/devspacexdb/api';
+
+// Supabase client for fetching user keys
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 /**
  * Convert PEM-formatted private key to CryptoKey
@@ -184,20 +193,53 @@ serve(async (req) => {
   }
 
   try {
-    // Load secrets
-    const apiKey = Deno.env.get('LIAM_API_KEY');
-    const privateKeyPem = Deno.env.get('LIAM_PRIVATE_KEY');
-    const userKey = Deno.env.get('LIAM_USER_KEY');
-
-    if (!apiKey || !privateKeyPem || !userKey) {
-      console.error('Missing LIAM credentials. Check LIAM_API_KEY, LIAM_PRIVATE_KEY, and LIAM_USER_KEY secrets.');
+    // Get the authorization header to identify the user
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'LIAM credentials not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('LIAM credentials loaded successfully');
+    // Create Supabase client with user's auth token
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Verify user and get their ID from the token
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    
+    if (userError || !user) {
+      console.error('Auth error:', userError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Authenticated user:', user.id);
+
+    // Fetch user's API keys from the database
+    const { data: userKeys, error: keysError } = await supabase
+      .from('user_api_keys')
+      .select('api_key, private_key, user_key')
+      .eq('user_id', user.id)
+      .single();
+
+    if (keysError || !userKeys) {
+      console.error('Failed to fetch user API keys:', keysError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'API keys not configured',
+          message: 'Please configure your API keys in your profile settings.'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { api_key: apiKey, private_key: privateKeyPem, user_key: userKey } = userKeys;
+
+    console.log('User API keys loaded successfully');
     console.log('API Key (first 10 chars):', apiKey.substring(0, 10) + '...');
     console.log('User Key (first 10 chars):', userKey.substring(0, 10) + '...');
 
