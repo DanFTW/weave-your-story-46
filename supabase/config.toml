@@ -1,1 +1,4 @@
 project_id = "ttanhgbtdyatzacxhxjj"
+
+[functions.liam-memory]
+verify_jwt = false
