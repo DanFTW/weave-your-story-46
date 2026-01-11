@@ -12,6 +12,7 @@ import Memories from "./pages/Memories";
 import MemoryDetail from "./pages/MemoryDetail";
 import Integrations from "./pages/Integrations";
 import Profile from "./pages/Profile";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          <Route path="/auth" element={<Auth />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
             <Route path="/threads" element={<Threads />} />
