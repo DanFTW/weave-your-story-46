@@ -14,18 +14,23 @@ interface Memory {
   content: string;
   tag?: string;
   createdAt: string;
+  category?: string;
+  sensitivity?: string;
 }
 
 interface UseLiamMemoryReturn {
   createMemory: (content: string, tag?: string) => Promise<boolean>;
   listMemories: () => Promise<Memory[] | null>;
+  forgetMemory: (memoryId: string, permanent?: boolean) => Promise<boolean>;
   isCreating: boolean;
   isListing: boolean;
+  isForgetting: boolean;
 }
 
 export function useLiamMemory(): UseLiamMemoryReturn {
   const [isCreating, setIsCreating] = useState(false);
   const [isListing, setIsListing] = useState(false);
+  const [isForgetting, setIsForgetting] = useState(false);
 
   const createMemory = async (content: string, tag?: string): Promise<boolean> => {
     setIsCreating(true);
@@ -132,10 +137,53 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     }
   }
 
+  const forgetMemory = async (memoryId: string, permanent: boolean = false): Promise<boolean> => {
+    setIsForgetting(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('liam-memory', {
+        body: {
+          action: 'forget',
+          memoryId,
+          permanent,
+        },
+      });
+
+      if (error) {
+        console.error('Error forgetting memory:', error);
+        toast({
+          title: 'Failed to forget memory',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      console.log('Memory forgotten successfully:', data);
+      toast({
+        title: 'Memory forgotten',
+        description: 'The memory has been removed.',
+      });
+      return true;
+    } catch (err) {
+      console.error('Unexpected error forgetting memory:', err);
+      toast({
+        title: 'Failed to forget memory',
+        description: 'An unexpected error occurred.',
+        variant: 'destructive',
+      });
+      return false;
+    } finally {
+      setIsForgetting(false);
+    }
+  };
+
   return {
     createMemory,
     listMemories,
+    forgetMemory,
     isCreating,
     isListing,
+    isForgetting,
   };
 }

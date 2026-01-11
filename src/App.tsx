@@ -9,6 +9,7 @@ import Threads from "./pages/Threads";
 import ThreadOverview from "./pages/ThreadOverview";
 import FlowPage from "./pages/FlowPage";
 import Memories from "./pages/Memories";
+import MemoryDetail from "./pages/MemoryDetail";
 import Integrations from "./pages/Integrations";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -31,6 +32,7 @@ const App = () => (
           </Route>
           <Route path="/thread/:threadId" element={<ThreadOverview />} />
           <Route path="/flow/:flowId" element={<FlowPage />} />
+          <Route path="/memory/:memoryId" element={<MemoryDetail />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
