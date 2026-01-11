@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock } from "lucide-react";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
+import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { Memory } from "@/types/memory";
 import { getCategoryConfig } from "@/components/memories/MemoryCard";
 import { cn } from "@/lib/utils";
@@ -12,11 +13,18 @@ export default function MemoryDetail() {
   const { memoryId } = useParams<{ memoryId: string }>();
   const navigate = useNavigate();
   const { listMemories, forgetMemory, isListing, isForgetting } = useLiamMemory();
+  const { addDeletedId, isDeleted } = useDeletedMemories();
   const [memory, setMemory] = useState<Memory | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     async function fetchMemory() {
+      // If this memory was already deleted locally, show not found
+      if (memoryId && isDeleted(memoryId)) {
+        setNotFound(true);
+        return;
+      }
+
       const memories = await listMemories();
       if (memories) {
         const found = memories.find((m) => m.id === memoryId);
@@ -28,16 +36,20 @@ export default function MemoryDetail() {
       }
     }
     fetchMemory();
-  }, [memoryId]);
+  }, [memoryId, isDeleted]);
 
   const handleForget = async () => {
     if (!memoryId) return;
-    // Use permanent: true to actually remove from memory list
+    
+    // Call the API with permanent: true
     const success = await forgetMemory(memoryId, true);
+    
     if (success) {
-      // Pass the deleted memory ID to the memories page so it can filter it out
-      // (handles LIAM API eventual consistency - list may return stale data briefly)
-      navigate("/memories", { replace: true, state: { deletedMemoryId: memoryId } });
+      // Mark as deleted locally (persists to localStorage)
+      // This ensures the memory won't appear in the list even if the API
+      // has eventual consistency issues and still returns it
+      addDeletedId(memoryId);
+      navigate("/memories", { replace: true });
     }
   };
 

@@ -1,40 +1,30 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { MemoryFilterBar } from "@/components/memories/MemoryFilterBar";
 import { MemoryList } from "@/components/memories/MemoryList";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
+import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { Memory } from "@/types/memory";
 
 export default function Memories() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [memories, setMemories] = useState<Memory[]>([]);
-  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const { listMemories, isListing } = useLiamMemory();
-  const location = useLocation();
-
-  // Handle deleted memory ID passed from MemoryDetail page
-  useEffect(() => {
-    const state = location.state as { deletedMemoryId?: string } | null;
-    if (state?.deletedMemoryId) {
-      setDeletedIds(prev => new Set(prev).add(state.deletedMemoryId!));
-      // Clear the state so it doesn't persist on refresh
-      window.history.replaceState({}, document.title);
-    }
-  }, [location.state]);
+  const { filterDeleted } = useDeletedMemories();
 
   useEffect(() => {
     async function fetchMemories() {
       const result = await listMemories();
       if (result) {
-        // Filter out any memories that were just deleted (handles API eventual consistency)
-        const filteredResult = result.filter(m => !deletedIds.has(m.id));
+        // Filter out any memories that were deleted locally
+        // (handles LIAM API eventual consistency - list may return stale data)
+        const filteredResult = filterDeleted(result);
         setMemories(filteredResult);
       }
     }
     fetchMemories();
-  }, [deletedIds]);
+  }, [filterDeleted]);
 
   return (
     <div className="pb-nav">
