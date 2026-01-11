@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Thread, ThreadGradient } from "@/types/threads";
 import { StatusBadge } from "./StatusBadge";
@@ -21,37 +20,31 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
   const Icon = thread.icon;
 
   return (
-    <motion.button
+    <button
       onClick={onClick}
-      whileTap={{ scale: 0.98 }}
-      whileHover={{ scale: 1.01 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
       className={cn(
-        "w-full relative overflow-hidden rounded-2xl p-6 text-left",
-        "min-h-[160px] flex flex-col",
-        "shadow-lg shadow-black/5",
+        "w-full relative overflow-hidden rounded-2xl p-5 text-left",
+        "h-32 flex items-center gap-4",
+        "shadow-lg shadow-black/5 active:scale-[0.98] transition-transform",
         gradientClasses[thread.gradient],
         className
       )}
     >
-      {/* Top row: Icon and Badge */}
-      <div className="flex items-start justify-between w-full">
-        <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-          <Icon className="w-7 h-7 text-white" strokeWidth={1.5} />
-        </div>
-        <StatusBadge status={thread.status} />
+      {/* Icon */}
+      <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+        <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />
       </div>
 
-      {/* Spacer to push title to bottom */}
-      <div className="flex-1 min-h-4" />
-
-      {/* Title at bottom */}
-      <h3 className="text-xl font-semibold text-white leading-tight">
+      {/* Title */}
+      <h3 className="text-lg font-semibold text-white leading-tight flex-1">
         {thread.title}
       </h3>
 
+      {/* Badge */}
+      <StatusBadge status={thread.status} />
+
       {/* Subtle gradient overlay for depth */}
       <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-    </motion.button>
+    </button>
   );
 }

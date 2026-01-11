@@ -56,10 +56,7 @@ export function BottomNav() {
 
       {/* Navigation bar */}
       <nav className="fixed bottom-6 left-4 right-4 z-50">
-        <motion.div
-          initial={{ y: 100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
+        <div
           className="bg-white/70 backdrop-blur-xl rounded-full px-3 py-2.5 shadow-lg shadow-black/5 border border-white/50 flex items-center justify-around"
           style={{
             background: "linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(248,250,252,0.75) 100%)",
@@ -69,10 +66,9 @@ export function BottomNav() {
             const isActive = activeItem === item.id;
 
             return (
-              <motion.button
+              <button
                 key={item.id}
                 onClick={() => handleItemClick(item.id)}
-                whileTap={{ scale: 0.9 }}
                 className={cn(
                   "relative flex items-center justify-center w-12 h-12 rounded-full transition-colors",
                   isActive ? "text-white" : "text-muted-foreground"
@@ -85,7 +81,7 @@ export function BottomNav() {
                     style={{
                       background: "linear-gradient(135deg, hsl(225 70% 55%) 0%, hsl(235 65% 50%) 100%)",
                     }}
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 35 }}
                   />
                 )}
                 <NavIcon
@@ -93,10 +89,10 @@ export function BottomNav() {
                   active={isActive}
                   className="relative z-10"
                 />
-              </motion.button>
+              </button>
             );
           })}
-        </motion.div>
+        </div>
       </nav>
     </>
   );

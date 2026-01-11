@@ -1,9 +1,8 @@
-import { BottomNav } from "@/components/BottomNav";
 import { PageHeader } from "@/components/PageHeader";
 
 export default function Integrations() {
   return (
-    <div className="min-h-screen bg-background pb-nav">
+    <div className="pb-nav">
       <div className="px-5 pt-14">
         <PageHeader 
           title="Integrations" 
@@ -18,8 +17,6 @@ export default function Integrations() {
           </div>
         </div>
       </div>
-      
-      <BottomNav />
     </div>
   );
 }
