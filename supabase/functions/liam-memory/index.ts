@@ -271,6 +271,16 @@ serve(async (req) => {
       );
     }
 
+    // Fetch user's profile to get their name (for personalized memories)
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('user_id', user.id)
+      .single();
+    
+    const userName = userProfile?.full_name || null;
+    console.log('User name from profile:', userName || '(not set)');
+
     // Parse request
     const { action, content, tag, memoryId, permanent } = await req.json();
     console.log(`LIAM Memory action: ${action}`);
@@ -286,15 +296,28 @@ serve(async (req) => {
           );
         }
 
+        // Personalize content: replace generic references with user's name
+        let personalizedContent = content;
+        if (userName) {
+          // Replace common generic references with the user's name
+          personalizedContent = content
+            .replace(/\bthe user\b/gi, userName)
+            .replace(/\bunrecognized user\b/gi, userName)
+            .replace(/\buser's\b/gi, `${userName}'s`)
+            .replace(/\bUser's\b/g, `${userName}'s`);
+        }
+
         const createBody: Record<string, string> = {
           userKey,
-          content,
+          content: personalizedContent,
         };
         
         if (tag) {
           // Convert tag to uppercase format (e.g., "family" -> "FAMILY")
           createBody.tag = tag.toUpperCase().replace(/\s+/g, '_');
         }
+
+        console.log('Creating memory with content:', personalizedContent);
 
         response = await makeAuthenticatedRequest(
           '/memory/create',
