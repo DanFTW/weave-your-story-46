@@ -78,7 +78,7 @@ export function useLiamMemory(): UseLiamMemoryReturn {
       console.log('Memory created successfully:', data);
       toast({
         title: 'Memory saved',
-        description: 'Your memory has been stored successfully.',
+        description: 'Your memory has been stored. It may take a moment to appear in your list.',
       });
       return true;
     } catch (err) {
@@ -128,9 +128,11 @@ export function useLiamMemory(): UseLiamMemoryReturn {
       }
 
       console.log('Memories retrieved:', data);
+      console.log('Total active memories:', data?.data?.totalActiveMemories);
       
       // Extract memories from nested API response structure
       const rawMemories = data?.data?.memories || data?.memories || [];
+      console.log('Raw memories count:', rawMemories.length);
       
       // Transform API response to our Memory interface
       const memories: Memory[] = rawMemories.map((m: any, index: number) => ({
@@ -142,6 +144,7 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         sensitivity: m.sensitivity,
       }));
       
+      console.log('Transformed memories count:', memories.length);
       return memories;
     } catch (err) {
       console.error('Unexpected error listing memories:', err);
