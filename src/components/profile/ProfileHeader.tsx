@@ -33,9 +33,9 @@ export function ProfileHeader({ name, handle, avatarUrl }: ProfileHeaderProps) {
         />
         
         {/* Content */}
-        <div className="relative z-10 flex flex-col items-center pt-12 pb-10">
+        <div className="relative z-10 flex flex-col items-center pt-16 pb-12">
           {/* Top bar with title and edit button */}
-          <div className="w-full flex items-center justify-between px-5 mb-10">
+          <div className="w-full flex items-center justify-between px-5 mb-8">
             <div className="w-[72px]" /> {/* Spacer for centering */}
             <h1 className="text-[17px] font-semibold text-white drop-shadow-sm">Profile</h1>
             <button className="flex items-center gap-1.5 bg-white/95 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-white transition-colors">
@@ -45,19 +45,19 @@ export function ProfileHeader({ name, handle, avatarUrl }: ProfileHeaderProps) {
           </div>
           
           {/* Avatar */}
-          <div className="mb-5">
+          <div className="mb-4">
             <div className="rounded-full p-[3px] bg-gradient-to-br from-white/30 to-white/10 backdrop-blur-sm">
-              <Avatar className="w-[136px] h-[136px] border-[3px] border-white/50">
+              <Avatar className="w-[120px] h-[120px] border-[3px] border-white/50">
                 <AvatarImage src={avatarUrl} alt={name} className="object-cover" />
-                <AvatarFallback className="bg-muted/80 text-3xl font-semibold text-muted-foreground">
-                  {name.split(' ').map(n => n[0]).join('')}
+                <AvatarFallback className="bg-muted/80 text-2xl font-semibold text-muted-foreground">
+                  {name.includes('@') ? name[0].toUpperCase() : name.split(' ').map(n => n[0]).join('')}
                 </AvatarFallback>
               </Avatar>
             </div>
           </div>
           
           {/* Name */}
-          <h2 className="text-[26px] font-bold text-white drop-shadow-md tracking-tight">{name}</h2>
+          <h2 className="text-[20px] font-semibold text-white drop-shadow-md tracking-tight max-w-[280px] truncate px-4">{name}</h2>
         </div>
       </div>
       

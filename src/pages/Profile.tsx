@@ -16,8 +16,8 @@ export default function Profile() {
   
   // User data from auth
   const userData = {
-    name: user?.user_metadata?.full_name || "User",
-    handle: user?.email?.split('@')[0] || "user",
+    name: user?.user_metadata?.full_name || user?.email || "Guest",
+    handle: user?.email?.split('@')[0] || "guest",
     email: user?.email || "Not set",
     avatarUrl: user?.user_metadata?.avatar_url,
     mcpUrl: `mcp://liam.memory/user/${user?.id?.slice(0, 8) || 'guest'}`,
