@@ -28,6 +28,7 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   lifestyle: { icon: Coffee, gradient: "bg-gradient-to-r from-violet-400 to-purple-500", label: "Lifestyle Memory" },
   receipts: { icon: ShoppingBag, gradient: "bg-gradient-to-r from-teal-400 to-cyan-500", label: "Receipt" },
   receipt: { icon: ShoppingBag, gradient: "bg-gradient-to-r from-teal-400 to-cyan-500", label: "Receipt" },
+  interests: { icon: Heart, gradient: "bg-gradient-to-r from-pink-400 to-rose-500", label: "Interests" },
 };
 
 export function getCategoryConfig(category?: string, tag?: string) {

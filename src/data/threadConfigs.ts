@@ -1,7 +1,39 @@
-import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera } from "lucide-react";
+import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "interests": {
+    id: "interests",
+    title: "Capture Your Interests",
+    subtitle: "What makes you, you",
+    description: "Save your hobbies, curiosities, and the activities that define who you are.",
+    gradient: "pink",
+    icon: Heart,
+    steps: [
+      {
+        id: "hobbies",
+        type: "setup",
+        title: "Add hobbies",
+        description: "Things you actively enjoy",
+        icon: Heart,
+      },
+      {
+        id: "flow",
+        type: "setup",
+        title: "Flow activities",
+        description: "What makes time disappear",
+        icon: Sparkles,
+      },
+      {
+        id: "save",
+        type: "save",
+        title: "Save Memory",
+        description: "Interests saved to your brain",
+        icon: Wifi,
+        badge: "XD BRAIN",
+      },
+    ],
+  },
   "receipts": {
     id: "receipts",
     title: "Receipt Scanner",
