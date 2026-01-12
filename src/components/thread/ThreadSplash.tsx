@@ -9,6 +9,7 @@ interface ThreadSplashProps {
   icon: LucideIcon;
   gradient: ThreadGradient;
   subtitle?: string;
+  onBack?: () => void;
 }
 
 const gradientClasses: Record<ThreadGradient, string> = {
@@ -19,14 +20,23 @@ const gradientClasses: Record<ThreadGradient, string> = {
   pink: "thread-gradient-pink",
 };
 
-export function ThreadSplash({ title, icon: Icon, gradient, subtitle }: ThreadSplashProps) {
+export function ThreadSplash({ title, icon: Icon, gradient, subtitle, onBack }: ThreadSplashProps) {
   const navigate = useNavigate();
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      // Default: go to threads page instead of unreliable history navigation
+      navigate('/threads');
+    }
+  };
 
   return (
     <div className={cn("relative px-5 pt-12 pb-10", gradientClasses[gradient])}>
       {/* Back button */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={handleBack}
         className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-6"
       >
         <ChevronLeft className="w-6 h-6 text-white" />

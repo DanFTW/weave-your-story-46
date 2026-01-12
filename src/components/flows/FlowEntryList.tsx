@@ -1,4 +1,5 @@
 import { Plus, Pencil, Trash2, Sparkles, Check } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { FlowConfig, FlowEntry } from "@/types/flows";
 import { ThreadSplash } from "@/components/thread/ThreadSplash";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,12 @@ export function FlowEntryList({
   onDeleteEntry,
   onGenerate,
 }: FlowEntryListProps) {
+  const navigate = useNavigate();
   const isSingleEntry = config.singleEntry;
+  
+  const handleBack = () => {
+    navigate('/threads');
+  };
   
   const getEntryTitle = (entry: FlowEntry) => {
     // Use first text field as title (usually 'name' or 'title')
@@ -107,6 +113,7 @@ export function FlowEntryList({
         title={config.title}
         icon={config.icon}
         gradient={config.gradient}
+        onBack={handleBack}
       />
       
       <div className="flex-1 px-5 pt-4 pb-32">
