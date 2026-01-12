@@ -1,7 +1,29 @@
-import { Users, Utensils, Music, Briefcase, Film } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  receipts: {
+    id: "receipts",
+    title: "Receipt Scanner",
+    subtitle: "Track your purchases",
+    description: "Scan receipts to automatically extract and save purchase details as memories.",
+    gradient: "teal",
+    icon: Receipt,
+    entryName: "receipt",
+    entryNamePlural: "receipts",
+    memoryTag: "RECEIPTS",
+    singleEntry: false,
+    isReceiptFlow: true,
+    fields: [
+      {
+        id: "image",
+        label: "Receipt Image",
+        placeholder: "Take a photo or upload",
+        type: "image",
+        required: true,
+      },
+    ],
+  },
   family: {
     id: "family",
     title: "Family Members",

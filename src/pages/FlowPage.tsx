@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { ChevronLeft, Receipt } from "lucide-react";
 import { getFlowConfig } from "@/data/flowConfigs";
 import { useFlowState } from "@/hooks/useFlowState";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
+import { useReceiptUpload, ReceiptData } from "@/hooks/useReceiptUpload";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { GeneratedMemory } from "@/types/flows";
+import { cn } from "@/lib/utils";
 
 // Flow components
 import { FlowOverview } from "@/components/flows/FlowOverview";
@@ -15,12 +18,33 @@ import { FlowGenerating } from "@/components/flows/FlowGenerating";
 import { FlowPreview } from "@/components/flows/FlowPreview";
 import { FlowConfigured } from "@/components/flows/FlowConfigured";
 
+// Receipt-specific components
+import { ReceiptUploader } from "@/components/flows/ReceiptUploader";
+import { ReceiptPreview } from "@/components/flows/ReceiptPreview";
+import { ReceiptMemoryList } from "@/components/flows/ReceiptMemoryList";
+
+// Gradient class mapping
+const gradientClasses: Record<string, string> = {
+  blue: "thread-gradient-blue",
+  teal: "thread-gradient-teal",
+  purple: "thread-gradient-purple",
+  orange: "thread-gradient-orange",
+  pink: "thread-gradient-pink",
+};
+
 export default function FlowPage() {
   const { flowId } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { createMemory } = useLiamMemory();
+  const { processReceipt, isProcessing } = useReceiptUpload();
   const [isConfirming, setIsConfirming] = useState(false);
+  
+  // Receipt-specific state
+  const [receiptPhase, setReceiptPhase] = useState<'list' | 'upload' | 'preview'>('list');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   
   const config = flowId ? getFlowConfig(flowId) : undefined;
   const {
@@ -50,8 +74,122 @@ export default function FlowPage() {
     );
   }
 
+  // === RECEIPT FLOW HANDLERS ===
+  
+  const handleImageSelected = (file: File, base64: string) => {
+    setSelectedFile(file);
+    setSelectedImage(base64);
+  };
+
+  const handleScanReceipt = async () => {
+    if (!selectedImage) return;
+    
+    const data = await processReceipt(selectedImage);
+    if (data) {
+      setReceiptData(data);
+      setReceiptPhase('preview');
+    }
+  };
+
+  const handleSaveReceipt = async (memoryString: string) => {
+    setIsConfirming(true);
+    
+    try {
+      const success = await createMemory(memoryString, 'RECEIPTS');
+      
+      if (success) {
+        toast({
+          title: "Receipt saved",
+          description: "Your purchase has been added to memory.",
+        });
+        // Reset and go back to list
+        setReceiptPhase('list');
+        setSelectedImage(null);
+        setSelectedFile(null);
+        setReceiptData(null);
+      }
+    } catch (error) {
+      console.error('Failed to save receipt:', error);
+      toast({
+        title: "Save failed",
+        description: "Could not save the receipt. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleRetakeReceipt = () => {
+    setReceiptPhase('upload');
+    setReceiptData(null);
+  };
+
+  const handleClearImage = () => {
+    setSelectedImage(null);
+    setSelectedFile(null);
+  };
+
+  // === RECEIPT FLOW RENDER ===
+  
+  if (config.isReceiptFlow) {
+    const Icon = config.icon;
+    
+    return (
+      <div className="min-h-screen bg-background pb-nav">
+        {/* Header */}
+        <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
+          <button
+            onClick={() => receiptPhase === 'list' ? navigate('/threads') : setReceiptPhase('list')}
+            className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-4"
+          >
+            <ChevronLeft className="w-6 h-6 text-white" />
+          </button>
+          
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <Icon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">{config.title}</h1>
+              <p className="text-white/70 text-sm">{config.subtitle}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-5 pt-5">
+          {receiptPhase === 'list' && (
+            <ReceiptMemoryList onAddNew={() => setReceiptPhase('upload')} />
+          )}
+          
+          {receiptPhase === 'upload' && (
+            <ReceiptUploader
+              onImageSelected={handleImageSelected}
+              onScan={handleScanReceipt}
+              isProcessing={isProcessing}
+              selectedImage={selectedImage}
+              onClear={handleClearImage}
+            />
+          )}
+          
+          {receiptPhase === 'preview' && receiptData && (
+            <ReceiptPreview
+              data={receiptData}
+              imageUrl={selectedImage || undefined}
+              onSave={handleSaveReceipt}
+              onRetake={handleRetakeReceipt}
+              isSaving={isConfirming}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // === STANDARD FLOW HANDLERS ===
+
   const handleSaveEntry = (data: Record<string, string>) => {
-    // For single-entry flows with existing entry, always update
     if (config.singleEntry && state.entries.length > 0) {
       updateEntry(state.entries[0].id, data);
     } else if (state.editingEntryId) {
@@ -76,9 +214,7 @@ export default function FlowPage() {
         },
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       if (data?.memories) {
         setGeneratedMemories(data.memories as GeneratedMemory[]);
@@ -134,7 +270,8 @@ export default function FlowPage() {
     navigate('/memories');
   };
 
-  // Render based on current phase
+  // === STANDARD FLOW RENDER ===
+  
   switch (state.phase) {
     case 'overview':
       return (

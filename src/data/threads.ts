@@ -1,7 +1,16 @@
-import { Send, Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag } from "lucide-react";
+import { Send, Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Receipt } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "receipts",
+    title: "Scan receipts to memory",
+    icon: Receipt,
+    gradient: "teal",
+    status: "active",
+    type: "flow",
+    category: "purchases",
+  },
   {
     id: "gmail-sent",
     title: "Save sent emails as memories",
