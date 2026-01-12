@@ -5,9 +5,17 @@ interface ProfileHeaderProps {
   name: string;
   handle: string;
   avatarUrl?: string;
+  onEditClick?: () => void;
 }
 
-export function ProfileHeader({ name, handle, avatarUrl }: ProfileHeaderProps) {
+export function ProfileHeader({ name, handle, avatarUrl, onEditClick }: ProfileHeaderProps) {
+  const getInitials = () => {
+    if (name.includes('@')) {
+      return name[0].toUpperCase();
+    }
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
   return (
     <div className="relative">
       {/* Blurred background container */}
@@ -38,7 +46,10 @@ export function ProfileHeader({ name, handle, avatarUrl }: ProfileHeaderProps) {
           <div className="w-full flex items-center justify-between px-5 mb-8">
             <div className="w-[72px]" /> {/* Spacer for centering */}
             <h1 className="text-[17px] font-semibold text-white drop-shadow-sm">Profile</h1>
-            <button className="flex items-center gap-1.5 bg-white/95 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-white transition-colors">
+            <button 
+              onClick={onEditClick}
+              className="flex items-center gap-1.5 bg-white/95 backdrop-blur-sm rounded-full px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-white transition-colors"
+            >
               <Pencil className="w-3.5 h-3.5" />
               Edit
             </button>
@@ -50,7 +61,7 @@ export function ProfileHeader({ name, handle, avatarUrl }: ProfileHeaderProps) {
               <Avatar className="w-[120px] h-[120px] border-[3px] border-white/50">
                 <AvatarImage src={avatarUrl} alt={name} className="object-cover" />
                 <AvatarFallback className="bg-muted/80 text-2xl font-semibold text-muted-foreground">
-                  {name.includes('@') ? name[0].toUpperCase() : name.split(' ').map(n => n[0]).join('')}
+                  {getInitials()}
                 </AvatarFallback>
               </Avatar>
             </div>

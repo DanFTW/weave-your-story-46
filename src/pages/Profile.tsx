@@ -5,40 +5,46 @@ import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileSettingsCard, SettingsRow } from "@/components/profile/ProfileSettingsCard";
 import { BellIcon, EyeIcon, SparkleIcon } from "@/components/profile/ProfileIcons";
 import { SwipeToUnlock } from "@/components/profile/SwipeToUnlock";
+import { ProfileEditDrawer } from "@/components/profile/ProfileEditDrawer";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { useUserApiKeys } from "@/hooks/useUserApiKeys";
 
 export default function Profile() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { hasKeys } = useUserApiKeys();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
   
-  // User data from auth
-  const userData = {
-    name: user?.user_metadata?.full_name || user?.email || "Guest",
-    handle: user?.email?.split('@')[0] || "guest",
-    email: user?.email || "Not set",
-    avatarUrl: user?.user_metadata?.avatar_url,
-    mcpUrl: `mcp://liam.memory/user/${user?.id?.slice(0, 8) || 'guest'}`,
+  // Use profile data with auth fallback
+  const displayName = profile?.full_name || user?.user_metadata?.full_name || user?.email || "Guest";
+  const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url;
+  const handle = user?.email?.split('@')[0] || "guest";
+  const mcpUrl = `mcp://liam.memory/user/${user?.id?.slice(0, 8) || 'guest'}`;
+
+  const handleApiKeysClick = () => {
+    navigate('/profile/api-keys');
   };
 
-  const handleEmailClick = () => {
-    navigate('/profile/api-keys');
+  const handleEditClick = () => {
+    setEditDrawerOpen(true);
   };
 
   return (
     <div className="min-h-screen bg-background pb-nav">
       {/* Header with blurred background */}
       <ProfileHeader 
-        name={userData.name}
-        handle={userData.handle}
-        avatarUrl={userData.avatarUrl}
+        name={displayName}
+        handle={handle}
+        avatarUrl={avatarUrl}
+        onEditClick={handleEditClick}
       />
       
       {/* Settings cards */}
       <div className="px-5 -mt-4 space-y-4 relative z-20">
-        {/* Email card - navigates to API key config */}
+        {/* API Configuration card */}
         <ProfileSettingsCard>
           <SettingsRow
             icon={<Key className="w-5 h-5 text-muted-foreground" />}
@@ -47,7 +53,7 @@ export default function Profile() {
             value={hasKeys ? "Configured" : "Not set"}
             hasChevron
             isLast
-            onClick={handleEmailClick}
+            onClick={handleApiKeysClick}
           />
         </ProfileSettingsCard>
         
@@ -81,8 +87,14 @@ export default function Profile() {
         </ProfileSettingsCard>
 
         {/* MCP URL Swipe to Unlock */}
-        <SwipeToUnlock mcpUrl={userData.mcpUrl} />
+        <SwipeToUnlock mcpUrl={mcpUrl} />
       </div>
+
+      {/* Edit Profile Drawer */}
+      <ProfileEditDrawer 
+        open={editDrawerOpen} 
+        onOpenChange={setEditDrawerOpen} 
+      />
     </div>
   );
 }
