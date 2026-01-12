@@ -32,6 +32,7 @@ export function FlowConfigured({
 }: FlowConfiguredProps) {
   const navigate = useNavigate();
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  const isSingleEntry = config.singleEntry;
 
   const getEntryTitle = (entry: FlowEntry) => {
     const titleField = config.fields.find(f => f.type === 'text');
@@ -52,7 +53,75 @@ export function FlowConfigured({
     setExpandedEntryId(prev => prev === entryId ? null : entryId);
   };
 
+  // For single-entry flows, parse and display array values
+  const parseArrayValue = (value: string): string[] => {
+    if (!value) return [];
+    return value.split('|||').filter(v => v.trim());
+  };
+
   const Icon = config.icon;
+
+  // Render single-entry summary view
+  const renderSingleEntrySummary = (entry: FlowEntry) => {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div>
+            <h3 className="font-semibold text-foreground">Your {config.entryName}</h3>
+            <p className="text-sm text-muted-foreground">{savedMemories.length} memories saved</p>
+          </div>
+          <button
+            onClick={() => onEditEntry(entry.id)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Edit
+          </button>
+        </div>
+        
+        {/* Summary Content */}
+        <div className="p-4 space-y-4">
+          {config.fields.map(field => {
+            const value = entry.data[field.id];
+            if (!value) return null;
+            
+            const isArrayField = field.type === 'multitext' || field.type === 'chips';
+            const items = isArrayField ? parseArrayValue(value) : [];
+            
+            if (isArrayField && items.length === 0) return null;
+            
+            return (
+              <div key={field.id} className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {field.label}
+                </p>
+                {isArrayField ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {items.map((item, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted text-sm text-foreground"
+                      >
+                        <Check className="w-3 h-3 text-primary" />
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-foreground">{value}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -83,99 +152,104 @@ export function FlowConfigured({
         </div>
 
         <p className="text-white/80 text-sm">
-          Your {config.entryNamePlural} have been added to memory. You can update them anytime.
+          Your {isSingleEntry ? config.entryName : config.entryNamePlural} {isSingleEntry ? 'has' : 'have'} been added to memory. You can update {isSingleEntry ? 'it' : 'them'} anytime.
         </p>
       </div>
       
       <div className="px-5 pt-4 pb-8">
-        {/* Entry Cards */}
-        <div className="space-y-3">
-          {entries.map((entry, index) => {
-            const entryMemories = getMemoriesForEntry(entry.id);
-            const isExpanded = expandedEntryId === entry.id;
+        {isSingleEntry && entries.length > 0 ? (
+          // Single-entry summary view
+          renderSingleEntrySummary(entries[0])
+        ) : (
+          // Multi-entry list view
+          <div className="space-y-3">
+            {entries.map((entry, index) => {
+              const entryMemories = getMemoriesForEntry(entry.id);
+              const isExpanded = expandedEntryId === entry.id;
 
-            return (
-              <motion.div
-                key={entry.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden"
-              >
-                {/* Entry Header */}
-                <button
-                  onClick={() => toggleExpanded(entry.id)}
-                  className="w-full p-4 flex items-center justify-between text-left"
+              return (
+                <motion.div
+                  key={entry.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden"
                 >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-foreground truncate">
-                      {getEntryTitle(entry)}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {getEntrySubtitle(entry)} • {entryMemories.length} memories
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 ml-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditEntry(entry.id);
-                      }}
-                      className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-                    >
-                      <Pencil className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    {isExpanded ? (
-                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                  {/* Entry Header */}
+                  <button
+                    onClick={() => toggleExpanded(entry.id)}
+                    className="w-full p-4 flex items-center justify-between text-left"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground truncate">
+                        {getEntryTitle(entry)}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        {getEntrySubtitle(entry)} • {entryMemories.length} memories
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 ml-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditEntry(entry.id);
+                        }}
+                        className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
+                      >
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      {isExpanded ? (
+                        <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Memories List */}
+                  <AnimatePresence>
+                    {isExpanded && entryMemories.length > 0 && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-4 pb-4 pt-0 space-y-2">
+                          {entryMemories.map((memory) => (
+                            <div
+                              key={memory.id}
+                              className="bg-muted/50 rounded-xl px-3 py-2"
+                            >
+                              <p className="text-sm text-foreground">
+                                {memory.content}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
                     )}
-                  </div>
-                </button>
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
 
-                {/* Memories List */}
-                <AnimatePresence>
-                  {isExpanded && entryMemories.length > 0 && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-4 pb-4 pt-0 space-y-2">
-                        {entryMemories.map((memory) => (
-                          <div
-                            key={memory.id}
-                            className="bg-muted/50 rounded-xl px-3 py-2"
-                          >
-                            <p className="text-sm text-foreground">
-                              {memory.content}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          })}
-
-          {/* Add Another Card */}
-          <motion.button
-            onClick={onAddEntry}
-            className="w-full bg-card rounded-2xl p-4 shadow-sm border border-border border-dashed flex items-center gap-3 hover:border-primary/30 transition-colors"
-            whileTap={{ scale: 0.98 }}
-          >
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <Plus className="w-5 h-5 text-primary" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground">
-              Add another {config.entryName}
-            </span>
-          </motion.button>
-        </div>
+            {/* Add Another Card - only for multi-entry flows */}
+            <motion.button
+              onClick={onAddEntry}
+              className="w-full bg-card rounded-2xl p-4 shadow-sm border border-border border-dashed flex items-center gap-3 hover:border-primary/30 transition-colors"
+              whileTap={{ scale: 0.98 }}
+            >
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Plus className="w-5 h-5 text-primary" />
+              </div>
+              <span className="text-sm font-medium text-muted-foreground">
+                Add another {config.entryName}
+              </span>
+            </motion.button>
+          </div>
+        )}
       </div>
     </div>
   );
