@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Plus, Settings2 } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 import { ThreadSplash } from "@/components/thread/ThreadSplash";
 import { motion } from "framer-motion";
@@ -9,6 +9,8 @@ interface FlowOverviewProps {
 }
 
 export function FlowOverview({ config, onAddEntry }: FlowOverviewProps) {
+  const isSingleEntry = config.singleEntry;
+  
   return (
     <div className="min-h-screen bg-background">
       <ThreadSplash
@@ -29,17 +31,21 @@ export function FlowOverview({ config, onAddEntry }: FlowOverviewProps) {
           </p>
         </div>
 
-        {/* Add Entry Card */}
+        {/* Add/Configure Entry Card */}
         <motion.button
           onClick={onAddEntry}
           className="w-full bg-card rounded-2xl p-6 shadow-sm border border-border border-dashed flex flex-col items-center justify-center gap-3 hover:border-primary/30 transition-colors"
           whileTap={{ scale: 0.98 }}
         >
           <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-            <Plus className="w-7 h-7 text-primary" />
+            {isSingleEntry ? (
+              <Settings2 className="w-7 h-7 text-primary" />
+            ) : (
+              <Plus className="w-7 h-7 text-primary" />
+            )}
           </div>
           <span className="text-base font-medium text-foreground">
-            Add {config.entryName}
+            {isSingleEntry ? `Configure ${config.entryName}` : `Add ${config.entryName}`}
           </span>
         </motion.button>
       </div>

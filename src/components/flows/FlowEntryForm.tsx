@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Plus, X } from "lucide-react";
 import { FlowConfig, FlowEntry } from "@/types/flows";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,11 +38,11 @@ const quickRelationships = [
 export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryFormProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [showOtherInput, setShowOtherInput] = useState(false);
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (entry) {
       setFormData(entry.data);
-      // Check if relationship is custom
       const isQuickRelationship = quickRelationships.some(r => r.value === entry.data.relationship);
       setShowOtherInput(!isQuickRelationship && !!entry.data.relationship);
     } else {
@@ -53,6 +53,7 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
       setFormData(initial);
       setShowOtherInput(false);
     }
+    setInputValues({});
   }, [entry, config.fields]);
 
   const handleChange = (fieldId: string, value: string) => {
@@ -66,6 +67,40 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
     } else {
       setShowOtherInput(false);
       handleChange('relationship', value);
+    }
+  };
+
+  // For multitext and chips - parse comma-separated values
+  const getArrayValue = (fieldId: string): string[] => {
+    const value = formData[fieldId];
+    if (!value) return [];
+    return value.split('|||').filter(v => v.trim());
+  };
+
+  const addToArray = (fieldId: string, newValue: string) => {
+    const trimmed = newValue.trim();
+    if (!trimmed) return;
+    
+    const current = getArrayValue(fieldId);
+    if (!current.includes(trimmed)) {
+      const updated = [...current, trimmed].join('|||');
+      handleChange(fieldId, updated);
+    }
+    setInputValues(prev => ({ ...prev, [fieldId]: '' }));
+  };
+
+  const removeFromArray = (fieldId: string, valueToRemove: string) => {
+    const current = getArrayValue(fieldId);
+    const updated = current.filter(v => v !== valueToRemove).join('|||');
+    handleChange(fieldId, updated);
+  };
+
+  const toggleChip = (fieldId: string, chipValue: string) => {
+    const current = getArrayValue(fieldId);
+    if (current.includes(chipValue)) {
+      removeFromArray(fieldId, chipValue);
+    } else {
+      addToArray(fieldId, chipValue);
     }
   };
 
@@ -111,6 +146,154 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
               autoFocus
             />
           )}
+        </div>
+      );
+    }
+
+    // Multitext field - add multiple items
+    if (field.type === 'multitext') {
+      const items = getArrayValue(field.id);
+      const inputValue = inputValues[field.id] || '';
+      
+      return (
+        <div className="space-y-3">
+          {field.hint && (
+            <p className="text-xs text-muted-foreground">{field.hint}</p>
+          )}
+          
+          {/* Tags display */}
+          {items.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {items.map((item) => (
+                <span
+                  key={item}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium"
+                >
+                  {item}
+                  <button
+                    type="button"
+                    onClick={() => removeFromArray(field.id, item)}
+                    className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          
+          {/* Input with add button */}
+          <div className="flex gap-2">
+            <Input
+              placeholder={field.placeholder}
+              value={inputValue}
+              onChange={(e) => setInputValues(prev => ({ ...prev, [field.id]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addToArray(field.id, inputValue);
+                }
+              }}
+              className="h-11 flex-1"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="h-11 w-11 shrink-0"
+              onClick={() => addToArray(field.id, inputValue)}
+              disabled={!inputValue.trim()}
+            >
+              <Plus className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Chips field - pre-defined options with multi-select
+    if (field.type === 'chips' && field.options) {
+      const selected = getArrayValue(field.id);
+      const inputValue = inputValues[field.id] || '';
+      
+      // Get custom items (items not in predefined options)
+      const customItems = selected.filter(s => !field.options?.includes(s));
+      
+      return (
+        <div className="space-y-3">
+          {field.hint && (
+            <p className="text-xs text-muted-foreground">{field.hint}</p>
+          )}
+          
+          {/* Predefined options */}
+          <div className="flex flex-wrap gap-2">
+            {field.options.map(option => {
+              const isSelected = selected.includes(option);
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => toggleChip(field.id, option)}
+                  className={cn(
+                    "px-3.5 py-2 rounded-full text-sm font-medium transition-all border",
+                    isSelected
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-border hover:border-primary/50"
+                  )}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+          
+          {/* Custom items display */}
+          {customItems.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {customItems.map((item) => (
+                <span
+                  key={item}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-medium"
+                >
+                  {item}
+                  <button
+                    type="button"
+                    onClick={() => removeFromArray(field.id, item)}
+                    className="hover:bg-primary-foreground/20 rounded-full p-0.5 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          
+          {/* Add custom option */}
+          <div className="flex gap-2">
+            <Input
+              placeholder={field.placeholder}
+              value={inputValue}
+              onChange={(e) => setInputValues(prev => ({ ...prev, [field.id]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addToArray(field.id, inputValue);
+                }
+              }}
+              className="h-10 flex-1 text-sm"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-10 px-3"
+              onClick={() => addToArray(field.id, inputValue)}
+              disabled={!inputValue.trim()}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add
+            </Button>
+          </div>
         </div>
       );
     }
@@ -178,6 +361,33 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
     return null;
   };
 
+  // Group fields by section
+  const getFieldsBySection = () => {
+    const sections: { name: string | null; fields: typeof config.fields }[] = [];
+    let currentSection: string | null = null;
+    let currentFields: typeof config.fields = [];
+
+    config.fields.forEach(field => {
+      if (field.section && field.section !== currentSection) {
+        if (currentFields.length > 0) {
+          sections.push({ name: currentSection, fields: currentFields });
+        }
+        currentSection = field.section;
+        currentFields = [field];
+      } else {
+        currentFields.push(field);
+      }
+    });
+
+    if (currentFields.length > 0) {
+      sections.push({ name: currentSection, fields: currentFields });
+    }
+
+    return sections;
+  };
+
+  const sections = getFieldsBySection();
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -195,26 +405,37 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">
-              {entry ? 'Edit' : 'Add'} {config.entryName}
+              {entry ? 'Edit' : config.singleEntry ? 'Configure' : 'Add'} {config.entryName}
             </h1>
-            <p className="text-white/70 text-sm">Fill in the details below</p>
+            <p className="text-white/70 text-sm">
+              {config.singleEntry ? config.description : 'Fill in the details below'}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex-1 px-5 py-5 pb-32">
-        <div className="space-y-5">
-          {config.fields.map(field => (
-            <div key={field.id} className="space-y-2">
-              <Label htmlFor={field.id} className="text-sm font-medium">
-                {field.label}
-                {field.required && <span className="text-destructive ml-1">*</span>}
-              </Label>
-              {renderField(field)}
+      <form onSubmit={handleSubmit} className="flex-1 px-5 py-5 pb-32 overflow-auto">
+        {sections.map((section, sectionIndex) => (
+          <div key={sectionIndex} className="mb-6">
+            {section.name && (
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 px-1">
+                {section.name}
+              </h3>
+            )}
+            <div className="space-y-5">
+              {section.fields.map(field => (
+                <div key={field.id} className="space-y-2">
+                  <Label htmlFor={field.id} className="text-sm font-medium">
+                    {field.label}
+                    {field.required && <span className="text-destructive ml-1">*</span>}
+                  </Label>
+                  {renderField(field)}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </form>
 
       {/* Save Button */}
@@ -224,7 +445,7 @@ export function FlowEntryForm({ config, entry, onSave, onCancel }: FlowEntryForm
           disabled={!isValid}
           className="w-full h-12 text-base font-medium"
         >
-          {entry ? 'Save Changes' : `Add ${config.entryName}`}
+          {entry ? 'Save Changes' : config.singleEntry ? 'Save Preferences' : `Add ${config.entryName}`}
         </Button>
       </div>
     </div>

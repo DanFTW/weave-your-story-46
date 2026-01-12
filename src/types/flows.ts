@@ -2,7 +2,7 @@ import { LucideIcon } from "lucide-react";
 import { ThreadGradient } from "./threads";
 
 // Field types supported in flow forms
-export type FlowFieldType = 'text' | 'textarea' | 'date' | 'select';
+export type FlowFieldType = 'text' | 'textarea' | 'date' | 'select' | 'chips' | 'multitext';
 
 // Single form field definition
 export interface FlowField {
@@ -11,7 +11,9 @@ export interface FlowField {
   placeholder: string;
   type: FlowFieldType;
   required: boolean;
-  options?: string[]; // For select type
+  options?: string[]; // For select/chips type
+  section?: string; // Optional section header
+  hint?: string; // Optional helper text
 }
 
 // Flow configuration - defines any memory collection flow
@@ -26,6 +28,7 @@ export interface FlowConfig {
   entryNamePlural: string;
   fields: FlowField[];
   memoryTag: string; // Tag for generated memories
+  singleEntry?: boolean; // If true, only one entry (like food preferences)
 }
 
 // Single data entry (e.g., one family member)
