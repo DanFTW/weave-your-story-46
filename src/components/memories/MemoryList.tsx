@@ -80,9 +80,12 @@ export function MemoryList({ memories, isLoading, activeFilter }: MemoryListProp
 
   if (memories.length === 0) {
     return (
-      <div className="rounded-2xl bg-card p-6 border border-border/50 text-center">
+      <div className="rounded-2xl bg-card p-6 border border-border/50 text-center space-y-2">
         <p className="text-sm text-muted-foreground">
           Your memories will appear here once you start creating them.
+        </p>
+        <p className="text-xs text-muted-foreground/70">
+          Just created a memory? It may take a moment to sync. Try refreshing with the button above.
         </p>
       </div>
     );
