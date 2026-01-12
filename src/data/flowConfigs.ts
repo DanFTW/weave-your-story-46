@@ -1,7 +1,56 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  interests: {
+    id: "interests",
+    title: "Your Interests",
+    subtitle: "What makes you, you",
+    description: "Capture the hobbies, curiosities, and activities that define who you are.",
+    gradient: "pink",
+    icon: Heart,
+    entryName: "interest profile",
+    entryNamePlural: "interests",
+    memoryTag: "interests",
+    singleEntry: true,
+    fields: [
+      {
+        id: "hobbies",
+        label: "Hobbies",
+        placeholder: "Add a hobby...",
+        type: "multitext",
+        required: true,
+        section: "What You Do",
+        hint: "Things you actively enjoy doing regularly",
+      },
+      {
+        id: "curiosities",
+        label: "Curiosities",
+        placeholder: "Add something you're curious about...",
+        type: "multitext",
+        required: false,
+        hint: "Topics or ideas that fascinate you",
+      },
+      {
+        id: "flow-activities",
+        label: "Activities You Lose Time Doing",
+        placeholder: "Add an activity...",
+        type: "multitext",
+        required: false,
+        section: "Deep Dives",
+        hint: "Things that make hours feel like minutes",
+      },
+      {
+        id: "explore",
+        label: "Interests to Explore",
+        placeholder: "Add something you want to try...",
+        type: "multitext",
+        required: false,
+        section: "Future You",
+        hint: "Things you'd love to learn or get into someday",
+      },
+    ],
+  },
   receipts: {
     id: "receipts",
     title: "Receipt Scanner",

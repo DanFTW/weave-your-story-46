@@ -1,7 +1,16 @@
-import { Send, Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Receipt } from "lucide-react";
+import { Send, Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Receipt, Heart } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "interests",
+    title: "Capture your interests",
+    icon: Heart,
+    gradient: "pink",
+    status: "active",
+    type: "flow",
+    category: "personal",
+  },
   {
     id: "receipts",
     title: "Scan receipts to memory",
