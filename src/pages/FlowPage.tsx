@@ -51,12 +51,15 @@ export default function FlowPage() {
   }
 
   const handleSaveEntry = (data: Record<string, string>) => {
-    if (state.editingEntryId) {
+    // For single-entry flows with existing entry, always update
+    if (config.singleEntry && state.entries.length > 0) {
+      updateEntry(state.entries[0].id, data);
+    } else if (state.editingEntryId) {
       updateEntry(state.editingEntryId, data);
     } else {
       addEntry(data);
-      setPhase('list');
     }
+    setPhase('list');
   };
 
   const handleGenerate = async () => {
@@ -145,8 +148,9 @@ export default function FlowPage() {
       return (
         <FlowEntryForm
           config={config}
+          entry={config.singleEntry && state.entries.length > 0 ? state.entries[0] : undefined}
           onSave={handleSaveEntry}
-          onCancel={goToList}
+          onCancel={() => state.entries.length > 0 ? goToList() : navigate('/threads')}
         />
       );
 
