@@ -14,7 +14,7 @@ export default function Home() {
 
   return (
     <div className="pb-nav">
-      <div className="px-5 pt-14">
+      <div className="px-5">
         <PageHeader 
           title="Welcome to Weave" 
           subtitle="Your memories, beautifully connected" 
