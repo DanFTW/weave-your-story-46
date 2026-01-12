@@ -19,12 +19,19 @@ export function ThreadStepCard({ step, onClick }: ThreadStepCardProps) {
 
   if (isSimple) {
     return (
-      <div className="bg-secondary/50 rounded-2xl px-5 py-4">
+      <button
+        onClick={onClick}
+        className={cn(
+          "w-full text-left bg-secondary/50 rounded-2xl px-5 py-4",
+          "active:scale-[0.99] transition-transform"
+        )}
+      >
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
             {Icon ? <Icon className="w-5 h-5 text-muted-foreground" /> : defaultIcons[step.type]}
           </div>
           <span className="font-semibold text-foreground">{step.title}</span>
+          <ChevronRight className="w-5 h-5 text-muted-foreground/50 ml-auto flex-shrink-0" />
         </div>
         {step.description && (
           <div className="flex items-center gap-3 text-sm text-muted-foreground pl-1">
@@ -32,7 +39,7 @@ export function ThreadStepCard({ step, onClick }: ThreadStepCardProps) {
             <span>{step.description}</span>
           </div>
         )}
-      </div>
+      </button>
     );
   }
 
