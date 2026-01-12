@@ -1,4 +1,5 @@
 import { Plus, Settings2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { FlowConfig } from "@/types/flows";
 import { ThreadSplash } from "@/components/thread/ThreadSplash";
 import { motion } from "framer-motion";
@@ -9,7 +10,12 @@ interface FlowOverviewProps {
 }
 
 export function FlowOverview({ config, onAddEntry }: FlowOverviewProps) {
+  const navigate = useNavigate();
   const isSingleEntry = config.singleEntry;
+  
+  const handleBack = () => {
+    navigate('/threads');
+  };
   
   return (
     <div className="min-h-screen bg-background">
@@ -18,6 +24,7 @@ export function FlowOverview({ config, onAddEntry }: FlowOverviewProps) {
         icon={config.icon}
         gradient={config.gradient}
         subtitle={config.subtitle}
+        onBack={handleBack}
       />
       
       <div className="px-5 pt-4">
