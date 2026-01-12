@@ -1,12 +1,17 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ThreadSplash } from "@/components/thread/ThreadSplash";
 import { ThreadContent } from "@/components/thread/ThreadContent";
 import { ThreadCTA } from "@/components/thread/ThreadCTA";
+import { StepDetailSheet } from "@/components/thread/StepDetailSheet";
 import { getThreadConfig } from "@/data/threadConfigs";
+import { ThreadStep } from "@/types/threadConfig";
 
 export default function ThreadOverview() {
   const { threadId } = useParams<{ threadId: string }>();
   const navigate = useNavigate();
+  const [selectedStep, setSelectedStep] = useState<ThreadStep | null>(null);
+  const [stepSheetOpen, setStepSheetOpen] = useState(false);
   
   const config = threadId ? getThreadConfig(threadId) : undefined;
 
@@ -19,13 +24,16 @@ export default function ThreadOverview() {
   }
 
   const handleStepClick = (stepId: string) => {
-    // Navigate to step detail or handle step action
-    console.log("Step clicked:", stepId);
+    const step = config.steps.find(s => s.id === stepId);
+    if (step) {
+      setSelectedStep(step);
+      setStepSheetOpen(true);
+    }
   };
 
   const handleGetStarted = () => {
     // Navigate to flow page for supported flows
-    const flowEnabledThreads = ['family', 'food-preferences', 'music-taste', 'shopping-preferences', 'receipts', 'interests'];
+    const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests'];
     if (flowEnabledThreads.includes(config.id)) {
       const flowId = config.id === 'food-preferences' ? 'food' : config.id;
       navigate(`/flow/${flowId}`);
@@ -48,6 +56,12 @@ export default function ThreadOverview() {
         onStepClick={handleStepClick}
       />
       <ThreadCTA onClick={handleGetStarted} />
+      
+      <StepDetailSheet
+        open={stepSheetOpen}
+        onOpenChange={setStepSheetOpen}
+        step={selectedStep}
+      />
     </div>
   );
 }
