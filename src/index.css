@@ -166,7 +166,15 @@
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
   }
 
+  .pt-safe-top {
+    padding-top: max(3.5rem, calc(env(safe-area-inset-top) + 2rem));
+  }
+
   .pb-nav {
-    padding-bottom: 6rem;
+    padding-bottom: max(6rem, calc(5rem + env(safe-area-inset-bottom)));
+  }
+
+  .bottom-safe {
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
   }
 }

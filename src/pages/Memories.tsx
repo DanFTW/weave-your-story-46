@@ -28,7 +28,7 @@ export default function Memories() {
 
   return (
     <div className="pb-nav">
-      <div className="px-5 pt-14">
+      <div className="px-5">
         <PageHeader 
           title="Memories" 
           subtitle="All your saved memories" 

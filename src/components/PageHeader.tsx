@@ -11,7 +11,7 @@ export function PageHeader({ title, subtitle }: PageHeaderProps) {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="px-4 pt-14 pb-6"
+      className="pt-safe-top pb-6"
     >
       <h1 className="text-3xl font-bold text-foreground tracking-tight">
         {title}

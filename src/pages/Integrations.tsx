@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 export default function Integrations() {
   return (
     <div className="pb-nav">
-      <div className="px-5 pt-14">
+      <div className="px-5">
         <PageHeader 
           title="Integrations" 
           subtitle="Connect your apps" 

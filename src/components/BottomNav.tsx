@@ -55,7 +55,7 @@ export function BottomNav() {
       </div>
 
       {/* Navigation bar */}
-      <nav className="fixed bottom-6 left-4 right-4 z-50">
+      <nav className="fixed bottom-safe left-4 right-4 z-50">
         <div
           className="bg-white/70 backdrop-blur-xl rounded-full px-3 py-2.5 shadow-lg shadow-black/5 border border-white/50 flex items-center justify-around"
           style={{
