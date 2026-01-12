@@ -1,6 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+
+async function getAuthToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
 
 /**
  * Custom hook for LIAM Memory API operations
@@ -39,6 +44,16 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     setIsCreating(true);
     
     try {
+      const token = await getAuthToken();
+      if (!token) {
+        toast({
+          title: 'Sign in required',
+          description: 'Please sign in to save memories.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
       const { data, error } = await supabase.functions.invoke('liam-memory', {
         body: {
           action: 'create',
@@ -83,6 +98,16 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     setIsListing(true);
     
     try {
+      const token = await getAuthToken();
+      if (!token) {
+        toast({
+          title: 'Sign in required',
+          description: 'Please sign in to view memories.',
+          variant: 'destructive',
+        });
+        return null;
+      }
+
       const { data, error } = await supabase.functions.invoke('liam-memory', {
         body: {
           action: 'list',
@@ -150,6 +175,16 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     setIsForgetting(true);
     
     try {
+      const token = await getAuthToken();
+      if (!token) {
+        toast({
+          title: 'Sign in required',
+          description: 'Please sign in to manage memories.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
       const { data, error } = await supabase.functions.invoke('liam-memory', {
         body: {
           action: 'forget',
@@ -191,6 +226,16 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     setIsChangingTag(true);
     
     try {
+      const token = await getAuthToken();
+      if (!token) {
+        toast({
+          title: 'Sign in required',
+          description: 'Please sign in to manage memories.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
       const { data, error } = await supabase.functions.invoke('liam-memory', {
         body: {
           action: 'changeTag',
