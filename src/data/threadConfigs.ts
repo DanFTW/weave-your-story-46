@@ -1,7 +1,39 @@
-import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi } from "lucide-react";
+import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "receipts": {
+    id: "receipts",
+    title: "Receipt Scanner",
+    subtitle: "Track your purchases",
+    description: "Scan receipts to automatically extract and save purchase details as memories.",
+    gradient: "teal",
+    icon: Receipt,
+    steps: [
+      {
+        id: "scan",
+        type: "setup",
+        title: "Scan receipt",
+        description: "Take a photo or upload an image",
+        icon: Camera,
+      },
+      {
+        id: "extract",
+        type: "setup",
+        title: "AI extraction",
+        description: "We extract store, items, and total",
+        icon: Sparkles,
+      },
+      {
+        id: "save",
+        type: "save",
+        title: "Save Memory",
+        description: "Receipt saved to your brain",
+        icon: Wifi,
+        badge: "XD BRAIN",
+      },
+    ],
+  },
   "gmail-incoming": {
     id: "gmail-incoming",
     title: "Incoming Emails to Memory",
