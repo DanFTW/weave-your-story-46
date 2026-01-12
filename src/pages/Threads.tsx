@@ -1,15 +1,39 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { ThreadCard } from "@/components/ThreadCard";
+import { ThreadDetailSheet } from "@/components/threads/ThreadDetailSheet";
 import { sampleThreads } from "@/data/threads";
+import { getThreadConfig } from "@/data/threadConfigs";
 import { Thread } from "@/types/threads";
+
+// Threads that have full flow implementations
+const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests'];
 
 export default function Threads() {
   const navigate = useNavigate();
+  const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const handleThreadClick = (thread: Thread) => {
-    navigate(`/thread/${thread.id}`);
+    // For flow-enabled threads, go directly to overview
+    if (flowEnabledThreads.includes(thread.id)) {
+      navigate(`/thread/${thread.id}`);
+    } else {
+      // For other threads (automations, etc.), show detail sheet
+      setSelectedThread(thread);
+      setSheetOpen(true);
+    }
   };
+
+  const handleGetStarted = () => {
+    if (selectedThread) {
+      setSheetOpen(false);
+      navigate(`/thread/${selectedThread.id}`);
+    }
+  };
+
+  const selectedConfig = selectedThread ? getThreadConfig(selectedThread.id) : null;
 
   return (
     <div className="pb-nav">
@@ -29,6 +53,14 @@ export default function Threads() {
           ))}
         </div>
       </div>
+
+      <ThreadDetailSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        thread={selectedThread}
+        config={selectedConfig}
+        onGetStarted={handleGetStarted}
+      />
     </div>
   );
 }
