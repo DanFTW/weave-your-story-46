@@ -30,6 +30,7 @@ export interface FlowConfig {
   memoryTag: string; // Tag for generated memories
   singleEntry?: boolean; // If true, only one entry (like food preferences)
   isReceiptFlow?: boolean; // If true, uses receipt scanning UI
+  isLLMImportFlow?: boolean; // If true, uses LLM import UI
 }
 
 // Single data entry (e.g., one family member)

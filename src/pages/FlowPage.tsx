@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ChevronLeft, Receipt } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { getFlowConfig } from "@/data/flowConfigs";
 import { useFlowState } from "@/hooks/useFlowState";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
@@ -8,6 +8,8 @@ import { useReceiptUpload, ReceiptData } from "@/hooks/useReceiptUpload";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { GeneratedMemory } from "@/types/flows";
+import { LLMImportCategory, LLMImportPhase } from "@/types/llmImport";
+import { parseMemories } from "@/utils/parseMemories";
 import { cn } from "@/lib/utils";
 
 // Flow components
@@ -22,6 +24,11 @@ import { FlowConfigured } from "@/components/flows/FlowConfigured";
 import { ReceiptUploader } from "@/components/flows/ReceiptUploader";
 import { ReceiptPreview } from "@/components/flows/ReceiptPreview";
 import { ReceiptMemoryList } from "@/components/flows/ReceiptMemoryList";
+
+// LLM Import components
+import { LLMImportCategoryList } from "@/components/flows/llm-import/LLMImportCategoryList";
+import { LLMImportConfig } from "@/components/flows/llm-import/LLMImportConfig";
+import { LLMImportSuccess } from "@/components/flows/llm-import/LLMImportSuccess";
 
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
@@ -45,6 +52,12 @@ export default function FlowPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  
+  // LLM Import state
+  const [llmImportPhase, setLLMImportPhase] = useState<LLMImportPhase>('category-select');
+  const [selectedCategory, setSelectedCategory] = useState<LLMImportCategory | null>(null);
+  const [llmSavedCount, setLLMSavedCount] = useState(0);
+  const [isProcessingLLM, setIsProcessingLLM] = useState(false);
   
   const config = flowId ? getFlowConfig(flowId) : undefined;
   const {
@@ -182,6 +195,120 @@ export default function FlowPage() {
               isSaving={isConfirming}
             />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // === LLM IMPORT FLOW HANDLERS ===
+
+  const handleSelectCategory = (category: LLMImportCategory) => {
+    setSelectedCategory(category);
+    setLLMImportPhase('configure');
+  };
+
+  const handleProcessLLMContent = async (content: string) => {
+    if (!selectedCategory) return;
+    
+    setIsProcessingLLM(true);
+    
+    try {
+      const memories = parseMemories(content);
+      
+      if (memories.length === 0) {
+        toast({
+          title: "No memories found",
+          description: "Could not extract any memories from the response. Make sure the format is correct.",
+          variant: "destructive",
+        });
+        setIsProcessingLLM(false);
+        return;
+      }
+
+      let savedCount = 0;
+      for (const memory of memories) {
+        const success = await createMemory(memory, selectedCategory.memoryTag.toUpperCase());
+        if (success) savedCount++;
+      }
+
+      if (savedCount > 0) {
+        setLLMSavedCount(savedCount);
+        setLLMImportPhase('success');
+      } else {
+        throw new Error('Failed to save memories');
+      }
+    } catch (error) {
+      console.error('LLM import error:', error);
+      toast({
+        title: "Import failed",
+        description: error instanceof Error ? error.message : "Failed to save memories",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingLLM(false);
+    }
+  };
+
+  const handleImportMore = () => {
+    setSelectedCategory(null);
+    setLLMImportPhase('category-select');
+    setLLMSavedCount(0);
+  };
+
+  // === LLM IMPORT FLOW RENDER ===
+
+  if (config.isLLMImportFlow) {
+    const Icon = config.icon;
+
+    // Success phase
+    if (llmImportPhase === 'success' && selectedCategory) {
+      return (
+        <LLMImportSuccess
+          savedCount={llmSavedCount}
+          categoryTitle={selectedCategory.title}
+          onImportMore={handleImportMore}
+        />
+      );
+    }
+
+    // Configure phase
+    if (llmImportPhase === 'configure' && selectedCategory) {
+      return (
+        <LLMImportConfig
+          category={selectedCategory}
+          onBack={() => setLLMImportPhase('category-select')}
+          onProcess={handleProcessLLMContent}
+          isProcessing={isProcessingLLM}
+        />
+      );
+    }
+
+    // Category select phase (default)
+    return (
+      <div className="min-h-screen bg-background pb-nav">
+        {/* Header */}
+        <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
+          <button
+            onClick={() => navigate('/threads')}
+            className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-4"
+          >
+            <ChevronLeft className="w-6 h-6 text-white" />
+          </button>
+          
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <Icon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">{config.title}</h1>
+              <p className="text-white/70 text-sm">{config.subtitle}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Category List */}
+        <div className="pt-5">
+          <LLMImportCategoryList onSelectCategory={handleSelectCategory} />
         </div>
       </div>
     );

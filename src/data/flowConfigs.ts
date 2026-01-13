@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -272,6 +272,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
         required: false,
       },
     ],
+  },
+  "llm-import": {
+    id: "llm-import",
+    title: "Import from Chat",
+    subtitle: "Extract memories from AI",
+    description: "Pull memories from your conversations with ChatGPT, Claude, Gemini, and other LLMs.",
+    gradient: "blue",
+    icon: MessageSquare,
+    entryName: "memory",
+    entryNamePlural: "memories",
+    memoryTag: "imported",
+    fields: [],
+    isLLMImportFlow: true,
   },
 };
 
