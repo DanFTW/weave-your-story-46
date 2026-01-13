@@ -55,7 +55,6 @@ export interface GeneratedMemory {
 
 // Flow phase states
 export type FlowPhase = 
-  | 'overview'    // Initial view with add card
   | 'adding'      // Form for new entry
   | 'editing'     // Form for existing entry
   | 'list'        // List of entries before generation

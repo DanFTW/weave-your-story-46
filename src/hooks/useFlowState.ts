@@ -10,7 +10,8 @@ const getInitialState = (flowId?: string): FlowState => {
       if (stored) {
         const entries = JSON.parse(stored) as FlowEntry[];
         return {
-          phase: entries.length > 0 ? 'list' : 'overview',
+          // Start at list if entries exist, otherwise start at adding (skip overview)
+          phase: entries.length > 0 ? 'list' : 'adding',
           entries,
           editingEntryId: null,
           generatedMemories: [],
@@ -22,7 +23,8 @@ const getInitialState = (flowId?: string): FlowState => {
     }
   }
   return {
-    phase: 'overview',
+    // Skip overview, start directly at adding
+    phase: 'adding',
     entries: [],
     editingEntryId: null,
     generatedMemories: [],
@@ -145,7 +147,8 @@ export function useFlowState(flowId?: string) {
   const goToList = useCallback(() => {
     setState(prev => ({
       ...prev,
-      phase: prev.entries.length > 0 ? 'list' : 'overview',
+      // Go to list if entries exist, otherwise stay at adding
+      phase: prev.entries.length > 0 ? 'list' : 'adding',
       editingEntryId: null,
     }));
   }, []);
