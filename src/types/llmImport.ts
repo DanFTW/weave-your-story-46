@@ -9,7 +9,7 @@ export interface LLMImportCategory {
   memoryTag: string;
 }
 
-export type LLMImportPhase = 'category-select' | 'configure' | 'processing' | 'success';
+export type LLMImportPhase = 'category-select' | 'configure' | 'preview' | 'success';
 
 export interface LLMImportState {
   phase: LLMImportPhase;
