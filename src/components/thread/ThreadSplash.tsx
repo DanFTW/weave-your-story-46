@@ -27,37 +27,36 @@ export function ThreadSplash({ title, icon: Icon, gradient, subtitle, onBack }: 
     if (onBack) {
       onBack();
     } else {
-      // Default: go to threads page instead of unreliable history navigation
       navigate('/threads');
     }
   };
 
   return (
-    <div className={cn("relative px-5 pt-12 pb-10", gradientClasses[gradient])}>
+    <div className={cn("relative px-5 pt-12 pb-8", gradientClasses[gradient])}>
       {/* Back button */}
       <button
         onClick={handleBack}
-        className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-6"
+        className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-4"
       >
         <ChevronLeft className="w-6 h-6 text-white" />
       </button>
 
-      {/* Icon */}
-      <div className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-5">
-        <Icon className="w-7 h-7 text-white" strokeWidth={1.5} />
+      {/* Header row with icon and title */}
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+          <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-white leading-tight">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="text-white/70 text-sm">
+              {subtitle}
+            </p>
+          )}
+        </div>
       </div>
-
-      {/* Title */}
-      <h1 className="text-[28px] font-bold text-white leading-tight">
-        {title}
-      </h1>
-
-      {/* Subtitle */}
-      {subtitle && (
-        <p className="text-white/80 text-sm mt-2 leading-relaxed">
-          {subtitle}
-        </p>
-      )}
     </div>
   );
 }

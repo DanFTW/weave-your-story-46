@@ -48,14 +48,18 @@ export default function ThreadOverview() {
         title={config.title}
         icon={config.icon}
         gradient={config.gradient}
+        subtitle={config.subtitle}
       />
       <ThreadContent
-        subtitle={config.subtitle}
+        subtitle="How it works"
         description={config.description}
         steps={config.steps}
         onStepClick={handleStepClick}
       />
-      <ThreadCTA onClick={handleGetStarted} />
+      <ThreadCTA 
+        onClick={handleGetStarted} 
+        gradient={config.gradient}
+      />
       
       <StepDetailSheet
         open={stepSheetOpen}

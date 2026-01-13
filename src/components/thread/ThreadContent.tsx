@@ -10,12 +10,12 @@ interface ThreadContentProps {
 
 export function ThreadContent({ subtitle, description, steps, onStepClick }: ThreadContentProps) {
   return (
-    <div className="relative -mt-4 rounded-t-[2rem] bg-background px-5 pt-7 pb-32 min-h-[60vh]">
+    <div className="relative -mt-4 rounded-t-[2rem] bg-background px-5 pt-7 pb-32 min-h-[50vh]">
       {/* Header */}
       <h2 className="text-xl font-bold text-foreground mb-2">
         {subtitle}
       </h2>
-      <p className="text-muted-foreground text-sm mb-6">
+      <p className="text-muted-foreground text-sm leading-relaxed mb-6">
         {description}
       </p>
 

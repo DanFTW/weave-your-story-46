@@ -13,7 +13,6 @@ import { parseMemories } from "@/utils/parseMemories";
 import { cn } from "@/lib/utils";
 
 // Flow components
-import { FlowOverview } from "@/components/flows/FlowOverview";
 import { FlowEntryList } from "@/components/flows/FlowEntryList";
 import { FlowEntryForm } from "@/components/flows/FlowEntryForm";
 import { FlowGenerating } from "@/components/flows/FlowGenerating";
@@ -400,14 +399,6 @@ export default function FlowPage() {
   // === STANDARD FLOW RENDER ===
   
   switch (state.phase) {
-    case 'overview':
-      return (
-        <FlowOverview
-          config={config}
-          onAddEntry={startAdding}
-        />
-      );
-
     case 'adding':
       return (
         <FlowEntryForm
