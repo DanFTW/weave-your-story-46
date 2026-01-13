@@ -7,7 +7,7 @@ import { MarqueeBanner } from '@/components/auth/MarqueeBanner';
 import { AuthDrawer } from '@/components/auth/AuthDrawer';
 import { useAuth } from '@/hooks/useAuth';
 
-export default function Auth() {
+export default function Login() {
   const [isSignUpOpen, setIsSignUpOpen] = useState(false);
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   const [contentVisible, setContentVisible] = useState(false);
