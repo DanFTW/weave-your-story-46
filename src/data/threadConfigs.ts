@@ -1,7 +1,39 @@
-import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart } from "lucide-react";
+import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "llm-import": {
+    id: "llm-import",
+    title: "Import from Chat",
+    subtitle: "Extract memories from your AI",
+    description: "Pull memories from your conversations with ChatGPT, Claude, Gemini, and other LLMs.",
+    gradient: "blue",
+    icon: MessageSquare,
+    steps: [
+      {
+        id: "copy",
+        type: "setup",
+        title: "Copy the prompt",
+        description: "Get a tailored extraction prompt",
+        icon: Copy,
+      },
+      {
+        id: "paste-llm",
+        type: "setup",
+        title: "Paste in your LLM",
+        description: "ChatGPT, Claude, or Gemini",
+        icon: ExternalLink,
+      },
+      {
+        id: "import",
+        type: "save",
+        title: "Import memories",
+        description: "Paste the response back",
+        icon: ClipboardPaste,
+        badge: "XD BRAIN",
+      },
+    ],
+  },
   "interests": {
     id: "interests",
     title: "Capture Your Interests",

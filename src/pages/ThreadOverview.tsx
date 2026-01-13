@@ -33,7 +33,7 @@ export default function ThreadOverview() {
 
   const handleGetStarted = () => {
     // Navigate to flow page for supported flows
-    const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests'];
+    const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests', 'llm-import'];
     if (flowEnabledThreads.includes(config.id)) {
       const flowId = config.id === 'food-preferences' ? 'food' : config.id;
       navigate(`/flow/${flowId}`);

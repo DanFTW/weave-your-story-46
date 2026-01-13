@@ -1,7 +1,16 @@
-import { Send, Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Receipt, Heart } from "lucide-react";
+import { Send, Mail, Users, Utensils, Receipt, Heart, MessageSquare } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "llm-import",
+    title: "Import from Chat",
+    icon: MessageSquare,
+    gradient: "blue",
+    status: "active",
+    type: "flow",
+    category: "import",
+  },
   {
     id: "interests",
     title: "Capture your interests",
