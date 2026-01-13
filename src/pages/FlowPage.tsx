@@ -57,6 +57,7 @@ export default function FlowPage() {
   const [selectedCategory, setSelectedCategory] = useState<LLMImportCategory | null>(null);
   const [llmSavedCount, setLLMSavedCount] = useState(0);
   const [isProcessingLLM, setIsProcessingLLM] = useState(false);
+  const [llmGeneratedMemories, setLLMGeneratedMemories] = useState<GeneratedMemory[]>([]);
   
   const config = flowId ? getFlowConfig(flowId) : undefined;
   const {
@@ -206,7 +207,7 @@ export default function FlowPage() {
     setLLMImportPhase('configure');
   };
 
-  const handleProcessLLMContent = async (content: string) => {
+  const handleProcessLLMContent = (content: string) => {
     if (!selectedCategory) return;
     
     setIsProcessingLLM(true);
@@ -224,9 +225,39 @@ export default function FlowPage() {
         return;
       }
 
+      // Convert to GeneratedMemory format for preview
+      const generatedMemories: GeneratedMemory[] = memories.map((memory, index) => ({
+        id: `llm-${Date.now()}-${index}`,
+        content: memory,
+        tag: selectedCategory.memoryTag.toUpperCase(),
+        entryId: 'llm-import',
+        entryName: selectedCategory.title,
+        isEditing: false,
+      }));
+
+      setLLMGeneratedMemories(generatedMemories);
+      setLLMImportPhase('preview');
+    } catch (error) {
+      console.error('LLM parse error:', error);
+      toast({
+        title: "Parse failed",
+        description: "Failed to parse the LLM response",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingLLM(false);
+    }
+  };
+
+  const handleConfirmLLMMemories = async () => {
+    if (!selectedCategory) return;
+    
+    setIsConfirming(true);
+    
+    try {
       let savedCount = 0;
-      for (const memory of memories) {
-        const success = await createMemory(memory, selectedCategory.memoryTag.toUpperCase());
+      for (const memory of llmGeneratedMemories) {
+        const success = await createMemory(memory.content, memory.tag);
         if (success) savedCount++;
       }
 
@@ -244,14 +275,37 @@ export default function FlowPage() {
         variant: "destructive",
       });
     } finally {
-      setIsProcessingLLM(false);
+      setIsConfirming(false);
     }
+  };
+
+  const handleDeleteLLMMemory = (id: string) => {
+    setLLMGeneratedMemories(prev => prev.filter(m => m.id !== id));
+  };
+
+  const handleUpdateLLMMemory = (id: string, content: string) => {
+    setLLMGeneratedMemories(prev => 
+      prev.map(m => m.id === id ? { ...m, content, isEditing: false } : m)
+    );
+  };
+
+  const handleUpdateLLMMemoryTag = (id: string, tag: string) => {
+    setLLMGeneratedMemories(prev => 
+      prev.map(m => m.id === id ? { ...m, tag } : m)
+    );
+  };
+
+  const handleToggleLLMMemoryEdit = (id: string, isEditing: boolean) => {
+    setLLMGeneratedMemories(prev => 
+      prev.map(m => m.id === id ? { ...m, isEditing } : m)
+    );
   };
 
   const handleImportMore = () => {
     setSelectedCategory(null);
     setLLMImportPhase('category-select');
     setLLMSavedCount(0);
+    setLLMGeneratedMemories([]);
   };
 
   // === LLM IMPORT FLOW RENDER ===
@@ -266,6 +320,23 @@ export default function FlowPage() {
           savedCount={llmSavedCount}
           categoryTitle={selectedCategory.title}
           onImportMore={handleImportMore}
+        />
+      );
+    }
+
+    // Preview phase
+    if (llmImportPhase === 'preview' && selectedCategory) {
+      return (
+        <FlowPreview
+          config={config}
+          memories={llmGeneratedMemories}
+          onDelete={handleDeleteLLMMemory}
+          onUpdate={handleUpdateLLMMemory}
+          onUpdateTag={handleUpdateLLMMemoryTag}
+          onToggleEdit={handleToggleLLMMemoryEdit}
+          onConfirm={handleConfirmLLMMemories}
+          onBack={() => setLLMImportPhase('configure')}
+          isConfirming={isConfirming}
         />
       );
     }
