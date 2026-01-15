@@ -35,7 +35,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-hidden">
+    <div className="min-h-[100dvh] bg-background flex flex-col overflow-hidden">
       {/* Marquee Banner */}
       <MarqueeBanner />
 
@@ -55,15 +55,15 @@ export default function Login() {
         }}
       />
 
-      {/* Main content */}
+      {/* Main content - flex-1 with justify-center for vertical centering */}
       <motion.div 
-        className="flex-1 flex flex-col items-center pt-16 px-6 relative z-20"
+        className="flex-1 flex flex-col items-center justify-center px-6 relative z-20 min-h-0"
         initial={{ opacity: 0 }}
         animate={{ opacity: contentVisible ? 1 : 0 }}
         transition={{ duration: 0.5 }}
       >
-        {/* Liquid Metal Logo with Reflection */}
-        <div className="relative">
+        {/* Liquid Metal Logo with Reflection - responsive sizing */}
+        <div className="relative flex-shrink-0">
           <div 
             style={{
               WebkitBoxReflect: 'below -5px linear-gradient(to bottom, transparent 35%, rgba(10, 10, 10, 0.12) 60%, rgba(10, 10, 10, 0.35) 100%)',
@@ -86,31 +86,32 @@ export default function Login() {
               style={{
                 backgroundColor: 'transparent',
                 borderRadius: '47px',
-                height: '280px',
-                width: '280px',
+                height: 'min(220px, 35vh)',
+                width: 'min(220px, 35vh)',
               }}
             />
           </div>
-          {/* Fade overlay for reflection - positioned below the logo */}
+          {/* Fade overlay for reflection */}
           <div 
-            className="absolute left-0 right-0 h-48 pointer-events-none"
+            className="absolute left-0 right-0 h-24 pointer-events-none"
             style={{
-              top: '260px',
-              background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 50%)',
+              top: 'calc(min(220px, 35vh) - 20px)',
+              background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 60%)',
             }}
           />
         </div>
       </motion.div>
 
-      {/* Bottom section with buttons */}
+      {/* Bottom section with buttons - safe area aware */}
       <motion.div 
-        className="px-6 pb-12 space-y-4 relative z-20"
+        className="px-6 pb-6 space-y-3 relative z-20 flex-shrink-0"
+        style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: contentVisible ? 1 : 0, y: contentVisible ? 0 : 20 }}
         transition={{ duration: 0.5, delay: 0.2 }}
       >
         <Button
-          className="w-full h-14 text-base font-semibold rounded-full bg-foreground text-background hover:bg-foreground/90"
+          className="w-full h-12 text-base font-semibold rounded-full bg-foreground text-background hover:bg-foreground/90"
           onClick={() => setIsSignUpOpen(true)}
         >
           Join Weave
@@ -118,7 +119,7 @@ export default function Login() {
         
         <Button
           variant="ghost"
-          className="w-full h-12 text-base font-medium text-foreground hover:bg-transparent hover:text-foreground/80"
+          className="w-full h-10 text-base font-medium text-foreground hover:bg-transparent hover:text-foreground/80"
           onClick={() => setIsSignInOpen(true)}
         >
           Sign In
