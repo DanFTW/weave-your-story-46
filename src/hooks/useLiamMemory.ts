@@ -1,10 +1,67 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
-async function getAuthToken(): Promise<string | null> {
+/**
+ * Attempts to get a valid auth token, refreshing the session if needed.
+ * Returns null if the session cannot be refreshed (user needs to re-login).
+ */
+async function getValidAuthToken(): Promise<string | null> {
+  // First check current session
   const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
+  
+  if (!session) {
+    return null;
+  }
+  
+  // Check if token is close to expiry (within 60 seconds)
+  const expiresAt = session.expires_at;
+  const now = Math.floor(Date.now() / 1000);
+  const isExpiringSoon = expiresAt && (expiresAt - now) < 60;
+  
+  if (isExpiringSoon) {
+    console.log('Session expiring soon, attempting refresh...');
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    
+    if (refreshError || !refreshData.session) {
+      console.error('Failed to refresh session:', refreshError);
+      return null;
+    }
+    
+    console.log('Session refreshed successfully');
+    return refreshData.session.access_token;
+  }
+  
+  return session.access_token;
+}
+
+/**
+ * Handles session expiration by signing out and showing appropriate message
+ */
+async function handleSessionExpired(): Promise<void> {
+  toast({
+    title: 'Session expired',
+    description: 'Please sign in again to continue.',
+    variant: 'destructive',
+  });
+  await supabase.auth.signOut();
+}
+
+/**
+ * Checks if an error indicates session expiration (401)
+ */
+function isSessionExpiredError(error: any, data: any): boolean {
+  const errorMessage = error?.message?.toLowerCase() || '';
+  const dataError = data?.error?.toLowerCase() || '';
+  
+  return (
+    errorMessage.includes('401') ||
+    errorMessage.includes('unauthorized') ||
+    errorMessage.includes('jwt expired') ||
+    errorMessage.includes('invalid token') ||
+    dataError.includes('unauthorized') ||
+    dataError.includes('jwt expired')
+  );
 }
 
 /**
@@ -12,6 +69,8 @@ async function getAuthToken(): Promise<string | null> {
  * 
  * Provides methods to create and list memories through the LIAM API
  * via the liam-memory edge function.
+ * 
+ * Includes automatic session refresh and retry logic for expired tokens.
  */
 
 interface Memory {
@@ -40,26 +99,49 @@ export function useLiamMemory(): UseLiamMemoryReturn {
   const [isForgetting, setIsForgetting] = useState(false);
   const [isChangingTag, setIsChangingTag] = useState(false);
 
+  /**
+   * Invokes an edge function with automatic retry on 401 errors.
+   * Will attempt to refresh the session and retry once if a 401 is encountered.
+   */
+  const invokeWithRetry = async (
+    body: Record<string, any>,
+    retried: boolean = false
+  ): Promise<{ data: any; error: any }> => {
+    const { data, error } = await supabase.functions.invoke('liam-memory', { body });
+    
+    // If we get a 401-like error and haven't retried yet, try refreshing session
+    if (!retried && isSessionExpiredError(error, data)) {
+      console.log('Got 401 error, attempting session refresh and retry...');
+      
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError || !refreshData.session) {
+        console.error('Session refresh failed, user needs to re-login');
+        await handleSessionExpired();
+        return { data: null, error: { message: 'Session expired' } };
+      }
+      
+      console.log('Session refreshed, retrying request...');
+      return invokeWithRetry(body, true);
+    }
+    
+    return { data, error };
+  };
+
   const createMemory = async (content: string, tag?: string): Promise<boolean> => {
     setIsCreating(true);
     
     try {
-      const token = await getAuthToken();
+      const token = await getValidAuthToken();
       if (!token) {
-        toast({
-          title: 'Sign in required',
-          description: 'Please sign in to save memories.',
-          variant: 'destructive',
-        });
+        await handleSessionExpired();
         return false;
       }
 
-      const { data, error } = await supabase.functions.invoke('liam-memory', {
-        body: {
-          action: 'create',
-          content,
-          tag,
-        },
+      const { data, error } = await invokeWithRetry({
+        action: 'create',
+        content,
+        tag,
       });
 
       // Check for transport-level errors
@@ -130,20 +212,14 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     setIsListing(true);
     
     try {
-      const token = await getAuthToken();
+      const token = await getValidAuthToken();
       if (!token) {
-        toast({
-          title: 'Sign in required',
-          description: 'Please sign in to view memories.',
-          variant: 'destructive',
-        });
+        await handleSessionExpired();
         return null;
       }
 
-      const { data, error } = await supabase.functions.invoke('liam-memory', {
-        body: {
-          action: 'list',
-        },
+      const { data, error } = await invokeWithRetry({
+        action: 'list',
       });
 
       // Check for transport-level errors
@@ -229,22 +305,16 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     setIsForgetting(true);
     
     try {
-      const token = await getAuthToken();
+      const token = await getValidAuthToken();
       if (!token) {
-        toast({
-          title: 'Sign in required',
-          description: 'Please sign in to manage memories.',
-          variant: 'destructive',
-        });
+        await handleSessionExpired();
         return false;
       }
 
-      const { data, error } = await supabase.functions.invoke('liam-memory', {
-        body: {
-          action: 'forget',
-          memoryId,
-          permanent,
-        },
+      const { data, error } = await invokeWithRetry({
+        action: 'forget',
+        memoryId,
+        permanent,
       });
 
       // Check for transport-level errors
@@ -292,22 +362,16 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     setIsChangingTag(true);
     
     try {
-      const token = await getAuthToken();
+      const token = await getValidAuthToken();
       if (!token) {
-        toast({
-          title: 'Sign in required',
-          description: 'Please sign in to manage memories.',
-          variant: 'destructive',
-        });
+        await handleSessionExpired();
         return false;
       }
 
-      const { data, error } = await supabase.functions.invoke('liam-memory', {
-        body: {
-          action: 'changeTag',
-          memoryId,
-          tag: newTag,
-        },
+      const { data, error } = await invokeWithRetry({
+        action: 'changeTag',
+        memoryId,
+        tag: newTag,
       });
 
       // Check for transport-level errors
