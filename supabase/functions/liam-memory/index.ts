@@ -427,9 +427,37 @@ serve(async (req) => {
     }
 
     if (!response.ok) {
+      console.error('LIAM API returned error status:', response.status, responseData);
       return new Response(
-        JSON.stringify({ error: 'LIAM API error', details: responseData }),
+        JSON.stringify({ 
+          error: 'LIAM API error', 
+          details: responseData,
+          message: responseData?.message || responseData?.error || `API returned status ${response.status}`
+        }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // For create action, verify the response indicates success
+    if (action === 'create') {
+      // LIAM API returns { success: true, ... } on successful creation
+      if (responseData.success === false || responseData.error) {
+        console.error('LIAM create failed despite 200 status:', responseData);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Memory creation failed',
+            details: responseData,
+            message: responseData.message || responseData.error || 'The memory was not saved'
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      console.log('Memory created successfully in LIAM API');
+      // Ensure success is explicitly true in response
+      return new Response(
+        JSON.stringify({ ...responseData, success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

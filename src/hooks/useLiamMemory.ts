@@ -62,8 +62,9 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         },
       });
 
+      // Check for transport-level errors
       if (error) {
-        console.error('Error creating memory:', error);
+        console.error('Error creating memory (transport):', error);
         const errorMessage = error.message || 'Failed to save memory';
         const isConfigError = errorMessage.includes('API keys not configured') || errorMessage.includes('API keys incomplete');
         
@@ -75,10 +76,41 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         return false;
       }
 
+      // CRITICAL: Check for API-level errors in response body
+      // The edge function returns { error: '...' } when LIAM API fails
+      if (data?.error) {
+        console.error('Error creating memory (API):', data.error, data.details);
+        const errorMessage = data.message || data.error || 'Failed to save memory';
+        const isConfigError = errorMessage.includes('API keys not configured') || 
+                             errorMessage.includes('API keys incomplete') ||
+                             errorMessage.includes('Invalid private key');
+        
+        toast({
+          title: isConfigError ? 'API keys required' : 'Failed to save memory',
+          description: isConfigError 
+            ? 'Please configure your API keys in Profile → API Configuration.' 
+            : typeof data.details === 'string' ? data.details : errorMessage,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      // Verify we got a successful response from LIAM API
+      // The API returns { success: true } or similar on success
+      if (!data || (data.success === false)) {
+        console.error('Unexpected response from LIAM API:', data);
+        toast({
+          title: 'Failed to save memory',
+          description: 'The memory service returned an unexpected response.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
       console.log('Memory created successfully:', data);
       toast({
         title: 'Memory saved',
-        description: 'Your memory has been stored. It may take a moment to appear in your list.',
+        description: 'Your memory has been stored.',
       });
       return true;
     } catch (err) {
@@ -114,14 +146,33 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         },
       });
 
+      // Check for transport-level errors
       if (error) {
-        console.error('Error listing memories:', error);
+        console.error('Error listing memories (transport):', error);
         const errorMessage = error.message || 'Failed to load memories';
         const isConfigError = errorMessage.includes('API keys not configured') || errorMessage.includes('API keys incomplete');
         
         toast({
           title: isConfigError ? 'API keys required' : 'Failed to load memories',
           description: isConfigError ? 'Please configure your API keys in Profile → API Configuration.' : errorMessage,
+          variant: 'destructive',
+        });
+        return null;
+      }
+
+      // CRITICAL: Check for API-level errors in response body
+      if (data?.error) {
+        console.error('Error listing memories (API):', data.error, data.details);
+        const errorMessage = data.message || data.error || 'Failed to load memories';
+        const isConfigError = errorMessage.includes('API keys not configured') || 
+                             errorMessage.includes('API keys incomplete') ||
+                             errorMessage.includes('Invalid private key');
+        
+        toast({
+          title: isConfigError ? 'API keys required' : 'Failed to load memories',
+          description: isConfigError 
+            ? 'Please configure your API keys in Profile → API Configuration.' 
+            : typeof data.details === 'string' ? data.details : errorMessage,
           variant: 'destructive',
         });
         return null;
@@ -196,11 +247,23 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         },
       });
 
+      // Check for transport-level errors
       if (error) {
-        console.error('Error forgetting memory:', error);
+        console.error('Error forgetting memory (transport):', error);
         toast({
           title: 'Failed to forget memory',
           description: error.message,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      // CRITICAL: Check for API-level errors in response body
+      if (data?.error) {
+        console.error('Error forgetting memory (API):', data.error, data.details);
+        toast({
+          title: 'Failed to forget memory',
+          description: data.message || data.error || 'The memory service returned an error.',
           variant: 'destructive',
         });
         return false;
@@ -247,11 +310,23 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         },
       });
 
+      // Check for transport-level errors
       if (error) {
-        console.error('Error changing tag:', error);
+        console.error('Error changing tag (transport):', error);
         toast({
           title: 'Failed to update tag',
           description: error.message,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      // CRITICAL: Check for API-level errors in response body
+      if (data?.error) {
+        console.error('Error changing tag (API):', data.error, data.details);
+        toast({
+          title: 'Failed to update tag',
+          description: data.message || data.error || 'The memory service returned an error.',
           variant: 'destructive',
         });
         return false;
