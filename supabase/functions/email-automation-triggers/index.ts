@@ -140,8 +140,8 @@ serve(async (req) => {
 
             if (incomingResponse.ok) {
               const incomingData = JSON.parse(incomingText);
-              // v3 returns trigger_instance_id or id
-              incomingTriggerId = incomingData.trigger_instance_id || incomingData.id || incomingData.triggerId;
+              // v3 returns trigger_id
+              incomingTriggerId = incomingData.trigger_id || incomingData.trigger_instance_id || incomingData.id;
               console.log("Incoming trigger ID:", incomingTriggerId);
             } else {
               console.error("Failed to create incoming trigger:", incomingText);
@@ -178,8 +178,8 @@ serve(async (req) => {
 
             if (outgoingResponse.ok) {
               const outgoingData = JSON.parse(outgoingText);
-              // v3 returns trigger_instance_id or id
-              outgoingTriggerId = outgoingData.trigger_instance_id || outgoingData.id || outgoingData.triggerId;
+              // v3 returns trigger_id
+              outgoingTriggerId = outgoingData.trigger_id || outgoingData.trigger_instance_id || outgoingData.id;
               console.log("Outgoing trigger ID:", outgoingTriggerId);
             } else {
               console.error("Failed to create outgoing trigger:", outgoingText);
