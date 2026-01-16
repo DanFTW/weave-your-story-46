@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Receipt, Plus, Loader2, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,25 +18,19 @@ interface ReceiptMemoryListProps {
   refreshTrigger?: number;
 }
 
-export function ReceiptMemoryList({ onAddNew, refreshTrigger = 0 }: ReceiptMemoryListProps) {
+export function ReceiptMemoryList({ onAddNew, refreshTrigger }: ReceiptMemoryListProps) {
   const { listMemories, isListing } = useLiamMemory();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
-  
-  // Use ref to avoid stale closure issues while keeping stable dependency
-  const listMemoriesRef = useRef(listMemories);
-  listMemoriesRef.current = listMemories;
 
   useEffect(() => {
     const fetchMemories = async () => {
-      console.log('Fetching receipt memories, trigger:', refreshTrigger);
-      const result = await listMemoriesRef.current();
+      const result = await listMemories();
       if (result) {
         // Filter to only receipt memories
         const receiptMemories = result.filter(
           (m) => m.tag?.toLowerCase() === 'receipts' || m.tag?.toLowerCase() === 'receipt'
         );
-        console.log('Found receipt memories:', receiptMemories.length);
         setMemories(receiptMemories);
       }
       setHasLoaded(true);
