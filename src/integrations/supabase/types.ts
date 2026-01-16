@@ -71,6 +71,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_integrations: {
+        Row: {
+          account_avatar_url: string | null
+          account_email: string | null
+          account_name: string | null
+          composio_connection_id: string | null
+          connected_at: string | null
+          created_at: string
+          id: string
+          integration_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_avatar_url?: string | null
+          account_email?: string | null
+          account_name?: string | null
+          composio_connection_id?: string | null
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          integration_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_avatar_url?: string | null
+          account_email?: string | null
+          account_name?: string | null
+          composio_connection_id?: string | null
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          integration_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
