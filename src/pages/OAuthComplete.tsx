@@ -16,10 +16,12 @@ export default function OAuthComplete() {
 
   useEffect(() => {
     const completeOAuth = async () => {
-      const connectionId = searchParams.get("connectionId");
+      // Composio uses 'connected_account_id' in callback, we also check 'connectionId' for flexibility
+      const connectionId = searchParams.get("connected_account_id") || searchParams.get("connectionId");
       const toolkit = searchParams.get("toolkit");
 
       console.log("OAuthComplete: connectionId =", connectionId, "toolkit =", toolkit);
+      console.log("OAuthComplete: all params =", Object.fromEntries(searchParams.entries()));
 
       if (!connectionId || !toolkit) {
         setStatus("error");

@@ -44,18 +44,7 @@ export function EmailAutomationFlow() {
     reset,
   } = useEmailAutomation();
 
-  // Check for OAuth callback
-  useEffect(() => {
-    const connected = searchParams.get('connected');
-    const connectionId = searchParams.get('connectionId');
-    
-    if (connected === 'true' && connectionId) {
-      gmail.completeConnection(connectionId).then(() => {
-        window.history.replaceState({}, '', '/flow/email-automation');
-        setIsCheckingAuth(false);
-      });
-    }
-  }, [searchParams, gmail]);
+  // Legacy OAuth callback handling removed - now using database polling in useComposio hook
 
   // Check Gmail connection status and load existing contacts
   useEffect(() => {

@@ -1,7 +1,7 @@
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
 import { IntegrationLargeIcon } from "@/components/integrations/IntegrationLargeIcon";
@@ -10,13 +10,10 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { useComposio } from "@/hooks/useComposio";
-import { isMedian, median } from "@/utils/median";
 
 export default function IntegrationDetail() {
   const { integrationId } = useParams<{ integrationId: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [isProcessingCallback, setIsProcessingCallback] = useState(false);
   
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
   
@@ -25,7 +22,6 @@ export default function IntegrationDetail() {
     connecting,
     isConnected,
     connect,
-    completeConnection,
     disconnect,
     checkStatus,
   } = useComposio(integrationId || "gmail");
@@ -35,94 +31,11 @@ export default function IntegrationDetail() {
     checkStatus();
   }, [checkStatus]);
 
-  // Handle OAuth callback when ?connected=true is in URL
-  useEffect(() => {
-    const connected = searchParams.get("connected");
-    if (connected === "true" && !isProcessingCallback) {
-      setIsProcessingCallback(true);
-      
-      // If we're in Median App Browser, close immediately and let main webview handle completion
-      // The App Browser has a separate session context, so we can't complete OAuth here
-      if (isMedian()) {
-        console.log("OAuth callback detected in Median App Browser - closing and signaling main webview");
-        
-        // Store a flag that main webview can check
-        localStorage.setItem("oauth_completed_callback", integrationId || "gmail");
-        
-        // Close the app browser - this returns to main webview
-        median.appbrowser.close();
-        return;
-      }
-      
-      // Standard web flow - complete the connection with retry logic
-      const completeWithRetry = async (retries = 3): Promise<boolean> => {
-        const result = await completeConnection();
-        
-        if (result?.success) {
-          return true;
-        }
-        
-        // Retry if not immediately successful (Composio webhook delay)
-        if (retries > 0) {
-          console.log(`Connection not ready, retrying... (${retries} attempts left)`);
-          await new Promise(r => setTimeout(r, 1000));
-          return completeWithRetry(retries - 1);
-        }
-        
-        return false;
-      };
-      
-      completeWithRetry().then(async () => {
-        // Remove the query param from URL
-        navigate(`/integration/${integrationId}`, { replace: true });
-        setIsProcessingCallback(false);
-      });
-    }
-  }, [searchParams, integrationId, completeConnection, navigate, isProcessingCallback]);
+  // Legacy OAuth callback handling removed - now using /oauth-complete page with database polling
+  // The useComposio hook polls the database for connection status changes
 
-  // Handle completion after Median App Browser closes (main webview context)
-  useEffect(() => {
-    const checkOAuthCompletion = async () => {
-      const completedToolkit = localStorage.getItem("oauth_completed_callback");
-      
-      if (completedToolkit && completedToolkit === integrationId) {
-        console.log("Main webview detected OAuth completion signal, completing connection...");
-        localStorage.removeItem("oauth_completed_callback");
-        setIsProcessingCallback(true);
-        
-        // Complete with retry in main webview which has the session
-        const completeWithRetry = async (retries = 5): Promise<boolean> => {
-          const result = await completeConnection();
-          
-          if (result?.success) {
-            return true;
-          }
-          
-          if (retries > 0) {
-            console.log(`Connection not ready, retrying... (${retries} attempts left)`);
-            await new Promise(r => setTimeout(r, 1000));
-            return completeWithRetry(retries - 1);
-          }
-          
-          return false;
-        };
-        
-        await completeWithRetry();
-        setIsProcessingCallback(false);
-      }
-    };
-    
-    // Check immediately
-    checkOAuthCompletion();
-    
-    // Also listen for focus events (when app browser closes, main webview regains focus)
-    const handleFocus = () => {
-      checkOAuthCompletion();
-    };
-    
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, [integrationId, completeConnection]);
+  // Legacy localStorage-based completion handling removed
+  // Connection status is now detected via database polling in useComposio hook
 
   if (!integration) {
     return (
@@ -149,7 +62,7 @@ export default function IntegrationDetail() {
     navigate("/integrations");
   };
 
-  const isLoading = connecting || isProcessingCallback;
+  const isLoading = connecting;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -201,9 +114,7 @@ export default function IntegrationDetail() {
         {isLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            <p className="text-muted-foreground">
-              {isProcessingCallback ? "Completing connection..." : "Connecting..."}
-            </p>
+            <p className="text-muted-foreground">Connecting...</p>
           </div>
         ) : (
           <>
