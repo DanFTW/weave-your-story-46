@@ -41,7 +41,20 @@ export default function IntegrationDetail() {
     if (connected === "true" && !isProcessingCallback) {
       setIsProcessingCallback(true);
       
-      // Complete the connection with retry logic
+      // If we're in Median App Browser, close immediately and let main webview handle completion
+      // The App Browser has a separate session context, so we can't complete OAuth here
+      if (isMedian()) {
+        console.log("OAuth callback detected in Median App Browser - closing and signaling main webview");
+        
+        // Store a flag that main webview can check
+        localStorage.setItem("oauth_completed_callback", integrationId || "gmail");
+        
+        // Close the app browser - this returns to main webview
+        median.appbrowser.close();
+        return;
+      }
+      
+      // Standard web flow - complete the connection with retry logic
       const completeWithRetry = async (retries = 3): Promise<boolean> => {
         const result = await completeConnection();
         
@@ -59,21 +72,57 @@ export default function IntegrationDetail() {
         return false;
       };
       
-      completeWithRetry().then(async (success) => {
-        // If we're in Median App Browser, auto-close it
-        if (isMedian() && success) {
-          console.log("OAuth successful in Median, closing app browser...");
-          // Small delay to ensure UI state updates
-          await new Promise(r => setTimeout(r, 500));
-          median.appbrowser.close();
-        }
-        
+      completeWithRetry().then(async () => {
         // Remove the query param from URL
         navigate(`/integration/${integrationId}`, { replace: true });
         setIsProcessingCallback(false);
       });
     }
   }, [searchParams, integrationId, completeConnection, navigate, isProcessingCallback]);
+
+  // Handle completion after Median App Browser closes (main webview context)
+  useEffect(() => {
+    const checkOAuthCompletion = async () => {
+      const completedToolkit = localStorage.getItem("oauth_completed_callback");
+      
+      if (completedToolkit && completedToolkit === integrationId) {
+        console.log("Main webview detected OAuth completion signal, completing connection...");
+        localStorage.removeItem("oauth_completed_callback");
+        setIsProcessingCallback(true);
+        
+        // Complete with retry in main webview which has the session
+        const completeWithRetry = async (retries = 5): Promise<boolean> => {
+          const result = await completeConnection();
+          
+          if (result?.success) {
+            return true;
+          }
+          
+          if (retries > 0) {
+            console.log(`Connection not ready, retrying... (${retries} attempts left)`);
+            await new Promise(r => setTimeout(r, 1000));
+            return completeWithRetry(retries - 1);
+          }
+          
+          return false;
+        };
+        
+        await completeWithRetry();
+        setIsProcessingCallback(false);
+      }
+    };
+    
+    // Check immediately
+    checkOAuthCompletion();
+    
+    // Also listen for focus events (when app browser closes, main webview regains focus)
+    const handleFocus = () => {
+      checkOAuthCompletion();
+    };
+    
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [integrationId, completeConnection]);
 
   if (!integration) {
     return (

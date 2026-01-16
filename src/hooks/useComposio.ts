@@ -158,21 +158,41 @@ export function useComposio(toolkit: string): UseComposioReturn {
           // Set up callback for when the app browser closes
           window.median_appbrowser_closed = async () => {
             console.log("Median app browser closed, checking connection...");
-            const inProgress = localStorage.getItem("median_oauth_in_progress");
+            localStorage.removeItem("median_oauth_in_progress");
             
-            if (inProgress) {
-              // Give a small delay for any redirects to complete
-              await new Promise(resolve => setTimeout(resolve, 800));
+            // Give a small delay for OAuth redirect to set localStorage flag
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Check if OAuth completed (flag set by the App Browser callback page)
+            const oauthCompleted = localStorage.getItem("oauth_completed_callback");
+            
+            if (oauthCompleted) {
+              console.log("OAuth callback detected, completing connection in main webview...");
+              localStorage.removeItem("oauth_completed_callback");
               
-              const result = await completeConnection();
-              if (result?.success) {
-                console.log("OAuth completed successfully after app browser closed");
+              // Complete with retry logic - main webview has the session
+              const completeWithRetry = async (retries = 5): Promise<boolean> => {
+                const result = await completeConnection();
+                if (result?.success) return true;
+                if (retries > 0) {
+                  await new Promise(r => setTimeout(r, 1000));
+                  return completeWithRetry(retries - 1);
+                }
+                return false;
+              };
+              
+              const success = await completeWithRetry();
+              if (success) {
+                console.log("OAuth completed successfully in main webview");
               } else {
-                console.log("OAuth may not have completed, user might have cancelled");
-                toast.info("Connection cancelled or incomplete");
+                toast.error("Failed to complete connection. Please try again.");
               }
-              setConnecting(false);
+            } else {
+              console.log("No OAuth callback detected - user may have cancelled");
+              toast.info("Connection cancelled or incomplete");
             }
+            
+            setConnecting(false);
           };
         } else {
           // Fallback if app browser isn't available
