@@ -1,4 +1,4 @@
-export type IntegrationStatus = 'connected' | 'unconfigured' | 'approved' | 'none';
+export type IntegrationStatus = 'connected' | 'unconfigured' | 'approved' | 'none' | 'coming-soon';
 
 export interface Integration {
   id: string;
