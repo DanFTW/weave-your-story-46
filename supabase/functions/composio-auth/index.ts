@@ -99,23 +99,32 @@ serve(async (req) => {
         
         console.log(`Using auth config: ${authConfigId}`);
         
-        // Create connection request to Composio using v1 API which is more stable
-        const composioResponse = await fetch(`https://backend.composio.dev/api/v1/connectedAccounts`, {
+        // Create connection request to Composio using v3 API
+        const requestBody = {
+          auth_config: { 
+            id: authConfigId 
+          },
+          connection: {
+            status: "INITIALIZING"
+          },
+          user_id: user.id,
+          callback_url: redirectUrl,
+        };
+        
+        console.log("Composio request body:", JSON.stringify(requestBody));
+        
+        const composioResponse = await fetch(`${COMPOSIO_API_BASE}/connected_accounts`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "x-api-key": COMPOSIO_API_KEY,
           },
-          body: JSON.stringify({
-            integrationId: authConfigId,
-            userUuid: user.id,
-            redirectUri: redirectUrl,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         const responseText = await composioResponse.text();
-        console.log(`Composio v1 response status: ${composioResponse.status}`);
-        console.log(`Composio v1 response: ${responseText}`);
+        console.log(`Composio response status: ${composioResponse.status}`);
+        console.log(`Composio response: ${responseText}`);
 
         if (!composioResponse.ok) {
           console.error("Composio API error:", composioResponse.status, responseText);
@@ -124,8 +133,9 @@ serve(async (req) => {
 
         const composioData = JSON.parse(responseText);
 
-        const connectionId = composioData.connectedAccountId || composioData.id;
-        const oauthRedirectUrl = composioData.redirectUrl || composioData.redirect_url;
+        // v3 API returns 'id' and 'redirect_url'
+        const connectionId = composioData.id;
+        const oauthRedirectUrl = composioData.redirect_url || composioData.redirect_uri;
 
         if (!connectionId || !oauthRedirectUrl) {
           console.error("Missing data from Composio:", composioData);
@@ -214,8 +224,8 @@ serve(async (req) => {
 
         console.log(`Checking status for connection: ${connId}`);
 
-        // Check status with Composio v1 API
-        const statusResponse = await fetch(`https://backend.composio.dev/api/v1/connectedAccounts/${connId}`, {
+        // Check status with Composio v3 API
+        const statusResponse = await fetch(`${COMPOSIO_API_BASE}/connected_accounts/${connId}`, {
           headers: {
             "x-api-key": COMPOSIO_API_KEY,
           },
@@ -225,8 +235,17 @@ serve(async (req) => {
           const errorText = await statusResponse.text();
           console.error("Composio status check error:", statusResponse.status, errorText);
           
-          // If connection not found, it might have been deleted
-          if (statusResponse.status === 404) {
+          // If connection not found, it might have been deleted or ID format is wrong
+          if (statusResponse.status === 404 || statusResponse.status === 400) {
+            // Clear the stale connection from our database
+            if (integrationId) {
+              await supabaseAdmin
+                .from("user_integrations")
+                .delete()
+                .eq("user_id", user.id)
+                .eq("integration_id", integrationId);
+            }
+            
             return new Response(
               JSON.stringify({ 
                 success: true, 
@@ -246,14 +265,14 @@ serve(async (req) => {
         const connectionStatus = statusData.status;
         const isActive = connectionStatus === "ACTIVE";
 
-        // Extract account info from the connection data
+        // Extract account info from the connection data (v3 API format)
         let accountName = "";
         let accountEmail = "";
         let accountAvatarUrl = "";
 
-        if (isActive && statusData.connectionParams) {
-          // Try to extract user info from connection params
-          const params = statusData.connectionParams;
+        if (isActive) {
+          // v3 API uses different field names
+          const params = statusData.connection_params || statusData.data || {};
           accountEmail = params.email || params.user_email || "";
           accountName = params.name || params.user_name || params.display_name || "";
         }
@@ -316,10 +335,10 @@ serve(async (req) => {
           );
         }
 
-        // Try to delete from Composio (best effort)
+        // Try to delete from Composio (best effort) using v3 API
         if (integration.composio_connection_id) {
           try {
-            await fetch(`https://backend.composio.dev/api/v1/connectedAccounts/${integration.composio_connection_id}`, {
+            await fetch(`${COMPOSIO_API_BASE}/connected_accounts/${integration.composio_connection_id}`, {
               method: "DELETE",
               headers: {
                 "x-api-key": COMPOSIO_API_KEY,
