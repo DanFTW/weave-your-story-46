@@ -170,12 +170,12 @@
 
   /* Header safe area - extends gradient behind status bar */
   .pt-safe-top {
-    padding-top: max(3rem, calc(env(safe-area-inset-top) + 0.75rem));
+    padding-top: max(3.5rem, calc(env(safe-area-inset-top) + 1.5rem));
   }
 
   /* For gradient headers that should extend behind status bar */
   .pt-status-bar {
-    padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+    padding-top: calc(env(safe-area-inset-top) + 2rem);
   }
 
   .pb-nav {
