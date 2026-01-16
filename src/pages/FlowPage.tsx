@@ -51,6 +51,7 @@ export default function FlowPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [receiptListRefresh, setReceiptListRefresh] = useState(0);
   
   // LLM Import state
   const [llmImportPhase, setLLMImportPhase] = useState<LLMImportPhase>('category-select');
@@ -115,11 +116,12 @@ export default function FlowPage() {
           title: "Receipt saved",
           description: "Your purchase has been added to memory.",
         });
-        // Reset and go back to list
+        // Reset and go back to list, trigger refresh
         setReceiptPhase('list');
         setSelectedImage(null);
         setSelectedFile(null);
         setReceiptData(null);
+        setReceiptListRefresh(prev => prev + 1);
       }
     } catch (error) {
       console.error('Failed to save receipt:', error);
@@ -173,7 +175,10 @@ export default function FlowPage() {
         {/* Content */}
         <div className="px-5 pt-5">
           {receiptPhase === 'list' && (
-            <ReceiptMemoryList onAddNew={() => setReceiptPhase('upload')} />
+            <ReceiptMemoryList 
+              onAddNew={() => setReceiptPhase('upload')} 
+              refreshTrigger={receiptListRefresh}
+            />
           )}
           
           {receiptPhase === 'upload' && (
