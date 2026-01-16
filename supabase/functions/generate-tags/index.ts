@@ -17,6 +17,9 @@ const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const SYSTEM_PROMPT = `You are a memory categorization assistant. Given a memory snippet, suggest 2-4 concise tags (1-2 words each) that best categorize it.
 
 Available tag categories:
+- quick_note: General notes, quick thoughts
+- email: Email correspondence, messages
+- receipts: Purchases, transactions, invoices
 - family: Family members, relationships, birthdays, gatherings
 - work: Career, meetings, colleagues, projects  
 - food: Recipes, restaurants, dietary preferences
@@ -27,11 +30,13 @@ Available tag categories:
 - hobby: Hobbies, interests, activities
 - event: Occasions, celebrations, appointments
 - reminder: Tasks, deadlines, things to remember
+- lifestyle: Daily routines, habits, general life topics
+- identity: Personal info, profile details, self-description
 
 Rules:
 1. Return ONLY a JSON array of tag strings, e.g. ["family", "event"]
-2. Choose the most specific and relevant tags
-3. Use only lowercase tag names from the list above
+2. Choose the most specific and relevant tags from the categories above
+3. Use only lowercase tag names
 4. Return 2-4 tags maximum
 5. No explanations, just the JSON array`;
 
@@ -118,8 +123,12 @@ serve(async (req) => {
       console.error('Failed to parse AI response:', parseError);
     }
 
-    // Validate and filter tags
-    const validTags = ['family', 'work', 'food', 'shopping', 'personal', 'health', 'travel', 'hobby', 'event', 'reminder', 'quick_note'];
+    // Validate and filter tags - include all categories
+    const validTags = [
+      'quick_note', 'email', 'receipts', 'family', 'work', 'food', 
+      'shopping', 'personal', 'health', 'travel', 'hobby', 'event', 
+      'reminder', 'lifestyle', 'identity'
+    ];
     tags = tags
       .filter((tag): tag is string => typeof tag === 'string')
       .map(tag => tag.toLowerCase().trim())

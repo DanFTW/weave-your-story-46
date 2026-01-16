@@ -252,7 +252,7 @@ function formatEmailAsMemory(email: ExtractedEmail): string {
   
   // Create a clean memory format
   const body = email.body || snippetText || '';
-  const cleanBody = String(body).replace(/\s+/g, ' ').trim().slice(0, 500);
+  const cleanBody = String(body).replace(/\s+/g, ' ').trim();
   
   return `Email from ${email.from} on ${date}: "${email.subject}" - ${cleanBody}`;
 }
