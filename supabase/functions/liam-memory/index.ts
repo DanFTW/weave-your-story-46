@@ -30,7 +30,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// API base URL from documentation quick start example
+// API base URL - using askbuddy proxy which works from edge functions
+// Official docs show api.liam.netxd.com but has DNS issues from Supabase
 const LIAM_API_BASE = 'https://web.askbuddy.ai/devspacexdb/api';
 
 // Supabase client for fetching user keys
@@ -390,16 +391,22 @@ serve(async (req) => {
           );
         }
 
+        // Docs show: userKey, currentTag, updatedTag
+        // But we're changing a specific memory's tag, so we may need transactionNumber
+        // Try both formats for compatibility
         const changeTagBody = {
           userKey,
           transactionNumber: memoryId,
+          currentTag: tag.toUpperCase().replace(/\s+/g, '_'),
+          updatedTag: tag.toUpperCase().replace(/\s+/g, '_'),
           notesKey: tag.toUpperCase().replace(/\s+/g, '_'),
         };
 
         console.log('ChangeTag request body:', JSON.stringify(changeTagBody));
 
+        // Official docs show endpoint as /memory/change-tag (with hyphen)
         response = await makeAuthenticatedRequest(
-          '/memory/changeTag',
+          '/memory/change-tag',
           'POST',
           changeTagBody,
           apiKey,

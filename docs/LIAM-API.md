@@ -1,7 +1,7 @@
 # LIAM/NextD Memory API Documentation
 
 > **Last Updated:** January 2026  
-> **Documentation URL:** https://web.askbuddy.ai/brain/#/developers
+> **Official Documentation:** https://web.askbuddy.ai/brain/#/developers
 
 ## Overview
 
@@ -13,17 +13,25 @@ LIAM (Longterm Intelligent Associative Memory) is a memory storage API that allo
 
 ### Base URL
 
+**Official (from docs):**
+```
+https://api.liam.netxd.com/api
+```
+
+**Working Proxy (use this from Supabase Edge Functions):**
 ```
 https://web.askbuddy.ai/devspacexdb/api
 ```
 
+> ⚠️ **Important:** The official URL `api.liam.netxd.com` has DNS resolution issues from Supabase Edge Functions. Use the askbuddy proxy URL which is confirmed working.
+
 ### Authentication
 
-The LIAM API uses **ECDSA P-256 signature-based authentication**. Every request must include:
+The LIAM API uses **ECDSA P-256 (secp256r1) signature-based authentication**. Every request must include:
 
 | Header | Description |
 |--------|-------------|
-| `apiKey` | Your API key (lowercase header name) |
+| `apiKey` | Your unique API key (lowercase header name) |
 | `signature` | Base64-encoded DER-formatted ECDSA SHA-256 signature |
 | `Content-Type` | `application/json` |
 
@@ -36,16 +44,23 @@ Users need three credentials stored in the `user_api_keys` table:
 | Field | Description |
 |-------|-------------|
 | `api_key` | The API key for authentication |
-| `private_key` | PEM-formatted PKCS#8 private key for signing |
+| `private_key` | PEM-formatted PKCS#8 private key for signing (P-256 curve) |
 | `user_key` | User-specific identifier for memory operations |
 
 ---
 
 ## Signature Generation
 
-### Algorithm
+### Algorithm Details
 
-1. Convert request body to JSON string: `JSON.stringify(requestBody)`
+- **Algorithm:** ECDSA
+- **Curve:** P-256 (secp256r1)
+- **Hash:** SHA-256
+- **Output:** DER-encoded Base64
+
+### Process
+
+1. Stringify the request body: `JSON.stringify(requestBody)`
 2. Sign with ECDSA SHA-256 using the P-256 private key
 3. Convert the raw 64-byte signature to DER format
 4. Base64 encode the DER-formatted signature
@@ -90,30 +105,54 @@ async function signRequest(privateKey: CryptoKey, body: object): Promise<string>
   return toDER(new Uint8Array(rawSignature));
 }
 
-// Convert raw signature to DER format
+// Convert raw ECDSA signature to DER format
 function toDER(signature: Uint8Array): string {
-  const r = signature.slice(0, 32);
-  const s = signature.slice(32, 64);
-  
-  const formatInt = (arr: Uint8Array): number[] => {
-    const result: number[] = [];
-    let i = 0;
-    while (i < arr.length - 1 && arr[i] === 0) i++;
-    if (arr[i] >= 0x80) result.push(0);
-    for (; i < arr.length; i++) result.push(arr[i]);
-    return result;
-  };
-  
-  const rFormatted = formatInt(r);
-  const sFormatted = formatInt(s);
-  
-  const sequence = [
-    0x02, rFormatted.length, ...rFormatted,
-    0x02, sFormatted.length, ...sFormatted,
-  ];
-  
-  const der = new Uint8Array([0x30, sequence.length, ...sequence]);
-  return btoa(String.fromCharCode(...der));
+  // Split signature into r and s components (32 bytes each for P-256)
+  let r = Array.from(signature.slice(0, 32));
+  let s = Array.from(signature.slice(32));
+
+  // Add leading zero if high bit is set (to indicate positive number)
+  if (r[0] & 0x80) r = [0].concat(r);
+  if (s[0] & 0x80) s = [0].concat(s);
+
+  // Remove leading zeros (except one if next byte has high bit)
+  r = removeLeadingZeros(r);
+  s = removeLeadingZeros(s);
+
+  // Build DER structure: SEQUENCE { INTEGER r, INTEGER s }
+  let arr = [0x02];  // INTEGER tag for r
+  constructLength(arr, r.length);
+  arr = arr.concat(r);
+
+  arr.push(0x02);  // INTEGER tag for s
+  constructLength(arr, s.length);
+  arr = arr.concat(s);
+
+  let result = [0x30];  // SEQUENCE tag
+  constructLength(result, arr.length);
+  result = result.concat(arr);
+
+  // Base64 encode
+  return btoa(String.fromCharCode(...result));
+}
+
+function removeLeadingZeros(arr: number[]): number[] {
+  while (arr.length > 1 && arr[0] === 0 && !(arr[1] & 0x80)) {
+    arr = arr.slice(1);
+  }
+  return arr;
+}
+
+function constructLength(arr: number[], len: number): void {
+  if (len < 0x80) {
+    arr.push(len);
+  } else {
+    const octets = 1 + (Math.log(len) / Math.LN2 >>> 3);
+    arr.push(octets | 0x80);
+    for (let i = octets - 1; i >= 0; i--) {
+      arr.push((len >>> (i * 8)) & 0xff);
+    }
+  }
 }
 ```
 
@@ -123,9 +162,9 @@ function toDER(signature: Uint8Array): string {
 
 ### 1. Create Memory
 
-Creates a new memory for the user.
+Creates a new memory entry for a user. Memories are automatically tokenized and indexed for efficient retrieval.
 
-**Endpoint:** `POST /memory/create`
+**Endpoint:** `POST /api/memory/create`
 
 **Request Body:**
 
@@ -133,7 +172,8 @@ Creates a new memory for the user.
 {
   "userKey": "user_unique_identifier",
   "content": "Memory content text",
-  "tag": "OPTIONAL_TAG"
+  "tag": "OPTIONAL_TAG",
+  "sessionId": "optional_session_id"
 }
 ```
 
@@ -143,16 +183,20 @@ Creates a new memory for the user.
 |-------|------|----------|-------------|
 | `userKey` | string | ✅ | User's unique identifier |
 | `content` | string | ✅ | The memory text to store |
-| `tag` | string | ❌ | Category tag (uppercase, e.g., `EMAIL`, `LINK`, `FAMILY`) |
+| `tag` | string | ❌ | Category tag for categorization |
+| `sessionId` | string | ❌ | Optional session identifier |
 
-**Response:**
+**Example Response:**
 
 ```json
 {
   "status": "Success",
+  "message": "Request processed successfully.",
   "data": {
     "transactionNumber": "memory_id_here"
-  }
+  },
+  "timestamp": "2025-03-26T06:35:03.071785+00:00",
+  "process_id": "72ce430e0a0c11f091b0e880883aad51"
 }
 ```
 
@@ -160,64 +204,52 @@ Creates a new memory for the user.
 
 ### 2. List Memories
 
-Retrieves all memories for a user.
+Retrieves a list of memories for a user, optionally filtered by tokens or query.
 
-**Endpoint:** `POST /memory/list`
-
-**Request Body:**
-
-```json
-{
-  "userKey": "user_unique_identifier"
-}
-```
-
-**Response:**
-
-```json
-{
-  "status": "Success",
-  "data": {
-    "memories": [
-      {
-        "transactionNumber": "memory_id",
-        "content": "Memory text",
-        "tag": "CATEGORY",
-        "createdAt": "2026-01-16T12:00:00Z"
-      }
-    ]
-  }
-}
-```
-
----
-
-### 3. Forget Memory
-
-Deletes a memory.
-
-**Endpoint:** `POST /memory/forget`
+**Endpoint:** `POST /api/memory/list`
 
 **Request Body:**
 
 ```json
 {
   "userKey": "user_unique_identifier",
-  "transactionNumber": "memory_id_to_delete",
-  "memoryId": "memory_id_to_delete",
-  "permanent": true
+  "tokens": ["optional", "filter", "tokens"],
+  "query": "optional search query"
 }
 ```
-
-> ⚠️ **Note:** The API expects `transactionNumber` but some documentation shows `memoryId`. Send both for compatibility.
 
 **Fields:**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `userKey` | string | ✅ | User's unique identifier |
-| `transactionNumber` | string | ✅ | The memory ID to delete |
-| `memoryId` | string | ✅ | Same as transactionNumber (for compatibility) |
+| `tokens` | array | ❌ | Array of tokens to filter by |
+| `query` | string | ❌ | Search query string |
+
+---
+
+### 3. Forget Memory
+
+Delete or mark a memory as forgotten. This removes the memory from active retrieval while optionally preserving audit history.
+
+**Endpoint:** `POST /api/memory/forget`
+
+**Request Body:**
+
+```json
+{
+  "userKey": "user_unique_identifier",
+  "memoryId": "memory_id_to_delete",
+  "permanent": true
+}
+```
+
+**Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `userKey` | string | ✅ | User's unique identifier |
+| `memoryId` | string | ✅ | The ID of the memory to forget |
 | `permanent` | boolean | ❌ | If true, permanently deletes; if false, soft delete |
 
 ---
@@ -226,15 +258,17 @@ Deletes a memory.
 
 Updates the tag/category of an existing memory.
 
-**Endpoint:** `POST /memory/changeTag`
+**Endpoint:** `POST /api/memory/change-tag`
+
+> ⚠️ **Note:** The endpoint is `/memory/change-tag` (with hyphen), not `/memory/changeTag`
 
 **Request Body:**
 
 ```json
 {
   "userKey": "user_unique_identifier",
-  "transactionNumber": "memory_id",
-  "notesKey": "NEW_TAG"
+  "currentTag": "OLD_TAG",
+  "updatedTag": "NEW_TAG"
 }
 ```
 
@@ -243,27 +277,44 @@ Updates the tag/category of an existing memory.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `userKey` | string | ✅ | User's unique identifier |
-| `transactionNumber` | string | ✅ | The memory ID to update |
-| `notesKey` | string | ✅ | New tag (uppercase, e.g., `WORK`, `PERSONAL`) |
+| `currentTag` | string | ✅ | The current tag to change |
+| `updatedTag` | string | ✅ | The new tag value |
 
 ---
 
-## Error Responses
+## Response Format
 
-### Common Error Format
+All API responses follow a consistent JSON structure:
+
+### Success Response (200 OK)
+
+```json
+{
+  "status": "Success",
+  "message": "Request processed successfully.",
+  "data": { ... },
+  "timestamp": "2025-03-26T06:35:03.071785+00:00",
+  "process_id": "72ce430e0a0c11f091b0e880883aad51"
+}
+```
+
+### Error Response (400 Bad Request)
 
 ```json
 {
   "status": "Failed",
   "message": "Error description",
-  "details": {},
-  "timestamp": "2026-01-16T19:54:37.677834+00:00",
-  "processId": "XD302EE584F31511F0BD10278DF3387F0A",
-  "referenceId": "XD302EE584F31511F0BD10278DF3387F0A"
+  "details": {
+    "field": "Specific error details"
+  },
+  "timestamp": "2025-03-26T06:35:29.916548+00:00",
+  "process_id": "82d0ae4b0a0c11f09147e880883aad51"
 }
 ```
 
-### Common Errors
+---
+
+## Common Errors
 
 | Message | Cause | Solution |
 |---------|-------|----------|
@@ -277,20 +328,19 @@ Updates the tag/category of an existing memory.
 
 ### 1. Always Use the Central Edge Function
 
-Instead of calling the LIAM API directly from multiple places, route all requests through `supabase/functions/liam-memory/index.ts`. This ensures:
+Route all requests through `supabase/functions/liam-memory/index.ts` to ensure:
 - Consistent authentication handling
 - Centralized error handling
 - Single place to update if API changes
 
 ### 2. Tag Conventions
 
-Use uppercase tags with underscores:
+Use descriptive tags:
 - `EMAIL` - Email-related memories
 - `LINK` - Web links and bookmarks
 - `MANUAL` - Manually entered memories
 - `RECEIPT` - Purchase receipts
-- `FAMILY` - Family-related
-- `WORK` - Work-related
+- `immigration` - Immigration-related (example from docs)
 
 ### 3. Content Formatting
 
@@ -298,14 +348,7 @@ Use uppercase tags with underscores:
 - Include dates when relevant
 - Include source context (e.g., "Email from John on Jan 15: ...")
 
-### 4. Error Handling
-
-Always handle these scenarios:
-1. Network failures (DNS, timeout)
-2. Authentication failures (expired/invalid keys)
-3. API errors (validation, not found)
-
-### 5. Private Key Format
+### 4. Private Key Format
 
 The private key must be in PKCS#8 PEM format:
 
@@ -314,8 +357,6 @@ The private key must be in PKCS#8 PEM format:
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg...
 -----END PRIVATE KEY-----
 ```
-
-Both `-----BEGIN PRIVATE KEY-----` (PKCS#8) and `-----BEGIN EC PRIVATE KEY-----` (SEC1) formats should be supported.
 
 ---
 
@@ -330,29 +371,9 @@ Both `-----BEGIN PRIVATE KEY-----` (PKCS#8) and `-----BEGIN EC PRIVATE KEY-----`
 
 ---
 
-## Testing
-
-### Manual Test via curl
-
-```bash
-# Test through the edge function
-curl -X POST \
-  'https://ttanhgbtdyatzacxhxjj.supabase.co/functions/v1/liam-memory' \
-  -H 'Authorization: Bearer YOUR_SUPABASE_JWT' \
-  -H 'Content-Type: application/json' \
-  -d '{"action": "list"}'
-```
-
-### Edge Function Logs
-
-Check logs in Supabase Dashboard or via:
-- `email-automation-webhook` - For email automation webhook
-- `liam-memory` - For general memory operations
-
----
-
 ## Changelog
 
-- **2026-01-16:** Fixed API URL from `https://api.heylia.ai` to `https://web.askbuddy.ai/devspacexdb/api`
-- **2026-01-16:** Fixed header names from `x-api-key`/`x-signature` to `apiKey`/`signature`
-- **2026-01-16:** Fixed request body format to use `content` instead of `text`
+- **2026-01-16:** Corrected API URL to `https://api.liam.netxd.com/api` (verified from official docs)
+- **2026-01-16:** Updated change-tag endpoint to use hyphen (`/memory/change-tag`)
+- **2026-01-16:** Added `sessionId` parameter for create endpoint
+- **2026-01-16:** Fixed header names to lowercase (`apiKey`, `signature`)

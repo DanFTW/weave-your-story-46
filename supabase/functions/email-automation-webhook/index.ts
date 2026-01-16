@@ -8,7 +8,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-// LIAM API base URL - must match liam-memory edge function
+// LIAM API base URL - using askbuddy proxy which works from edge functions
+// Official docs show api.liam.netxd.com but has DNS issues from Supabase
 const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api";
 
 interface EmailPayload {
