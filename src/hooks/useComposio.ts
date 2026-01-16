@@ -104,18 +104,16 @@ export function useComposio(toolkit: string): UseComposioReturn {
 
       const currentPath = customRedirectPath || window.location.pathname;
       
-      // Build redirect URL - use custom URL scheme if running in Median app
-      let redirectUrl: string;
+      // Build redirect URL - always use standard HTTPS URL
+      // OAuth providers can't redirect to custom URL schemes (weavefabric.https://...)
+      // The appbrowser mode keeps the flow within the Median app context instead
       const baseUrl = "https://weavefabric.lovable.app";
+      const redirectUrl = isMedian() 
+        ? `${baseUrl}${currentPath}?connected=true`
+        : `${window.location.origin}${currentPath}?connected=true`;
       
       if (isMedian()) {
-        const scheme = median.getUrlScheme();
-        // Use Median's URL scheme format: scheme.https://domain/path
-        // This allows the Median app to intercept the redirect
-        redirectUrl = `${scheme}.${baseUrl}${currentPath}?connected=true`;
-        console.log(`Running in Median app, using scheme redirect: ${redirectUrl}`);
-      } else {
-        redirectUrl = `${window.location.origin}${currentPath}?connected=true`;
+        console.log(`Running in Median app, using standard HTTPS redirect with appbrowser mode`);
       }
 
       console.log(`Initiating ${toolkit} OAuth...`);
