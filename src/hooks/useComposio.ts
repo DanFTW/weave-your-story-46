@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { isMedian, median } from "@/utils/median";
 
 export interface ConnectedAccount {
   name: string;
@@ -23,63 +24,14 @@ export function useComposio(toolkit: string): UseComposioReturn {
   const [connecting, setConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Initiate OAuth connection
-  const connect = useCallback(async (customRedirectPath?: string) => {
-    try {
-      setConnecting(true);
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("Please sign in to connect integrations");
-        setConnecting(false);
-        return;
-      }
-
-      const currentPath = customRedirectPath || window.location.pathname;
-      const redirectUrl = `${window.location.origin}${currentPath}?connected=true`;
-
-      console.log(`Initiating ${toolkit} OAuth...`);
-      console.log(`Redirect URL: ${redirectUrl}`);
-
-      const { data, error } = await supabase.functions.invoke("composio-connect", {
-        body: { toolkit: toolkit.toUpperCase(), redirectUrl },
-      });
-
-      if (error) {
-        console.error("Connect error:", error);
-        toast.error("Failed to start connection");
-        setConnecting(false);
-        return;
-      }
-
-      console.log("Connect response:", data);
-
-      if (!data?.redirectUrl) {
-        toast.error("No redirect URL received");
-        setConnecting(false);
-        return;
-      }
-
-      // Store connection ID for later
-      if (data.connectionId) {
-        localStorage.setItem("composio_pending_connection", data.connectionId);
-        localStorage.setItem("composio_pending_toolkit", toolkit.toLowerCase());
-      }
-
-      // Redirect to OAuth - use top-level window to escape iframe
-      // This is needed because Composio blocks embedding in iframes
-      const targetWindow = window.top || window;
-      targetWindow.location.assign(data.redirectUrl);
-    } catch (error) {
-      console.error("Connection error:", error);
-      toast.error("Failed to connect integration");
-      setConnecting(false);
-    }
-  }, [toolkit]);
-
   // Complete connection after OAuth redirect
   const completeConnection = useCallback(async (connectionId?: string) => {
     try {
+      // Clean up any Median callback
+      if (typeof window !== 'undefined' && window.median_appbrowser_closed) {
+        delete window.median_appbrowser_closed;
+      }
+
       const pendingId = connectionId || localStorage.getItem("composio_pending_connection");
       const pendingToolkit = localStorage.getItem("composio_pending_toolkit") || toolkit;
       
@@ -120,6 +72,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
         setIsConnected(true);
         localStorage.removeItem("composio_pending_connection");
         localStorage.removeItem("composio_pending_toolkit");
+        localStorage.removeItem("median_oauth_in_progress");
         toast.success(`${toolkit} connected successfully!`);
         return { success: true, email: data.email };
       }
@@ -136,6 +89,110 @@ export function useComposio(toolkit: string): UseComposioReturn {
       return { success: false };
     }
   }, [toolkit]);
+
+  // Initiate OAuth connection
+  const connect = useCallback(async (customRedirectPath?: string) => {
+    try {
+      setConnecting(true);
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Please sign in to connect integrations");
+        setConnecting(false);
+        return;
+      }
+
+      const currentPath = customRedirectPath || window.location.pathname;
+      
+      // Build redirect URL - use custom URL scheme if running in Median app
+      let redirectUrl: string;
+      const baseUrl = "https://weavefabric.lovable.app";
+      
+      if (isMedian()) {
+        const scheme = median.getUrlScheme();
+        // Use Median's URL scheme format: scheme.https://domain/path
+        // This allows the Median app to intercept the redirect
+        redirectUrl = `${scheme}.${baseUrl}${currentPath}?connected=true`;
+        console.log(`Running in Median app, using scheme redirect: ${redirectUrl}`);
+      } else {
+        redirectUrl = `${window.location.origin}${currentPath}?connected=true`;
+      }
+
+      console.log(`Initiating ${toolkit} OAuth...`);
+      console.log(`Redirect URL: ${redirectUrl}`);
+
+      const { data, error } = await supabase.functions.invoke("composio-connect", {
+        body: { toolkit: toolkit.toUpperCase(), redirectUrl },
+      });
+
+      if (error) {
+        console.error("Connect error:", error);
+        toast.error("Failed to start connection");
+        setConnecting(false);
+        return;
+      }
+
+      console.log("Connect response:", data);
+
+      if (!data?.redirectUrl) {
+        toast.error("No redirect URL received");
+        setConnecting(false);
+        return;
+      }
+
+      // Store connection ID for later
+      if (data.connectionId) {
+        localStorage.setItem("composio_pending_connection", data.connectionId);
+        localStorage.setItem("composio_pending_toolkit", toolkit.toLowerCase());
+      }
+
+      // Handle OAuth redirect based on platform
+      if (isMedian()) {
+        // Store flag indicating OAuth is in progress
+        localStorage.setItem("median_oauth_in_progress", "true");
+        
+        // Use Median's app browser to keep OAuth flow within app context
+        const opened = median.window.open(data.redirectUrl, 'appbrowser');
+        
+        if (opened) {
+          console.log("Opened OAuth in Median app browser");
+          
+          // Set up callback for when the app browser closes
+          window.median_appbrowser_closed = async () => {
+            console.log("Median app browser closed, checking connection...");
+            const inProgress = localStorage.getItem("median_oauth_in_progress");
+            
+            if (inProgress) {
+              // Give a small delay for any redirects to complete
+              await new Promise(resolve => setTimeout(resolve, 800));
+              
+              const result = await completeConnection();
+              if (result?.success) {
+                console.log("OAuth completed successfully after app browser closed");
+              } else {
+                console.log("OAuth may not have completed, user might have cancelled");
+                toast.info("Connection cancelled or incomplete");
+              }
+              setConnecting(false);
+            }
+          };
+        } else {
+          // Fallback if app browser isn't available
+          console.log("Median app browser not available, using standard redirect");
+          window.location.assign(data.redirectUrl);
+        }
+      } else {
+        // Standard web redirect - use top-level window to escape iframe
+        // This is needed because Composio blocks embedding in iframes
+        const targetWindow = window.top || window;
+        targetWindow.location.assign(data.redirectUrl);
+      }
+    } catch (error) {
+      console.error("Connection error:", error);
+      toast.error("Failed to connect integration");
+      setConnecting(false);
+    }
+  }, [toolkit, completeConnection]);
 
   // Check existing connection status
   const checkStatus = useCallback(async () => {
