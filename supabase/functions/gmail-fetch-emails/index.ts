@@ -66,6 +66,26 @@ serve(async (req) => {
     const connectionId = integration.composio_connection_id;
     console.log(`Using connection: ${connectionId}`);
 
+    // Get the connected account details to retrieve the proper ID
+    const accountResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+
+    if (!accountResponse.ok) {
+      const errorText = await accountResponse.text();
+      console.error("Failed to get account:", errorText);
+      throw new Error("Failed to get connected account");
+    }
+
+    const accountData = await accountResponse.json();
+    const accountId = accountData.id || connectionId;
+    console.log(`Account ID: ${accountId}`);
+
     const allEmails: ExtractedEmail[] = [];
 
     // Search for emails from/to each address
@@ -75,14 +95,14 @@ serve(async (req) => {
       // Build query for from OR to
       const query = `from:${email} OR to:${email}`;
 
-      const searchResponse = await fetch("https://backend.composio.dev/api/v2/actions/GMAIL_SEARCH_EMAILS/execute", {
+      const searchResponse = await fetch("https://backend.composio.dev/api/v1/actions/GMAIL_SEARCH_EMAILS/execute", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-api-key": COMPOSIO_API_KEY!,
         },
         body: JSON.stringify({
-          connectedAccountId: connectionId,
+          connectedAccountId: accountId,
           input: {
             query: query,
             max_results: 10,
@@ -96,57 +116,33 @@ serve(async (req) => {
       }
 
       const searchData = await searchResponse.json();
-      const messages = searchData.data?.messages || searchData.messages || [];
+      const responseData = searchData.response?.data || searchData.data || searchData;
+      const messages = responseData?.messages || responseData?.results || [];
 
       console.log(`Found ${messages.length} messages for ${email}`);
 
-      // Get full content for each message
+      // Extract email data from search results
       for (const message of messages) {
         try {
-          const messageId = message.id || message.messageId;
+          const messageId = message.id || message.messageId || message.message_id;
           if (!messageId) continue;
 
-          // Get full message content
-          const getResponse = await fetch("https://backend.composio.dev/api/v2/actions/GMAIL_GET_MESSAGE/execute", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": COMPOSIO_API_KEY!,
-            },
-            body: JSON.stringify({
-              connectedAccountId: connectionId,
-              input: {
-                message_id: messageId,
-                format: "full",
-              },
-            }),
-          });
+          // Check if we already have this email
+          if (allEmails.some(e => e.id === messageId)) continue;
 
-          if (!getResponse.ok) {
-            console.error(`Failed to get message ${messageId}`);
-            continue;
-          }
-
-          const messageData = await getResponse.json();
-          const fullMessage = messageData.data || messageData;
-
-          // Extract email data
+          // Extract email data directly from search results
           const extractedEmail: ExtractedEmail = {
             id: messageId,
-            from: fullMessage.from || fullMessage.sender || message.from || "",
-            to: fullMessage.to || fullMessage.recipient || message.to || "",
-            subject: fullMessage.subject || message.subject || "(No subject)",
-            snippet: fullMessage.snippet || message.snippet || "",
-            body: extractBody(fullMessage),
-            date: fullMessage.date || fullMessage.internalDate || message.date || new Date().toISOString(),
-            threadId: fullMessage.threadId || message.threadId,
+            from: message.from || message.From || message.sender || "",
+            to: message.to || message.To || message.recipient || "",
+            subject: message.subject || message.Subject || "(No subject)",
+            snippet: message.snippet || message.preview || "",
+            body: message.body || message.text || message.snippet || "",
+            date: message.date || message.Date || message.internalDate || new Date().toISOString(),
+            threadId: message.threadId || message.thread_id,
           };
 
-          // Avoid duplicates
-          if (!allEmails.some(e => e.id === extractedEmail.id)) {
-            allEmails.push(extractedEmail);
-          }
-
+          allEmails.push(extractedEmail);
         } catch (msgError) {
           console.error(`Error processing message:`, msgError);
         }
@@ -156,7 +152,11 @@ serve(async (req) => {
     console.log(`Total emails extracted: ${allEmails.length}`);
 
     // Sort by date descending
-    allEmails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    allEmails.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
+    });
 
     // Limit to 50 most recent
     const limitedEmails = allEmails.slice(0, 50);
@@ -175,56 +175,3 @@ serve(async (req) => {
     );
   }
 });
-
-function extractBody(message: any): string {
-  // Try to get plain text body
-  if (message.body) {
-    return typeof message.body === "string" 
-      ? message.body 
-      : message.body.plain || message.body.html || "";
-  }
-
-  // Try payload structure
-  if (message.payload) {
-    const payload = message.payload;
-    
-    // Check for parts
-    if (payload.parts) {
-      for (const part of payload.parts) {
-        if (part.mimeType === "text/plain" && part.body?.data) {
-          return decodeBase64(part.body.data);
-        }
-      }
-      // Fallback to HTML if no plain text
-      for (const part of payload.parts) {
-        if (part.mimeType === "text/html" && part.body?.data) {
-          return stripHtml(decodeBase64(part.body.data));
-        }
-      }
-    }
-
-    // Direct body
-    if (payload.body?.data) {
-      return decodeBase64(payload.body.data);
-    }
-  }
-
-  // Use snippet as fallback
-  return message.snippet || "";
-}
-
-function decodeBase64(data: string): string {
-  try {
-    const decoded = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
-    return decoded;
-  } catch {
-    return data;
-  }
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
