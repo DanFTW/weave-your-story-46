@@ -126,7 +126,7 @@ export function FlowConfigured({
   return (
     <div className="min-h-screen bg-background">
       {/* Header with success message */}
-      <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
+      <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses[config.gradient])}>
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => navigate('/threads')}

@@ -32,7 +32,7 @@ export function ThreadSplash({ title, icon: Icon, gradient, subtitle, onBack }: 
   };
 
   return (
-    <div className={cn("relative px-5 pt-12 pb-8", gradientClasses[gradient])}>
+    <div className={cn("relative px-5 pt-status-bar pb-8", gradientClasses[gradient])}>
       {/* Header row with back button and title inline */}
       <div className="flex items-center gap-3">
         <button

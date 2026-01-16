@@ -151,7 +151,7 @@ export function EmailAutomationFlow() {
   return (
     <div className="min-h-screen bg-background pb-nav">
       {/* Header */}
-      <div className={cn("relative px-5 pt-12 pb-6", gradientClasses.blue)}>
+      <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses.blue)}>
         <div className="flex items-center gap-3">
           <button
             onClick={handleBack}

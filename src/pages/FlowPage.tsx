@@ -169,7 +169,7 @@ export default function FlowPage() {
     return (
       <div className="min-h-screen bg-background pb-nav">
         {/* Header */}
-        <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
+        <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses[config.gradient])}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => receiptPhase === 'list' ? navigate('/threads') : setReceiptPhase('list')}
@@ -372,7 +372,7 @@ export default function FlowPage() {
     return (
       <div className="min-h-screen bg-background pb-nav">
         {/* Header */}
-        <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
+        <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses[config.gradient])}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/threads')}
