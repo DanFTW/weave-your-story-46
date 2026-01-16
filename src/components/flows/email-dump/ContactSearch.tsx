@@ -185,7 +185,7 @@ export function ContactSearch({
         {!isSearching && query.length < 2 && searchResults.length === 0 && selectedEmails.length === 0 && (
           <div className="text-center py-8">
             <p className="text-muted-foreground">
-              Search for contacts to extract their emails
+              Search for contacts to select
             </p>
           </div>
         )}
@@ -198,7 +198,7 @@ export function ContactSearch({
           disabled={selectedEmails.length === 0}
           className="w-full h-14 text-base font-semibold rounded-2xl gap-2"
         >
-          Extract Emails ({selectedEmails.length})
+          Select Contacts ({selectedEmails.length})
           <ArrowRight className="w-5 h-5" />
         </Button>
       </div>
