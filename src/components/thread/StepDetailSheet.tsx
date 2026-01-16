@@ -38,7 +38,7 @@ const stepTypeDetails: Record<string, {
     ],
   },
   save: {
-    explanation: "Your information is securely saved to your XD Brain, making it available across all your connected experiences.",
+    explanation: "Your information is securely saved to Weave Fabric, making it available across all your connected experiences.",
     benefits: [
       { icon: Shield, title: "Encrypted", description: "End-to-end security" },
       { icon: Zap, title: "Instant", description: "Available immediately" },
@@ -81,7 +81,7 @@ export function StepDetailSheet({ open, onOpenChange, step }: StepDetailSheetPro
               {step.badge && (
                 <Badge 
                   variant="secondary" 
-                  className="text-[10px] px-2 py-0.5 bg-orange-100 text-orange-600 font-semibold"
+                  className="text-[10px] px-2 py-0.5 bg-teal-100 text-teal-600 font-semibold"
                 >
                   {step.badge}
                 </Badge>
