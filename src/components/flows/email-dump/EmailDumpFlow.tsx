@@ -1,10 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, Inbox } from "lucide-react";
+import { ChevronLeft, Inbox, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEmailDump } from "@/hooks/useEmailDump";
 import { useComposio } from "@/hooks/useComposio";
-import { GmailAuthGate } from "./GmailAuthGate";
 import { ContactSearch } from "./ContactSearch";
 import { EmailExtracting } from "./EmailExtracting";
 import { EmailPreviewList } from "./EmailPreviewList";
@@ -21,6 +20,7 @@ const gradientClasses: Record<string, string> = {
 export function EmailDumpFlow() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const gmail = useComposio('GMAIL');
   
   const {
@@ -46,7 +46,7 @@ export function EmailDumpFlow() {
     reset,
   } = useEmailDump();
 
-  // Check for OAuth callback
+  // Check for OAuth callback first
   useEffect(() => {
     const connected = searchParams.get('connected');
     const connectionId = searchParams.get('connectionId');
@@ -55,21 +55,39 @@ export function EmailDumpFlow() {
       gmail.completeConnection(connectionId).then(() => {
         // Clear URL params
         window.history.replaceState({}, '', '/flow/email-dump');
+        setIsCheckingAuth(false);
       });
     }
   }, [searchParams, gmail]);
 
   // Check Gmail connection status on mount
   useEffect(() => {
-    gmail.checkStatus();
+    const checkAuth = async () => {
+      await gmail.checkStatus();
+      setIsCheckingAuth(false);
+    };
+    
+    // Only check if not handling OAuth callback
+    const connected = searchParams.get('connected');
+    if (!connected) {
+      checkAuth();
+    }
   }, []);
 
-  // Move to contact search when Gmail is connected
+  // Handle connection status changes
   useEffect(() => {
-    if (gmail.isConnected && phase === 'auth-check') {
-      setPhase('contact-search');
+    if (isCheckingAuth) return;
+    
+    if (gmail.isConnected) {
+      // User is connected, go to contact search
+      if (phase === 'auth-check') {
+        setPhase('contact-search');
+      }
+    } else {
+      // User is not connected, redirect to the Gmail integration page
+      navigate('/integration/gmail');
     }
-  }, [gmail.isConnected, phase, setPhase]);
+  }, [gmail.isConnected, isCheckingAuth, phase, setPhase, navigate]);
 
   const handleBack = () => {
     switch (phase) {
@@ -92,6 +110,18 @@ export function EmailDumpFlow() {
         navigate('/threads');
     }
   };
+
+  // Show loading while checking auth
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground text-sm">Checking connection...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Success screen (full screen, no header)
   if (phase === 'success') {
@@ -126,7 +156,6 @@ export function EmailDumpFlow() {
           <div>
             <h1 className="text-xl font-bold text-white">Email Dump</h1>
             <p className="text-white/70 text-sm">
-              {phase === 'auth-check' && 'Connect your Gmail'}
               {phase === 'contact-search' && 'Select email addresses'}
               {phase === 'preview' && `${extractedEmails.length} emails to save`}
             </p>
@@ -136,16 +165,6 @@ export function EmailDumpFlow() {
 
       {/* Content */}
       <div className="px-5 pt-5">
-        {phase === 'auth-check' && (
-          <GmailAuthGate
-            isConnected={gmail.isConnected}
-            isConnecting={gmail.connecting}
-            connectedAccount={gmail.connectedAccount}
-            onConnect={() => gmail.connect('/flow/email-dump')}
-            onContinue={() => setPhase('contact-search')}
-          />
-        )}
-
         {phase === 'contact-search' && (
           <ContactSearch
             selectedEmails={selectedEmails}
