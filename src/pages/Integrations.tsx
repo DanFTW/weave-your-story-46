@@ -1,21 +1,34 @@
-import { PageHeader } from "@/components/PageHeader";
+import { motion } from "framer-motion";
+import { integrationSections } from "@/data/integrations";
+import { IntegrationSection } from "@/components/integrations/IntegrationSection";
 
 export default function Integrations() {
   return (
     <div className="pb-nav">
       <div className="px-5">
-        <PageHeader 
-          title="Integrations" 
-          subtitle="Connect your apps" 
-        />
-        
-        <div className="mt-8 space-y-4">
-          <div className="rounded-2xl bg-card p-6 border border-border/50 text-center">
-            <p className="text-sm text-muted-foreground">
-              Connect apps like Gmail, Calendar, and more to automatically generate memories.
-            </p>
-          </div>
-        </div>
+        {/* Page Header */}
+        <motion.header
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="pt-safe-top pb-6"
+        >
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">
+            Integrations
+          </h1>
+        </motion.header>
+
+        {/* Integration Sections */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          className="space-y-8"
+        >
+          {integrationSections.map((section) => (
+            <IntegrationSection key={section.title} section={section} />
+          ))}
+        </motion.div>
       </div>
     </div>
   );
