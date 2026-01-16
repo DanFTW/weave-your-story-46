@@ -46,19 +46,7 @@ export function EmailDumpFlow() {
     reset,
   } = useEmailDump();
 
-  // Check for OAuth callback first
-  useEffect(() => {
-    const connected = searchParams.get('connected');
-    const connectionId = searchParams.get('connectionId');
-    
-    if (connected === 'true' && connectionId) {
-      gmail.completeConnection(connectionId).then(() => {
-        // Clear URL params
-        window.history.replaceState({}, '', '/flow/email-dump');
-        setIsCheckingAuth(false);
-      });
-    }
-  }, [searchParams, gmail]);
+  // Legacy OAuth callback handling removed - now using database polling in useComposio hook
 
   // Check Gmail connection status on mount
   useEffect(() => {
