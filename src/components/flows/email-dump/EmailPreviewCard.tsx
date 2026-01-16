@@ -4,6 +4,7 @@ import { Trash2, ChevronDown, ChevronUp, Mail } from "lucide-react";
 import { EmailMemory, ExtractedEmail } from "@/types/emailDump";
 import { getTagById } from "@/data/tagConfig";
 import { cn } from "@/lib/utils";
+import { cleanEmailText } from "@/utils/decodeHtmlEntities";
 
 interface EmailPreviewCardProps {
   memory: EmailMemory;
@@ -49,7 +50,8 @@ function getSnippetText(email: ExtractedEmail): string {
     text = text.body || text.text || '';
   }
   
-  return String(text).replace(/\s+/g, ' ').trim();
+  // Clean and decode HTML entities
+  return cleanEmailText(String(text).replace(/\s+/g, ' '));
 }
 
 function getFullBodyText(email: ExtractedEmail): string {
@@ -61,8 +63,8 @@ function getFullBodyText(email: ExtractedEmail): string {
     text = text.body || text.text || '';
   }
   
-  // Preserve line breaks but clean up excessive whitespace
-  return String(text).replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  // Clean and decode HTML entities, preserving line breaks
+  return cleanEmailText(String(text));
 }
 
 export function EmailPreviewCard({ memory, onDelete }: EmailPreviewCardProps) {
