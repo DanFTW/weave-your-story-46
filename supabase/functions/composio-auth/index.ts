@@ -93,9 +93,14 @@ serve(async (req) => {
             "x-api-key": COMPOSIO_API_KEY,
           },
           body: JSON.stringify({
-            auth_config_id: GMAIL_AUTH_CONFIG_ID,
-            entity_id: user.id, // Use Supabase user ID as entity
-            redirect_url: redirectUrl,
+            auth_config: {
+              id: GMAIL_AUTH_CONFIG_ID,
+            },
+            connection: {
+              status: "INITIALIZING",
+            },
+            user_id: user.id,
+            callback_url: redirectUrl,
           }),
         });
 
