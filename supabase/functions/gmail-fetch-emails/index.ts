@@ -118,7 +118,7 @@ serve(async (req) => {
           // Check if we already have this email
           if (allEmails.some(e => e.id === messageId)) continue;
 
-          // Handle snippet which may be an object or string
+          // Handle snippet which may be an object or string (short preview)
           let snippetText = "";
           if (typeof message.snippet === 'object' && message.snippet?.body) {
             snippetText = message.snippet.body;
@@ -134,14 +134,32 @@ serve(async (req) => {
             subjectText = message.snippet.subject;
           }
 
+          // CRITICAL: Extract full body - Composio returns it as 'messageText'
+          // Priority order: messageText (full body) > body > text > snippet (short preview)
+          let fullBodyText = "";
+          if (message.messageText && typeof message.messageText === 'string') {
+            fullBodyText = message.messageText;
+          } else if (message.body && typeof message.body === 'string') {
+            fullBodyText = message.body;
+          } else if (message.text && typeof message.text === 'string') {
+            fullBodyText = message.text;
+          } else {
+            fullBodyText = snippetText; // Fallback to snippet only if nothing else
+          }
+
+          // Log first email body length for debugging
+          if (allEmails.length === 0) {
+            console.log(`First email body length: ${fullBodyText.length}, snippet length: ${snippetText.length}`);
+          }
+
           // Extract email data directly from search results
           const extractedEmail: ExtractedEmail = {
             id: messageId,
             from: message.from || message.From || message.sender || "",
             to: message.to || message.To || message.recipient || "",
             subject: subjectText,
-            snippet: snippetText,
-            body: message.body || message.text || snippetText || "",
+            snippet: snippetText, // Short preview for collapsed view
+            body: fullBodyText,   // Full email body for expanded view
             date: message.date || message.Date || message.internalDate || new Date().toISOString(),
             threadId: message.threadId || message.thread_id,
           };
