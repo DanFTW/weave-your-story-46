@@ -8,6 +8,12 @@ const corsHeaders = {
 
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3";
 
+// Mapping of integration IDs to their Composio auth config IDs
+// These are Composio-managed auth configs that use Composio's OAuth credentials
+const AUTH_CONFIG_MAP: Record<string, string> = {
+  gmail: "ac_JO3RFglIYYKs", // Existing managed Gmail auth config
+};
+
 interface InitiateRequest {
   action: "initiate";
   integrationId: string;
@@ -26,69 +32,6 @@ interface DisconnectRequest {
 }
 
 type RequestBody = InitiateRequest | StatusRequest | DisconnectRequest;
-
-// Helper to get or create a Composio-managed auth config for a toolkit
-async function getOrCreateManagedAuthConfig(
-  apiKey: string,
-  toolkit: string
-): Promise<string> {
-  const toolkitUpper = toolkit.toUpperCase();
-  
-  // First, try to find an existing managed auth config for this toolkit
-  console.log(`Looking for existing managed auth config for ${toolkitUpper}`);
-  
-  const listResponse = await fetch(
-    `${COMPOSIO_API_BASE}/auth-configs?toolkit=${toolkitUpper}`,
-    {
-      headers: { "x-api-key": apiKey },
-    }
-  );
-
-  if (listResponse.ok) {
-    const configs = await listResponse.json();
-    console.log(`Found ${configs.items?.length || 0} auth configs for ${toolkitUpper}`);
-    
-    // Look for an existing managed config that is active
-    const managedConfig = configs.items?.find(
-      (c: { type?: string; status?: string }) => 
-        c.type === "use_composio_managed_auth" && c.status === "ACTIVE"
-    );
-    
-    if (managedConfig) {
-      console.log(`Using existing managed auth config: ${managedConfig.id}`);
-      return managedConfig.id;
-    }
-  } else {
-    console.log(`List auth configs failed: ${listResponse.status}`);
-  }
-
-  // If none exists, create a new managed auth config
-  console.log(`Creating new managed auth config for ${toolkitUpper}`);
-  
-  const createResponse = await fetch(`${COMPOSIO_API_BASE}/auth-configs`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-    },
-    body: JSON.stringify({
-      toolkit: toolkitUpper,
-      name: `${toolkit} Managed Auth`,
-      type: "use_composio_managed_auth",
-      auth_scheme: "OAUTH2",
-    }),
-  });
-
-  if (!createResponse.ok) {
-    const errorText = await createResponse.text();
-    console.error("Failed to create auth config:", createResponse.status, errorText);
-    throw new Error(`Failed to create auth configuration: ${errorText}`);
-  }
-
-  const newConfig = await createResponse.json();
-  console.log(`Created managed auth config: ${newConfig.id}`);
-  return newConfig.id;
-}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -147,48 +90,46 @@ serve(async (req) => {
         console.log(`Initiating OAuth for integration: ${integrationId}`);
         console.log(`Redirect URL: ${redirectUrl}`);
         
-        // Get or create a managed auth config for this integration
-        const authConfigId = await getOrCreateManagedAuthConfig(
-          COMPOSIO_API_KEY,
-          integrationId
-        );
+        // Get the auth config ID for this integration
+        const authConfigId = AUTH_CONFIG_MAP[integrationId.toLowerCase()];
+        
+        if (!authConfigId) {
+          throw new Error(`No auth configuration found for integration: ${integrationId}`);
+        }
         
         console.log(`Using auth config: ${authConfigId}`);
         
-        // Create connection request to Composio
-        const composioResponse = await fetch(`${COMPOSIO_API_BASE}/connected_accounts`, {
+        // Create connection request to Composio using v1 API which is more stable
+        const composioResponse = await fetch(`https://backend.composio.dev/api/v1/connectedAccounts`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "x-api-key": COMPOSIO_API_KEY,
           },
           body: JSON.stringify({
-            auth_config: {
-              id: authConfigId,
-            },
-            connection: {
-              status: "INITIALIZING",
-            },
-            user_id: user.id,
-            callback_url: redirectUrl,
+            integrationId: authConfigId,
+            userUuid: user.id,
+            redirectUri: redirectUrl,
           }),
         });
 
+        const responseText = await composioResponse.text();
+        console.log(`Composio v1 response status: ${composioResponse.status}`);
+        console.log(`Composio v1 response: ${responseText}`);
+
         if (!composioResponse.ok) {
-          const errorText = await composioResponse.text();
-          console.error("Composio API error:", composioResponse.status, errorText);
-          throw new Error(`Composio API error: ${composioResponse.status}`);
+          console.error("Composio API error:", composioResponse.status, responseText);
+          throw new Error(`Composio API error: ${composioResponse.status} - ${responseText}`);
         }
 
-        const composioData = await composioResponse.json();
-        console.log("Composio response:", JSON.stringify(composioData));
+        const composioData = JSON.parse(responseText);
 
-        const connectionId = composioData.id;
-        const oauthRedirectUrl = composioData.redirect_url;
+        const connectionId = composioData.connectedAccountId || composioData.id;
+        const oauthRedirectUrl = composioData.redirectUrl || composioData.redirect_url;
 
         if (!connectionId || !oauthRedirectUrl) {
           console.error("Missing data from Composio:", composioData);
-          throw new Error("Invalid response from Composio");
+          throw new Error("Invalid response from Composio - missing redirect URL");
         }
 
         // Upsert pending record in user_integrations
@@ -273,8 +214,8 @@ serve(async (req) => {
 
         console.log(`Checking status for connection: ${connId}`);
 
-        // Check status with Composio
-        const statusResponse = await fetch(`${COMPOSIO_API_BASE}/connected_accounts/${connId}`, {
+        // Check status with Composio v1 API
+        const statusResponse = await fetch(`https://backend.composio.dev/api/v1/connectedAccounts/${connId}`, {
           headers: {
             "x-api-key": COMPOSIO_API_KEY,
           },
@@ -310,19 +251,11 @@ serve(async (req) => {
         let accountEmail = "";
         let accountAvatarUrl = "";
 
-        if (isActive && statusData.connection_params) {
+        if (isActive && statusData.connectionParams) {
           // Try to extract user info from connection params
-          const params = statusData.connection_params;
+          const params = statusData.connectionParams;
           accountEmail = params.email || params.user_email || "";
           accountName = params.name || params.user_name || params.display_name || "";
-          
-          // If we have scope info, we might find more details
-          if (statusData.member?.metadata) {
-            const metadata = statusData.member.metadata;
-            accountName = accountName || metadata.name || metadata.display_name || "";
-            accountEmail = accountEmail || metadata.email || "";
-            accountAvatarUrl = metadata.picture || metadata.avatar_url || "";
-          }
         }
 
         // Update database with connection status
@@ -386,7 +319,7 @@ serve(async (req) => {
         // Try to delete from Composio (best effort)
         if (integration.composio_connection_id) {
           try {
-            await fetch(`${COMPOSIO_API_BASE}/connected_accounts/${integration.composio_connection_id}`, {
+            await fetch(`https://backend.composio.dev/api/v1/connectedAccounts/${integration.composio_connection_id}`, {
               method: "DELETE",
               headers: {
                 "x-api-key": COMPOSIO_API_KEY,
