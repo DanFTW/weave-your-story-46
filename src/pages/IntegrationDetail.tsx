@@ -1,6 +1,7 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
 import { IntegrationLargeIcon } from "@/components/integrations/IntegrationLargeIcon";
@@ -8,21 +9,45 @@ import { IntegrationConnectButton } from "@/components/integrations/IntegrationC
 import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationCapabilityTag";
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
-import { useIntegrationConnection } from "@/hooks/useIntegrationConnection";
+import { useComposio } from "@/hooks/useComposio";
 
 export default function IntegrationDetail() {
   const { integrationId } = useParams<{ integrationId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [isProcessingCallback, setIsProcessingCallback] = useState(false);
   
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
   
   const {
+    connectedAccount,
+    connecting,
     isConnected,
-    isLoading,
-    connectionData,
-    initiateConnection,
+    connect,
+    completeConnection,
     disconnect,
-  } = useIntegrationConnection(integrationId || "");
+    checkStatus,
+  } = useComposio(integrationId || "gmail");
+
+  // Check existing status on mount
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
+
+  // Handle OAuth callback when ?connected=true is in URL
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    if (connected === "true" && !isProcessingCallback) {
+      setIsProcessingCallback(true);
+      
+      // Complete the connection
+      completeConnection().then((result) => {
+        // Remove the query param from URL
+        navigate(`/integration/${integrationId}`, { replace: true });
+        setIsProcessingCallback(false);
+      });
+    }
+  }, [searchParams, integrationId, completeConnection, navigate, isProcessingCallback]);
 
   if (!integration) {
     return (
@@ -33,13 +58,12 @@ export default function IntegrationDetail() {
   }
 
   const handleConnect = async () => {
-    await initiateConnection();
+    await connect(`/integration/${integrationId}`);
   };
 
   const handleChangeAccount = async () => {
-    // Disconnect and reconnect
     await disconnect();
-    await initiateConnection();
+    await connect(`/integration/${integrationId}`);
   };
 
   const handleDone = () => {
@@ -49,6 +73,8 @@ export default function IntegrationDetail() {
   const handleBack = () => {
     navigate("/integrations");
   };
+
+  const isLoading = connecting || isProcessingCallback;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -97,8 +123,11 @@ export default function IntegrationDetail() {
       >
         {/* Loading State */}
         {isLoading ? (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <p className="text-muted-foreground">
+              {isProcessingCallback ? "Completing connection..." : "Connecting..."}
+            </p>
           </div>
         ) : (
           <>
@@ -111,13 +140,13 @@ export default function IntegrationDetail() {
             </section>
 
             {/* Connected State: Account Section */}
-            {isConnected && connectionData ? (
+            {isConnected && connectedAccount ? (
               <>
                 <div className="mt-8">
                   <IntegrationConnectedAccount
-                    avatarUrl={connectionData.avatarUrl}
-                    name={connectionData.name || "Connected Account"}
-                    email={connectionData.email || "Email not available"}
+                    avatarUrl={connectedAccount.avatarUrl}
+                    name={connectedAccount.name || "Connected Account"}
+                    email={connectedAccount.email || "Email not available"}
                     onChangeAccount={handleChangeAccount}
                   />
                 </div>

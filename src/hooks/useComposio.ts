@@ -1,0 +1,198 @@
+import { useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+export interface ConnectedAccount {
+  name: string;
+  email: string;
+  avatarUrl?: string;
+}
+
+interface UseComposioReturn {
+  connectedAccount: ConnectedAccount | null;
+  connecting: boolean;
+  isConnected: boolean;
+  connect: (customRedirectPath?: string) => Promise<void>;
+  completeConnection: (connectionId?: string) => Promise<{ success: boolean; email?: string } | undefined>;
+  disconnect: () => Promise<void>;
+  checkStatus: () => Promise<void>;
+}
+
+export function useComposio(toolkit: string): UseComposioReturn {
+  const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+
+  // Initiate OAuth connection
+  const connect = useCallback(async (customRedirectPath?: string) => {
+    try {
+      setConnecting(true);
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Please sign in to connect integrations");
+        setConnecting(false);
+        return;
+      }
+
+      const currentPath = customRedirectPath || window.location.pathname;
+      const redirectUrl = `${window.location.origin}${currentPath}?connected=true`;
+
+      console.log(`Initiating ${toolkit} OAuth...`);
+      console.log(`Redirect URL: ${redirectUrl}`);
+
+      const { data, error } = await supabase.functions.invoke("composio-connect", {
+        body: { toolkit: toolkit.toUpperCase(), redirectUrl },
+      });
+
+      if (error) {
+        console.error("Connect error:", error);
+        toast.error("Failed to start connection");
+        setConnecting(false);
+        return;
+      }
+
+      console.log("Connect response:", data);
+
+      if (!data?.redirectUrl) {
+        toast.error("No redirect URL received");
+        setConnecting(false);
+        return;
+      }
+
+      // Store connection ID for later
+      if (data.connectionId) {
+        localStorage.setItem("composio_pending_connection", data.connectionId);
+        localStorage.setItem("composio_pending_toolkit", toolkit.toLowerCase());
+      }
+
+      // Redirect to OAuth - use assign for Safari compatibility
+      window.location.assign(data.redirectUrl);
+    } catch (error) {
+      console.error("Connection error:", error);
+      toast.error("Failed to connect integration");
+      setConnecting(false);
+    }
+  }, [toolkit]);
+
+  // Complete connection after OAuth redirect
+  const completeConnection = useCallback(async (connectionId?: string) => {
+    try {
+      const pendingId = connectionId || localStorage.getItem("composio_pending_connection");
+      const pendingToolkit = localStorage.getItem("composio_pending_toolkit") || toolkit;
+      
+      if (!pendingId) {
+        console.log("No pending connection ID found");
+        return;
+      }
+
+      console.log(`Completing connection for: ${pendingId}`);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error("No session for completing connection");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("composio-callback", {
+        body: { 
+          connectionId: pendingId,
+          userId: session.user.id,
+          toolkit: pendingToolkit,
+        },
+      });
+
+      console.log("Callback response:", data);
+
+      if (error) {
+        console.error("Callback error:", error);
+        return { success: false };
+      }
+      
+      if (data?.success) {
+        setConnectedAccount({
+          name: data.account?.account_name || "",
+          email: data.email || data.account?.account_email || "",
+          avatarUrl: data.account?.account_avatar_url,
+        });
+        setIsConnected(true);
+        localStorage.removeItem("composio_pending_connection");
+        localStorage.removeItem("composio_pending_toolkit");
+        toast.success("Gmail connected successfully!");
+        return { success: true, email: data.email };
+      }
+
+      // If not active yet, might need to retry
+      if (data?.status && data.status !== "connected" && data.status !== "ACTIVE") {
+        console.log(`Connection status: ${data.status}`);
+        return { success: false };
+      }
+
+      return { success: false };
+    } catch (error) {
+      console.error("Error completing connection:", error);
+      return { success: false };
+    }
+  }, [toolkit]);
+
+  // Check existing connection status
+  const checkStatus = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: integration } = await supabase
+        .from("user_integrations")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .eq("integration_id", toolkit.toLowerCase())
+        .eq("status", "connected")
+        .single();
+
+      if (integration) {
+        setConnectedAccount({
+          name: integration.account_name || "",
+          email: integration.account_email || "",
+          avatarUrl: integration.account_avatar_url || undefined,
+        });
+        setIsConnected(true);
+      } else {
+        setConnectedAccount(null);
+        setIsConnected(false);
+      }
+    } catch (error) {
+      console.error("Error checking status:", error);
+    }
+  }, [toolkit]);
+
+  // Disconnect integration
+  const disconnect = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      await supabase
+        .from("user_integrations")
+        .delete()
+        .eq("user_id", session.user.id)
+        .eq("integration_id", toolkit.toLowerCase());
+
+      setConnectedAccount(null);
+      setIsConnected(false);
+      toast.success("Integration disconnected");
+    } catch (error) {
+      console.error("Disconnect error:", error);
+      toast.error("Failed to disconnect");
+    }
+  }, [toolkit]);
+
+  return {
+    connectedAccount,
+    connecting,
+    isConnected,
+    connect,
+    completeConnection,
+    disconnect,
+    checkStatus,
+  };
+}
