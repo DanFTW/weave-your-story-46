@@ -51,6 +51,7 @@ export default function FlowPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [receiptListKey, setReceiptListKey] = useState(0);
   
   // LLM Import state
   const [llmImportPhase, setLLMImportPhase] = useState<LLMImportPhase>('category-select');
@@ -115,7 +116,8 @@ export default function FlowPage() {
           title: "Receipt saved",
           description: "Your purchase has been added to memory.",
         });
-        // Reset and go back to list
+        // Reset and go back to list, increment key to trigger refetch
+        setReceiptListKey(prev => prev + 1);
         setReceiptPhase('list');
         setSelectedImage(null);
         setSelectedFile(null);
@@ -173,7 +175,7 @@ export default function FlowPage() {
         {/* Content */}
         <div className="px-5 pt-5">
           {receiptPhase === 'list' && (
-            <ReceiptMemoryList onAddNew={() => setReceiptPhase('upload')} />
+            <ReceiptMemoryList key={receiptListKey} onAddNew={() => setReceiptPhase('upload')} />
           )}
           
           {receiptPhase === 'upload' && (
