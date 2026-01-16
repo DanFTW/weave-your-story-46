@@ -10,6 +10,19 @@ const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
+// Helper to decode JWT payload (no verification needed, just extraction)
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = parts[1];
+    const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -43,7 +56,6 @@ serve(async (req) => {
 
     const responseText = await composioResponse.text();
     console.log(`Composio status response: ${composioResponse.status}`);
-    console.log(`Composio data: ${responseText}`);
 
     if (!composioResponse.ok) {
       console.error("Failed to fetch connection:", composioResponse.status, responseText);
@@ -66,17 +78,35 @@ serve(async (req) => {
       );
     }
 
-    // Extract email from response - try multiple possible locations
-    const connectionData = accountData.connectionData || accountData.connection_params || accountData.data || {};
-    const accountEmail = connectionData.user_email || 
-                         connectionData.email || 
-                         accountData.user_email ||
-                         null;
+    // Extract user info from the OAuth data
+    // For Google OAuth, the id_token contains user profile information
+    const data = accountData.data || {};
+    let accountEmail: string | null = null;
+    let accountName: string | null = null;
+    let accountAvatarUrl: string | null = null;
 
-    console.log(`Account email: ${accountEmail}`);
+    // Try to decode the id_token (Google OAuth includes user info in JWT)
+    if (data.id_token) {
+      const jwtPayload = decodeJwtPayload(data.id_token);
+      if (jwtPayload) {
+        accountEmail = (jwtPayload.email as string) || null;
+        accountName = (jwtPayload.name as string) || null;
+        accountAvatarUrl = (jwtPayload.picture as string) || null;
+        console.log(`Extracted from id_token - email: ${accountEmail}, name: ${accountName}, picture: ${accountAvatarUrl}`);
+      }
+    }
 
-    // Upsert to user_integrations table (using existing table structure)
-    const { data, error } = await supabase
+    // Fallback to other possible locations
+    if (!accountEmail) {
+      const connectionData = accountData.connectionData || accountData.connection_params || {};
+      accountEmail = connectionData.user_email || connectionData.email || accountData.user_email || null;
+      accountName = connectionData.name || connectionData.display_name || null;
+    }
+
+    console.log(`Final account info - email: ${accountEmail}, name: ${accountName}, avatar: ${accountAvatarUrl}`);
+
+    // Upsert to user_integrations table
+    const { data: savedData, error } = await supabase
       .from("user_integrations")
       .upsert({
         user_id: userId,
@@ -84,7 +114,8 @@ serve(async (req) => {
         composio_connection_id: connectionId,
         status: "connected",
         account_email: accountEmail,
-        account_name: connectionData.name || connectionData.display_name || null,
+        account_name: accountName,
+        account_avatar_url: accountAvatarUrl,
         connected_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, {
@@ -98,13 +129,15 @@ serve(async (req) => {
       throw error;
     }
 
-    console.log(`Saved integration:`, data);
+    console.log(`Saved integration:`, savedData);
 
     return new Response(
       JSON.stringify({
         success: true,
-        account: data,
+        account: savedData,
         email: accountEmail,
+        name: accountName,
+        avatarUrl: accountAvatarUrl,
         status: "connected",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
