@@ -8,10 +8,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LIAM_API_KEY = Deno.env.get("LIAM_API_KEY");
-
-// LIAM API base URL
-const LIAM_API_BASE = "https://api.heylia.ai";
+// LIAM API base URL - must match liam-memory edge function
+const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api";
 
 interface EmailPayload {
   from?: string;
@@ -129,7 +127,12 @@ async function saveMemoryToLiam(
     const cryptoKey = await importPrivateKey(privateKey);
     console.log("Private key imported successfully");
     
-    const requestBody = { text: memoryText, tags: ['email'] };
+    // Body format matches liam-memory edge function: userKey, content, tag
+    const requestBody = { 
+      userKey, 
+      content: memoryText, 
+      tag: 'EMAIL' 
+    };
     const signature = await signRequest(cryptoKey, requestBody);
     console.log("Request signed successfully");
 
@@ -137,9 +140,8 @@ async function saveMemoryToLiam(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'x-user-key': userKey,
-        'x-signature': signature,
+        'apiKey': apiKey,       // lowercase as per LIAM docs
+        'signature': signature, // lowercase as per LIAM docs
       },
       body: JSON.stringify(requestBody),
     });
