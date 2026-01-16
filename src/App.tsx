@@ -14,6 +14,7 @@ import FlowPage from "./pages/FlowPage";
 import Memories from "./pages/Memories";
 import MemoryDetail from "./pages/MemoryDetail";
 import Integrations from "./pages/Integrations";
+import IntegrationDetail from "./pages/IntegrationDetail";
 import Profile from "./pages/Profile";
 import ApiKeyConfig from "./pages/ApiKeyConfig";
 import Login from "./pages/Login";
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/thread/:threadId" element={<ProtectedRoute><ThreadOverview /></ProtectedRoute>} />
             <Route path="/flow/:flowId" element={<ProtectedRoute><FlowPage /></ProtectedRoute>} />
             <Route path="/memory/:memoryId" element={<ProtectedRoute><MemoryDetail /></ProtectedRoute>} />
+            <Route path="/integration/:integrationId" element={<ProtectedRoute><IntegrationDetail /></ProtectedRoute>} />
             <Route path="/profile/api-keys" element={<ProtectedRoute><ApiKeyConfig /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

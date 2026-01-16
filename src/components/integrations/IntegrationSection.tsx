@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { IntegrationSection as IntegrationSectionType } from "@/types/integrations";
 import { IntegrationCard } from "./IntegrationCard";
 
@@ -6,6 +7,8 @@ interface IntegrationSectionProps {
 }
 
 export function IntegrationSection({ section }: IntegrationSectionProps) {
+  const navigate = useNavigate();
+
   return (
     <section>
       {/* Section Title */}
@@ -19,10 +22,7 @@ export function IntegrationSection({ section }: IntegrationSectionProps) {
           <IntegrationCard
             key={integration.id}
             integration={integration}
-            onClick={() => {
-              // TODO: Navigate to integration detail
-              console.log(`Navigate to ${integration.id}`);
-            }}
+            onClick={() => navigate(`/integration/${integration.id}`)}
           />
         ))}
       </div>

@@ -12,3 +12,14 @@ export interface IntegrationSection {
   title: string;
   integrations: Integration[];
 }
+
+export interface IntegrationDetail extends Integration {
+  description: string;
+  capabilities: string[];
+  gradientColors: {
+    primary: string;
+    secondary: string;
+    tertiary?: string;
+    quaternary?: string;
+  };
+}
