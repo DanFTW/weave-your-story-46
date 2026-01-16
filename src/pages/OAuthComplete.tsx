@@ -8,85 +8,107 @@ import { Loader2, CheckCircle2, XCircle } from "lucide-react";
  * OAuth completion page - handles the callback from OAuth providers.
  * This page runs in the App Browser context (Median) or browser tab.
  * It completes the connection and closes/redirects appropriately.
+ * 
+ * Composio v3 redirects here with `connected_account_id` parameter.
+ * The toolkit is determined server-side from the Composio API response.
  */
 export default function OAuthComplete() {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Completing connection...");
+  const [toolkit, setToolkit] = useState<string | null>(null);
 
   useEffect(() => {
     const completeOAuth = async () => {
-      // Composio uses 'connected_account_id' in callback, we also check 'connectionId' for flexibility
-      const connectionId = searchParams.get("connected_account_id") || searchParams.get("connectionId");
-      const toolkit = searchParams.get("toolkit");
+      // Log the full URL for debugging
+      console.log("OAuthComplete: Full URL:", window.location.href);
+      console.log("OAuthComplete: Search string:", window.location.search);
+      console.log("OAuthComplete: Hash:", window.location.hash);
+      
+      // Composio v3 uses 'connected_account_id' in callback
+      // Also check alternative param names for flexibility
+      const connectionId = 
+        searchParams.get("connected_account_id") || 
+        searchParams.get("connectionId") ||
+        searchParams.get("id");
+      
+      // Toolkit might be in URL (if Composio preserved it) or will be fetched from API
+      const toolkitFromUrl = searchParams.get("toolkit");
 
-      console.log("OAuthComplete: connectionId =", connectionId, "toolkit =", toolkit);
-      console.log("OAuthComplete: all params =", Object.fromEntries(searchParams.entries()));
+      console.log("OAuthComplete: Parsed params:", Object.fromEntries(searchParams.entries()));
+      console.log("OAuthComplete: connectionId =", connectionId, "toolkit =", toolkitFromUrl);
 
-      if (!connectionId || !toolkit) {
+      if (!connectionId) {
+        console.error("OAuthComplete: No connection ID found in URL params");
+        console.error("OAuthComplete: Expected format: /oauth-complete?connected_account_id=ca_xxx");
         setStatus("error");
-        setMessage("Missing connection parameters");
+        // More descriptive error message
+        const allParams = Object.fromEntries(searchParams.entries());
+        const paramStr = Object.keys(allParams).length > 0 
+          ? `Received params: ${JSON.stringify(allParams)}`
+          : "No query parameters received from OAuth provider.";
+        setMessage(`Connection incomplete. ${paramStr}`);
         return;
       }
 
       try {
-        // Get the current session
+        // Get the current session - may be null in Median App Browser
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (!session) {
-          console.log("No session in OAuthComplete - this is expected in App Browser");
-          // In Median App Browser, we won't have a session because it's an isolated context
-          // The edge function will use service role to update the connection
-        }
+        console.log("OAuthComplete: Session available:", !!session);
 
         // Call the callback edge function to complete the connection
+        // The edge function will fetch toolkit info from Composio if not provided
         const { data, error } = await supabase.functions.invoke("composio-callback", {
           body: {
             connectionId,
-            userId: session?.user?.id, // May be null in App Browser
-            toolkit: toolkit.toLowerCase(),
+            userId: session?.user?.id, // May be null in App Browser - edge function handles this
+            toolkit: toolkitFromUrl, // May be null - edge function will fetch from Composio
           },
         });
 
-        console.log("OAuthComplete callback response:", data, error);
+        console.log("OAuthComplete: Callback response:", data, error);
 
         if (error) {
-          console.error("Callback error:", error);
+          console.error("OAuthComplete: Callback error:", error);
           setStatus("error");
-          setMessage("Failed to complete connection");
+          setMessage("Failed to complete connection. Please try again.");
           return;
         }
 
         if (data?.success) {
+          const resolvedToolkit = data.toolkit || toolkitFromUrl || "integration";
+          setToolkit(resolvedToolkit);
           setStatus("success");
-          setMessage(`${toolkit} connected successfully!`);
+          setMessage(`${resolvedToolkit.charAt(0).toUpperCase() + resolvedToolkit.slice(1)} connected successfully!`);
 
           // If we're in the Median App Browser, close it
           if (isMedian()) {
-            console.log("In Median, attempting to close app browser...");
+            console.log("OAuthComplete: In Median, attempting to close app browser...");
             // Give user a moment to see success message
             setTimeout(() => {
-              const closed = median.appbrowser.close();
-              if (!closed) {
-                console.log("Failed to close app browser, showing manual close message");
+              try {
+                median.appbrowser.close();
+              } catch (e) {
+                console.log("OAuthComplete: Failed to close app browser:", e);
                 setMessage("Connection complete! You can close this window.");
               }
             }, 1500);
           } else {
             // In regular browser, redirect back to the integration page
             setTimeout(() => {
-              const redirectPath = `/integration/${toolkit.toLowerCase()}`;
+              const redirectPath = `/integration/${resolvedToolkit.toLowerCase()}`;
               window.location.href = `${window.location.origin}${redirectPath}`;
             }, 1500);
           }
         } else {
           setStatus("error");
-          setMessage(data?.error || "Connection failed");
+          setMessage(data?.error || data?.message || "Connection failed. Please try again.");
         }
       } catch (err) {
-        console.error("OAuthComplete error:", err);
+        console.error("OAuthComplete: Unexpected error:", err);
         setStatus("error");
-        setMessage("An error occurred");
+        setMessage("An unexpected error occurred. Please try again.");
       }
     };
 
