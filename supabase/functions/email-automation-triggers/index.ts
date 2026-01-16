@@ -107,7 +107,7 @@ serve(async (req) => {
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // ==================== STATUS ACTION ====================
-    // Get trigger status from Composio
+    // Get trigger status from Composio - use active list endpoint
     if (action === "status") {
       const { triggerIds } = body;
       
@@ -118,56 +118,122 @@ serve(async (req) => {
         );
       }
 
-      const statuses: TriggerStatus[] = [];
-
-      for (const triggerId of triggerIds) {
-        if (!triggerId) continue;
-        
-        try {
-          console.log(`Fetching status for trigger: ${triggerId}`);
-          const response = await fetch(
-            `${COMPOSIO_API_BASE}/trigger_instances/${triggerId}`,
-            {
-              method: "GET",
-              headers: { "x-api-key": COMPOSIO_API_KEY },
-            }
-          );
-
-          const responseText = await response.text();
-          console.log(`Status response for ${triggerId}:`, response.status, responseText);
-
-          if (response.ok) {
-            const data = JSON.parse(responseText);
-            statuses.push({
-              triggerId,
-              status: data.status || "unknown",
-              enabled: data.enabled ?? true,
-              lastPolled: data.last_polled_at || data.lastPolledAt,
-              config: data.trigger_config || data.config,
-            });
-          } else {
-            statuses.push({
-              triggerId,
-              status: "error",
-              enabled: false,
-              error: `HTTP ${response.status}: ${responseText}`,
-            });
+      try {
+        // Fetch all active triggers for this connected account
+        console.log(`Fetching active triggers for connection: ${connectedAccountId}`);
+        const response = await fetch(
+          `${COMPOSIO_API_BASE}/trigger_instances/active?connectedAccountId=${connectedAccountId}`,
+          {
+            method: "GET",
+            headers: { "x-api-key": COMPOSIO_API_KEY },
           }
-        } catch (error) {
-          console.error(`Failed to get status for ${triggerId}:`, error);
-          statuses.push({
-            triggerId,
-            status: "error",
-            enabled: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-          });
-        }
-      }
+        );
 
-      return new Response(
-        JSON.stringify({ success: true, statuses }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        const responseText = await response.text();
+        console.log(`Active triggers response:`, response.status, responseText.substring(0, 500));
+
+        if (!response.ok) {
+          // Fallback: try to get trigger details individually
+          console.log("Active endpoint failed, trying individual lookups...");
+          const statuses: TriggerStatus[] = [];
+          
+          for (const triggerId of triggerIds) {
+            if (!triggerId) continue;
+            
+            // Try the v2-style endpoint as fallback
+            try {
+              const detailResponse = await fetch(
+                `https://backend.composio.dev/api/v1/triggers/instance/${triggerId}`,
+                {
+                  method: "GET",
+                  headers: { "x-api-key": COMPOSIO_API_KEY },
+                }
+              );
+              
+              const detailText = await detailResponse.text();
+              console.log(`v1 trigger detail for ${triggerId}:`, detailResponse.status, detailText.substring(0, 200));
+              
+              if (detailResponse.ok) {
+                const data = JSON.parse(detailText);
+                statuses.push({
+                  triggerId,
+                  status: data.status || "active",
+                  enabled: data.disabled !== true,
+                  lastPolled: data.lastPollTime || data.updatedAt,
+                  config: data.triggerConfig || data.config,
+                });
+              } else {
+                statuses.push({
+                  triggerId,
+                  status: "not_found",
+                  enabled: false,
+                  error: `Trigger not found (HTTP ${detailResponse.status})`,
+                });
+              }
+            } catch (err) {
+              statuses.push({
+                triggerId,
+                status: "error",
+                enabled: false,
+                error: err instanceof Error ? err.message : "Unknown error",
+              });
+            }
+          }
+          
+          return new Response(
+            JSON.stringify({ success: true, statuses }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Parse the active triggers list
+        const data = JSON.parse(responseText);
+        const activeTriggers = data.triggers || data.items || data || [];
+        
+        // Map requested trigger IDs to their status
+        const statuses: TriggerStatus[] = triggerIds.map((triggerId: string) => {
+          if (!triggerId) {
+            return { triggerId: "", status: "invalid", enabled: false };
+          }
+          
+          const found = activeTriggers.find((t: any) => 
+            t.trigger_id === triggerId || 
+            t.triggerId === triggerId || 
+            t.id === triggerId
+          );
+          
+          if (found) {
+            return {
+              triggerId,
+              status: found.status || "active",
+              enabled: found.enabled !== false && found.disabled !== true,
+              lastPolled: found.last_polled_at || found.lastPollTime || found.updatedAt,
+              config: found.trigger_config || found.triggerConfig,
+            };
+          } else {
+            return {
+              triggerId,
+              status: "not_found",
+              enabled: false,
+              error: "Trigger not in active list",
+            };
+          }
+        });
+
+        return new Response(
+          JSON.stringify({ success: true, statuses, totalActive: activeTriggers.length }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (error) {
+        console.error("Failed to check trigger status:", error);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: error instanceof Error ? error.message : "Failed to check status",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ==================== LOGS ACTION ====================
