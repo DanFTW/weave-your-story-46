@@ -66,7 +66,7 @@ export function ThreadStepCard({ step, onClick }: ThreadStepCardProps) {
         <div className="flex items-center gap-2">
           <span className="font-semibold text-foreground">{step.title}</span>
           {step.badge && (
-            <span className="text-xs font-medium text-[hsl(var(--thread-orange-from))] px-1.5 py-0.5 rounded bg-orange-50">
+            <span className="text-[9px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded whitespace-nowrap">
               {step.badge}
             </span>
           )}
