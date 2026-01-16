@@ -88,16 +88,21 @@ serve(async (req) => {
     }
 
     console.log(`Search data keys: ${Object.keys(searchData).join(', ')}`);
+    console.log(`Search data structure:`, JSON.stringify(searchData).slice(0, 500));
 
     // Extract unique contacts from search results
     const contacts: { email: string; name?: string }[] = [];
     const seenEmails = new Set<string>();
 
-    // Handle various response formats from v3 API
-    const responseData = searchData.data || searchData.response?.data || searchData;
-    const messages = responseData?.messages || responseData?.results || responseData?.threadsList || [];
+    // Handle Composio v3 API response format
+    // The response structure is: { data: { messages: [...] }, successful: true, error: null }
+    const responseData = searchData.data || searchData;
+    const messages = responseData?.messages || responseData?.results || responseData?.threadsList || responseData?.emails || [];
     
     console.log(`Found ${messages.length} messages`);
+    if (messages.length > 0) {
+      console.log(`First message keys: ${Object.keys(messages[0]).join(', ')}`);
+    }
 
     for (const message of messages) {
       // Extract from field

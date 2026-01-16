@@ -51,13 +51,22 @@ export function useEmailDump(): UseEmailDumpReturn {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
+      console.log('Searching contacts for:', query);
+
       const { data, error } = await supabase.functions.invoke('gmail-search', {
         body: { query },
-        headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      if (error) throw error;
-      setSearchResults(data?.contacts || []);
+      console.log('Search response:', { data, error });
+
+      if (error) {
+        console.error('Search function error:', error);
+        throw error;
+      }
+      
+      const contacts = data?.contacts || [];
+      console.log(`Found ${contacts.length} contacts`);
+      setSearchResults(contacts);
     } catch (error) {
       console.error('Search failed:', error);
       toast({
@@ -95,14 +104,21 @@ export function useEmailDump(): UseEmailDumpReturn {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
+      console.log('Extracting emails for:', selectedEmails);
+
       const { data, error } = await supabase.functions.invoke('gmail-fetch-emails', {
         body: { emailAddresses: selectedEmails },
-        headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      if (error) throw error;
+      console.log('Extract response:', { data, error });
+
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw error;
+      }
 
       const emails: ExtractedEmail[] = data?.emails || [];
+      console.log(`Extracted ${emails.length} emails`);
       
       if (emails.length === 0) {
         toast({
@@ -122,6 +138,7 @@ export function useEmailDump(): UseEmailDumpReturn {
         isEditing: false,
       }));
 
+      console.log(`Created ${memories.length} memories`);
       setExtractedEmails(memories);
       setPhase('preview');
     } catch (error) {
@@ -226,9 +243,16 @@ function formatEmailAsMemory(email: ExtractedEmail): string {
     day: 'numeric',
   });
   
+  // Handle snippet which may be an object in some cases
+  let snippetText = email.snippet;
+  if (typeof email.snippet === 'object' && email.snippet !== null) {
+    // @ts-ignore - snippet might be an object from API
+    snippetText = email.snippet.body || email.snippet.text || JSON.stringify(email.snippet);
+  }
+  
   // Create a clean memory format
-  const body = email.body || email.snippet;
-  const cleanBody = body.replace(/\s+/g, ' ').trim().slice(0, 500);
+  const body = email.body || snippetText || '';
+  const cleanBody = String(body).replace(/\s+/g, ' ').trim().slice(0, 500);
   
   return `Email from ${email.from} on ${date}: "${email.subject}" - ${cleanBody}`;
 }

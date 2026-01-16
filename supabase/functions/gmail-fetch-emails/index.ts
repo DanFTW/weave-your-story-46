@@ -96,10 +96,18 @@ serve(async (req) => {
       }
 
       const searchData = await searchResponse.json();
-      const responseData = searchData.data || searchData.response?.data || searchData;
-      const messages = responseData?.messages || responseData?.results || responseData?.threadsList || [];
+      console.log(`Response keys for ${email}: ${Object.keys(searchData).join(', ')}`);
+      
+      // Handle Composio v3 API response format
+      const responseData = searchData.data || searchData;
+      console.log(`Response data keys: ${responseData ? Object.keys(responseData).join(', ') : 'null'}`);
+      
+      const messages = responseData?.messages || responseData?.results || responseData?.threadsList || responseData?.emails || [];
 
       console.log(`Found ${messages.length} messages for ${email}`);
+      if (messages.length > 0) {
+        console.log(`First message sample: ${JSON.stringify(messages[0]).slice(0, 300)}`);
+      }
 
       // Extract email data from search results
       for (const message of messages) {
@@ -110,14 +118,30 @@ serve(async (req) => {
           // Check if we already have this email
           if (allEmails.some(e => e.id === messageId)) continue;
 
+          // Handle snippet which may be an object or string
+          let snippetText = "";
+          if (typeof message.snippet === 'object' && message.snippet?.body) {
+            snippetText = message.snippet.body;
+          } else if (typeof message.snippet === 'string') {
+            snippetText = message.snippet;
+          } else if (message.preview) {
+            snippetText = message.preview;
+          }
+
+          // Handle subject which may be nested in snippet object
+          let subjectText = message.subject || message.Subject || "(No subject)";
+          if (typeof message.snippet === 'object' && message.snippet?.subject) {
+            subjectText = message.snippet.subject;
+          }
+
           // Extract email data directly from search results
           const extractedEmail: ExtractedEmail = {
             id: messageId,
             from: message.from || message.From || message.sender || "",
             to: message.to || message.To || message.recipient || "",
-            subject: message.subject || message.Subject || "(No subject)",
-            snippet: message.snippet || message.preview || "",
-            body: message.body || message.text || message.snippet || "",
+            subject: subjectText,
+            snippet: snippetText,
+            body: message.body || message.text || snippetText || "",
             date: message.date || message.Date || message.internalDate || new Date().toISOString(),
             threadId: message.threadId || message.thread_id,
           };
