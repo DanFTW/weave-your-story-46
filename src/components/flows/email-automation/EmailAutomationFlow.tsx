@@ -168,6 +168,8 @@ export function EmailAutomationFlow() {
               selectedEmails={selectedContacts.map(c => c.email)}
               searchResults={searchResults}
               isSearching={isSearching}
+              maxEmails={50}
+              onMaxEmailsChange={() => {}}
               onSearch={searchContacts}
               onSelect={handleContactSelect}
               onDeselect={deselectContact}
