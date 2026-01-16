@@ -5,8 +5,8 @@ export const integrationSections: IntegrationSection[] = [
     title: "Apps",
     integrations: [
       {
-        id: "google-gmail",
-        name: "Google Gmail",
+        id: "gmail",
+        name: "Gmail",
         icon: "gmail",
         status: "unconfigured",
       },
@@ -58,9 +58,9 @@ export const integrationSections: IntegrationSection[] = [
 ];
 
 export const integrationDetails: Record<string, IntegrationDetail> = {
-  "google-gmail": {
-    id: "google-gmail",
-    name: "Google Gmail",
+  "gmail": {
+    id: "gmail",
+    name: "Gmail",
     icon: "gmail",
     status: "unconfigured",
     description: "Gmail allows Weave to read, send, and manage emails. Additionally, it enables automation of tasks like batch sending, creating drafts, and managing user settings for features like forwarding and vacation responders.",
