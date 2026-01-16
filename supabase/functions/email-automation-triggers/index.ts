@@ -28,6 +28,15 @@ interface TriggerResult {
   error?: string;
 }
 
+interface TriggerStatus {
+  triggerId: string;
+  status: string;
+  enabled: boolean;
+  lastPolled?: string;
+  config?: Record<string, unknown>;
+  error?: string;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -97,6 +106,177 @@ serve(async (req) => {
     // Use service role for database operations
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // ==================== STATUS ACTION ====================
+    // Get trigger status from Composio
+    if (action === "status") {
+      const { triggerIds } = body;
+      
+      if (!triggerIds || !Array.isArray(triggerIds) || triggerIds.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: "No trigger IDs provided" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const statuses: TriggerStatus[] = [];
+
+      for (const triggerId of triggerIds) {
+        if (!triggerId) continue;
+        
+        try {
+          console.log(`Fetching status for trigger: ${triggerId}`);
+          const response = await fetch(
+            `${COMPOSIO_API_BASE}/trigger_instances/${triggerId}`,
+            {
+              method: "GET",
+              headers: { "x-api-key": COMPOSIO_API_KEY },
+            }
+          );
+
+          const responseText = await response.text();
+          console.log(`Status response for ${triggerId}:`, response.status, responseText);
+
+          if (response.ok) {
+            const data = JSON.parse(responseText);
+            statuses.push({
+              triggerId,
+              status: data.status || "unknown",
+              enabled: data.enabled ?? true,
+              lastPolled: data.last_polled_at || data.lastPolledAt,
+              config: data.trigger_config || data.config,
+            });
+          } else {
+            statuses.push({
+              triggerId,
+              status: "error",
+              enabled: false,
+              error: `HTTP ${response.status}: ${responseText}`,
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to get status for ${triggerId}:`, error);
+          statuses.push({
+            triggerId,
+            status: "error",
+            enabled: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, statuses }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ==================== LOGS ACTION ====================
+    // Get trigger logs from Composio
+    if (action === "logs") {
+      try {
+        console.log(`Fetching trigger logs for connection: ${connectedAccountId}`);
+        
+        // Try to get logs - Composio v3 API endpoint
+        const response = await fetch(
+          `${COMPOSIO_API_BASE}/triggers/logs?connectionId=${connectedAccountId}&limit=50`,
+          {
+            method: "GET",
+            headers: { "x-api-key": COMPOSIO_API_KEY },
+          }
+        );
+
+        const responseText = await response.text();
+        console.log(`Logs response:`, response.status, responseText.substring(0, 500));
+
+        if (response.ok) {
+          const data = JSON.parse(responseText);
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              logs: data.logs || data.items || data,
+              total: data.total || (data.logs || data.items || []).length,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } else {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `Failed to fetch logs: HTTP ${response.status}`,
+              details: responseText,
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } catch (error) {
+        console.error("Failed to fetch logs:", error);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: error instanceof Error ? error.message : "Failed to fetch logs",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ==================== ENABLE ACTION ====================
+    // Re-enable a trigger
+    if (action === "enable") {
+      const { triggerId } = body;
+      
+      if (!triggerId) {
+        return new Response(
+          JSON.stringify({ success: false, error: "No trigger ID provided" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      try {
+        console.log(`Enabling trigger: ${triggerId}`);
+        const response = await fetch(
+          `${COMPOSIO_API_BASE}/trigger_instances/manage/${triggerId}`,
+          {
+            method: "PATCH",
+            headers: { 
+              "x-api-key": COMPOSIO_API_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ enabled: true }),
+          }
+        );
+
+        const responseText = await response.text();
+        console.log(`Enable response:`, response.status, responseText);
+
+        if (response.ok) {
+          return new Response(
+            JSON.stringify({ success: true, message: "Trigger enabled" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } else {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `Failed to enable: HTTP ${response.status}`,
+              details: responseText,
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } catch (error) {
+        console.error("Failed to enable trigger:", error);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: error instanceof Error ? error.message : "Failed to enable trigger",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ==================== CREATE ACTION ====================
     if (action === "create") {
       const contacts: ContactInput[] = body.contacts;
       const results: TriggerResult[] = [];
@@ -234,6 +414,7 @@ serve(async (req) => {
       );
     }
 
+    // ==================== DELETE ACTION ====================
     if (action === "delete") {
       const { contactId, incomingTriggerId, outgoingTriggerId } = body;
 

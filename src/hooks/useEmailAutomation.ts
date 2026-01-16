@@ -9,6 +9,23 @@ import {
   MonitoringPreferences 
 } from "@/types/emailAutomation";
 
+export interface TriggerStatus {
+  triggerId: string;
+  status: string;
+  enabled: boolean;
+  lastPolled?: string;
+  config?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface TriggerLog {
+  id: string;
+  timestamp: string;
+  triggerId: string;
+  status: string;
+  payload?: unknown;
+}
+
 interface UseEmailAutomationReturn {
   phase: EmailAutomationPhase;
   setPhase: (phase: EmailAutomationPhase) => void;
@@ -18,6 +35,8 @@ interface UseEmailAutomationReturn {
   isSearching: boolean;
   isActivating: boolean;
   isLoading: boolean;
+  isCheckingStatus: boolean;
+  triggerStatuses: Record<string, TriggerStatus>;
   searchContacts: (query: string) => Promise<void>;
   selectContact: (email: string, name?: string, avatarUrl?: string) => void;
   deselectContact: (email: string) => void;
@@ -26,6 +45,9 @@ interface UseEmailAutomationReturn {
   activateMonitoring: () => Promise<boolean>;
   deactivateContact: (contactId: string) => Promise<boolean>;
   loadMonitoredContacts: () => Promise<void>;
+  checkTriggerStatus: (triggerIds: string[]) => Promise<TriggerStatus[]>;
+  enableTrigger: (triggerId: string) => Promise<boolean>;
+  fetchTriggerLogs: () => Promise<TriggerLog[]>;
   reset: () => void;
 }
 
@@ -39,6 +61,8 @@ export function useEmailAutomation(): UseEmailAutomationReturn {
   const [isSearching, setIsSearching] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [triggerStatuses, setTriggerStatuses] = useState<Record<string, TriggerStatus>>({});
 
   // Load existing monitored contacts from database
   const loadMonitoredContacts = useCallback(async () => {
@@ -79,6 +103,86 @@ export function useEmailAutomation(): UseEmailAutomationReturn {
       setIsLoading(false);
     }
   }, [phase]);
+
+  // Check trigger status from Composio
+  const checkTriggerStatus = useCallback(async (triggerIds: string[]): Promise<TriggerStatus[]> => {
+    const validIds = triggerIds.filter(Boolean);
+    if (validIds.length === 0) return [];
+
+    setIsCheckingStatus(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('email-automation-triggers', {
+        body: { action: 'status', triggerIds: validIds },
+      });
+
+      if (error) throw error;
+
+      const statuses = data?.statuses || [];
+      
+      // Update local state
+      const statusMap: Record<string, TriggerStatus> = {};
+      for (const status of statuses) {
+        statusMap[status.triggerId] = status;
+      }
+      setTriggerStatuses(prev => ({ ...prev, ...statusMap }));
+
+      return statuses;
+    } catch (error) {
+      console.error('Failed to check trigger status:', error);
+      toast({
+        title: "Status check failed",
+        description: "Could not fetch trigger status from Composio.",
+        variant: "destructive",
+      });
+      return [];
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  }, [toast]);
+
+  // Enable a trigger
+  const enableTrigger = useCallback(async (triggerId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('email-automation-triggers', {
+        body: { action: 'enable', triggerId },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: "Trigger enabled",
+          description: "The trigger has been re-enabled.",
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to enable trigger:', error);
+      toast({
+        title: "Enable failed",
+        description: "Could not enable trigger.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  }, [toast]);
+
+  // Fetch trigger logs from Composio
+  const fetchTriggerLogs = useCallback(async (): Promise<TriggerLog[]> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('email-automation-triggers', {
+        body: { action: 'logs' },
+      });
+
+      if (error) throw error;
+
+      return data?.logs || [];
+    } catch (error) {
+      console.error('Failed to fetch trigger logs:', error);
+      return [];
+    }
+  }, []);
 
   // Search contacts using Gmail API
   const searchContacts = useCallback(async (query: string) => {
@@ -269,6 +373,8 @@ export function useEmailAutomation(): UseEmailAutomationReturn {
     isSearching,
     isActivating,
     isLoading,
+    isCheckingStatus,
+    triggerStatuses,
     searchContacts,
     selectContact,
     deselectContact,
@@ -277,6 +383,9 @@ export function useEmailAutomation(): UseEmailAutomationReturn {
     activateMonitoring,
     deactivateContact,
     loadMonitoredContacts,
+    checkTriggerStatus,
+    enableTrigger,
+    fetchTriggerLogs,
     reset,
   };
 }
