@@ -12,6 +12,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // Official docs show api.liam.netxd.com but has DNS issues from Supabase
 const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api";
 
+// Original nested payload format
 interface EmailPayload {
   from?: string;
   to?: string | string[];
@@ -23,7 +24,27 @@ interface EmailPayload {
   threadId?: string;
 }
 
-interface TriggerPayload {
+// Composio V3 flat payload format (email data at root level)
+interface V3Payload {
+  sender?: string;           // "Ben Ornstein <ben@weave.cloud>"
+  to?: string;               // "Shane Grady <shane@weave.cloud>"
+  subject?: string;
+  message_text?: string;     // Body content
+  message_timestamp?: string;
+  message_id?: string;
+  thread_id?: string;
+  id?: string;
+  label_ids?: string[];
+  attachment_list?: unknown[];
+  preview?: unknown;
+  payload?: unknown;
+  trigger_name?: string;
+  trigger_id?: string;
+  connection_id?: string;
+}
+
+// Original nested format
+interface NestedPayload {
   trigger_name?: string;
   trigger_id?: string;
   connection_id?: string;
@@ -162,6 +183,51 @@ async function saveMemoryToLiam(
   }
 }
 
+// Detect if payload is V3 format (flat structure with message_text, sender, etc.)
+function isV3Format(payload: unknown): payload is V3Payload {
+  if (typeof payload !== 'object' || payload === null) return false;
+  const p = payload as Record<string, unknown>;
+  // V3 format has message_text and sender at root level
+  return 'message_text' in p && 'sender' in p;
+}
+
+// Normalize payload to our internal format
+function normalizePayload(rawPayload: unknown): {
+  emailData: EmailPayload | null;
+  triggerName: string | undefined;
+  triggerId: string | undefined;
+  format: 'v3' | 'nested';
+} {
+  if (isV3Format(rawPayload)) {
+    // V3 format: email data is at root level with different field names
+    console.log("Detected V3 (flat) payload format");
+    return {
+      emailData: {
+        from: rawPayload.sender,
+        to: rawPayload.to,
+        subject: rawPayload.subject,
+        body: rawPayload.message_text,
+        date: rawPayload.message_timestamp,
+        messageId: rawPayload.message_id || rawPayload.id,
+        threadId: rawPayload.thread_id,
+      },
+      triggerName: rawPayload.trigger_name,
+      triggerId: rawPayload.trigger_id,
+      format: 'v3',
+    };
+  }
+
+  // Original nested format
+  console.log("Detected nested payload format");
+  const nested = rawPayload as NestedPayload;
+  return {
+    emailData: nested.payload || null,
+    triggerName: nested.trigger_name || nested.metadata?.trigger_name,
+    triggerId: nested.trigger_id,
+    format: 'nested',
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -172,11 +238,30 @@ serve(async (req) => {
   const url = new URL(req.url);
   const isTestMode = url.searchParams.get("test") === "true";
 
+  console.log("=== Email Automation Webhook ===");
   console.log("Received webhook from Composio", isTestMode ? "(TEST MODE)" : "");
+  console.log("Request URL:", req.url);
+  console.log("Request method:", req.method);
 
   try {
-    const payload: TriggerPayload = await req.json();
-    console.log("Webhook payload:", JSON.stringify(payload, null, 2));
+    const rawPayload = await req.json();
+    console.log("Raw payload keys:", Object.keys(rawPayload));
+    console.log("Full payload:", JSON.stringify(rawPayload, null, 2));
+
+    // Normalize payload (handles both V3 and nested formats)
+    const { emailData, triggerName, triggerId, format } = normalizePayload(rawPayload);
+    
+    console.log("Payload format:", format);
+    console.log("Trigger name:", triggerName);
+    console.log("Trigger ID:", triggerId);
+    console.log("Email data present:", !!emailData);
+    
+    if (emailData) {
+      console.log("Email from:", emailData.from);
+      console.log("Email to:", emailData.to);
+      console.log("Email subject:", emailData.subject);
+      console.log("Email body length:", emailData.body?.length || 0);
+    }
 
     // If test mode, just log and return success
     if (isTestMode) {
@@ -187,19 +272,19 @@ serve(async (req) => {
           message: "Test webhook received",
           testMode: true,
           receivedAt: new Date().toISOString(),
+          format,
           payload: {
-            trigger_name: payload.trigger_name,
-            trigger_id: payload.trigger_id,
-            hasPayload: !!payload.payload,
+            trigger_name: triggerName,
+            trigger_id: triggerId,
+            hasEmailData: !!emailData,
+            emailFrom: emailData?.from,
+            emailTo: emailData?.to,
+            emailSubject: emailData?.subject,
           }
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const triggerName = payload.trigger_name || payload.metadata?.trigger_name;
-    const triggerId = payload.trigger_id;
-    const emailData = payload.payload;
 
     if (!emailData) {
       console.log("No email data in payload");
@@ -213,6 +298,8 @@ serve(async (req) => {
     const isIncoming = triggerName === "GMAIL_NEW_GMAIL_MESSAGE";
     const isOutgoing = triggerName === "GMAIL_EMAIL_SENT_TRIGGER";
 
+    console.log("Trigger type - isIncoming:", isIncoming, "isOutgoing:", isOutgoing);
+
     if (!isIncoming && !isOutgoing) {
       console.log("Unknown trigger type:", triggerName);
       return new Response(
@@ -225,6 +312,8 @@ serve(async (req) => {
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     const triggerColumn = isIncoming ? 'incoming_trigger_id' : 'outgoing_trigger_id';
+    console.log("Looking up trigger in column:", triggerColumn, "with ID:", triggerId);
+    
     const { data: contact, error: contactError } = await adminClient
       .from('email_automation_contacts')
       .select('user_id, email_address')
@@ -235,6 +324,13 @@ serve(async (req) => {
       console.log("Could not find contact for trigger:", triggerId);
       console.log("Looking in column:", triggerColumn);
       console.log("Contact error:", contactError);
+      
+      // Log all contacts for debugging
+      const { data: allContacts } = await adminClient
+        .from('email_automation_contacts')
+        .select('email_address, incoming_trigger_id, outgoing_trigger_id');
+      console.log("All contacts in database:", JSON.stringify(allContacts, null, 2));
+      
       return new Response(
         JSON.stringify({ success: true, message: "Trigger not found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -269,18 +365,22 @@ serve(async (req) => {
       apiKeys.user_key
     );
 
+    console.log("Memory save result:", saved);
+
     return new Response(
       JSON.stringify({ 
         success: saved, 
         message: saved ? "Memory saved" : "Failed to save memory",
         email: contact.email_address,
         type: isIncoming ? "incoming" : "outgoing",
+        format,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error("Webhook error:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack");
     return new Response(
       JSON.stringify({ 
         success: false, 
