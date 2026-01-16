@@ -1,4 +1,4 @@
-import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -130,65 +130,40 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
-  "gmail-incoming": {
-    id: "gmail-incoming",
-    title: "Incoming Emails to Memory",
-    subtitle: "Never miss an important email",
-    description: "You'll create a new memory each time these contacts send you an email.",
-    gradient: "teal",
+  "email-automation": {
+    id: "email-automation",
+    title: "Save Emails from Contacts",
+    subtitle: "Automatic email memories",
+    description: "Monitor specific contacts and automatically save their emails as memories.",
+    gradient: "blue",
     icon: Mail,
     steps: [
       {
-        id: "setup",
-        type: "setup",
-        title: "Personalized set up",
-        description: "Add your important contacts",
-        icon: Sparkles,
+        id: "connect",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to your emails",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
       },
       {
-        id: "gmail",
-        type: "integration",
-        title: "Gmail",
-        description: "Weave collects emails you receive from your selected contacts",
-        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+        id: "search",
+        type: "setup",
+        title: "Select Contacts",
+        description: "Choose contacts to monitor",
+        icon: Search,
+      },
+      {
+        id: "preferences",
+        type: "setup",
+        title: "Configure Monitoring",
+        description: "Set incoming/outgoing preferences",
+        icon: Settings,
       },
       {
         id: "save",
         type: "save",
-        title: "Save Memory",
-        description: "We save the data to your brain",
-        icon: Wifi,
-        badge: "XD BRAIN",
-      },
-    ],
-  },
-  "gmail-sent": {
-    id: "gmail-sent",
-    title: "Sent Emails to Memory",
-    subtitle: "Remember what you shared",
-    description: "Create memories from emails you send to important contacts.",
-    gradient: "blue",
-    icon: Send,
-    steps: [
-      {
-        id: "setup",
-        type: "setup",
-        title: "Personalized set up",
-        description: "Select contacts to track",
-        icon: Sparkles,
-      },
-      {
-        id: "gmail",
-        type: "integration",
-        title: "Gmail",
-        description: "Weave monitors your sent emails to selected contacts",
-        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
-      },
-      {
-        id: "save",
-        type: "save",
-        title: "Save Memory",
-        description: "Memories are saved to your brain",
+        title: "Active Monitoring",
+        description: "Emails saved automatically",
         icon: Wifi,
         badge: "XD BRAIN",
       },
