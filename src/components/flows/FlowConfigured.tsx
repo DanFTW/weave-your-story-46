@@ -135,10 +135,6 @@ export function FlowConfigured({
             <ChevronLeft className="w-6 h-6 text-white" />
           </button>
           
-          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-            <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />
-          </div>
-          
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-white truncate">
               {config.title}

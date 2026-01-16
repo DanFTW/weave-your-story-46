@@ -60,10 +60,6 @@ export function LLMImportConfig({ category, onBack, onProcess, isProcessing }: L
             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </button>
           
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <Icon className="w-6 h-6 text-primary" />
-          </div>
-          
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-foreground truncate">{category.title}</h1>
             <p className="text-sm text-muted-foreground truncate">Import from your LLM</p>

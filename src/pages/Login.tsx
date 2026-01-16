@@ -102,10 +102,10 @@ export default function Login() {
         </div>
       </motion.div>
 
-      {/* Bottom section with buttons - safe area aware */}
+      {/* Bottom section with buttons - safe area aware and higher on mobile */}
       <motion.div 
-        className="px-6 pb-6 space-y-3 relative z-20 flex-shrink-0"
-        style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+        className="px-6 pb-10 space-y-3 relative z-20 flex-shrink-0"
+        style={{ paddingBottom: 'max(2.5rem, calc(env(safe-area-inset-bottom) + 1.5rem))' }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: contentVisible ? 1 : 0, y: contentVisible ? 0 : 20 }}
         transition={{ duration: 0.5, delay: 0.2 }}
