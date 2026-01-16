@@ -66,8 +66,10 @@ export function useComposio(toolkit: string): UseComposioReturn {
         localStorage.setItem("composio_pending_toolkit", toolkit.toLowerCase());
       }
 
-      // Redirect to OAuth - use assign for Safari compatibility
-      window.location.assign(data.redirectUrl);
+      // Redirect to OAuth - use top-level window to escape iframe
+      // This is needed because Composio blocks embedding in iframes
+      const targetWindow = window.top || window;
+      targetWindow.location.assign(data.redirectUrl);
     } catch (error) {
       console.error("Connection error:", error);
       toast.error("Failed to connect integration");
