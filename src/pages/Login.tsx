@@ -93,10 +93,10 @@ export default function Login() {
           </div>
           {/* Fade overlay for reflection */}
           <div 
-            className="absolute left-0 right-0 h-24 pointer-events-none"
+            className="absolute left-0 right-0 h-32 pointer-events-none"
             style={{
-              top: 'calc(min(220px, 35vh) - 20px)',
-              background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 60%)',
+              top: 'calc(min(220px, 35vh) + 40px)',
+              background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 80%)',
             }}
           />
         </div>
