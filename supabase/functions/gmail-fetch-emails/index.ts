@@ -85,7 +85,7 @@ serve(async (req) => {
           connected_account_id: connectionId,
           arguments: {
             query: query,
-            max_results: 10,
+            max_results: 100,
           },
         }),
       });

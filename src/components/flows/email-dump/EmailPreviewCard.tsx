@@ -41,8 +41,8 @@ function formatDate(dateStr: string): string {
 }
 
 function getSnippetText(email: ExtractedEmail): string {
-  // Handle snippet which may be an object
-  let text = email.body || email.snippet || '';
+  // Handle snippet which may be an object - prefer snippet for preview
+  let text = email.snippet || '';
   
   if (typeof text === 'object' && text !== null) {
     // @ts-ignore
@@ -50,6 +50,19 @@ function getSnippetText(email: ExtractedEmail): string {
   }
   
   return String(text).replace(/\s+/g, ' ').trim();
+}
+
+function getFullBodyText(email: ExtractedEmail): string {
+  // Handle body which may be an object - prefer body for full content
+  let text = email.body || email.snippet || '';
+  
+  if (typeof text === 'object' && text !== null) {
+    // @ts-ignore
+    text = text.body || text.text || '';
+  }
+  
+  // Preserve line breaks but clean up excessive whitespace
+  return String(text).replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function EmailPreviewCard({ memory, onDelete }: EmailPreviewCardProps) {
@@ -69,6 +82,7 @@ export function EmailPreviewCard({ memory, onDelete }: EmailPreviewCardProps) {
   const senderEmail = extractEmail(email.from);
   const dateStr = formatDate(email.date);
   const snippetText = getSnippetText(email);
+  const fullBodyText = getFullBodyText(email);
   const tagConfig = getTagById(memory.tag);
 
   return (
@@ -167,9 +181,9 @@ export function EmailPreviewCard({ memory, onDelete }: EmailPreviewCardProps) {
               </p>
 
               {/* Full body */}
-              <div className="bg-muted/50 rounded-xl p-3">
-                <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                  {snippetText || "No content available"}
+              <div className="bg-muted/50 rounded-xl p-3 max-h-80 overflow-y-auto">
+                <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed break-words">
+                  {fullBodyText || "No content available"}
                 </p>
               </div>
 
