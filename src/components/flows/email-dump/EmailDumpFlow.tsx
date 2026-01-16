@@ -30,6 +30,8 @@ export function EmailDumpFlow() {
     searchResults,
     extractedEmails,
     savedCount,
+    maxEmails,
+    setMaxEmails,
     isSearching,
     isExtracting,
     isSaving,
@@ -73,6 +75,8 @@ export function EmailDumpFlow() {
       }
     } else {
       // User is not connected, redirect to the Gmail integration page
+      // Store return path so we can come back after connection
+      sessionStorage.setItem('returnAfterGmailConnect', '/flow/email-dump');
       navigate('/integration/gmail');
     }
   }, [gmail.isConnected, isCheckingAuth, phase, setPhase, navigate]);
@@ -155,6 +159,8 @@ export function EmailDumpFlow() {
             selectedEmails={selectedEmails}
             searchResults={searchResults}
             isSearching={isSearching}
+            maxEmails={maxEmails}
+            onMaxEmailsChange={setMaxEmails}
             onSearch={searchContacts}
             onSelect={selectEmail}
             onDeselect={deselectEmail}

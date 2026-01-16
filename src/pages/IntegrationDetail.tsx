@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
 import { IntegrationLargeIcon } from "@/components/integrations/IntegrationLargeIcon";
@@ -26,10 +26,28 @@ export default function IntegrationDetail() {
     checkStatus,
   } = useComposio(integrationId || "gmail");
 
+  // Track if we've already handled the return redirect
+  const hasHandledReturn = useRef(false);
+
   // Check existing status on mount
   useEffect(() => {
     checkStatus();
   }, [checkStatus]);
+
+  // Check for return path after connection becomes active
+  useEffect(() => {
+    if (isConnected && !hasHandledReturn.current) {
+      const returnPath = sessionStorage.getItem('returnAfterGmailConnect');
+      if (returnPath && integrationId?.toLowerCase() === 'gmail') {
+        hasHandledReturn.current = true;
+        sessionStorage.removeItem('returnAfterGmailConnect');
+        // Small delay to show connection success before redirecting
+        setTimeout(() => {
+          navigate(returnPath);
+        }, 500);
+      }
+    }
+  }, [isConnected, integrationId, navigate]);
 
   // Legacy OAuth callback handling removed - now using /oauth-complete page with database polling
   // The useComposio hook polls the database for connection status changes

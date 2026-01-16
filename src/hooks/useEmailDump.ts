@@ -11,6 +11,8 @@ interface UseEmailDumpReturn {
   searchResults: Contact[];
   extractedEmails: EmailMemory[];
   savedCount: number;
+  maxEmails: number;
+  setMaxEmails: (value: number) => void;
   isSearching: boolean;
   isExtracting: boolean;
   isSaving: boolean;
@@ -36,6 +38,7 @@ export function useEmailDump(): UseEmailDumpReturn {
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
   const [extractedEmails, setExtractedEmails] = useState<EmailMemory[]>([]);
   const [savedCount, setSavedCount] = useState(0);
+  const [maxEmails, setMaxEmails] = useState(50);
   const [isSearching, setIsSearching] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -107,7 +110,10 @@ export function useEmailDump(): UseEmailDumpReturn {
       console.log('Extracting emails for:', selectedEmails);
 
       const { data, error } = await supabase.functions.invoke('gmail-fetch-emails', {
-        body: { emailAddresses: selectedEmails },
+        body: { 
+          emailAddresses: selectedEmails,
+          maxEmails: maxEmails,
+        },
       });
 
       console.log('Extract response:', { data, error });
@@ -152,7 +158,7 @@ export function useEmailDump(): UseEmailDumpReturn {
     } finally {
       setIsExtracting(false);
     }
-  }, [selectedEmails, toast]);
+  }, [selectedEmails, maxEmails, toast]);
 
   const removeExtractedEmail = useCallback((id: string) => {
     setExtractedEmails(prev => prev.filter(e => e.id !== id));
@@ -210,6 +216,7 @@ export function useEmailDump(): UseEmailDumpReturn {
     setSearchResults([]);
     setExtractedEmails([]);
     setSavedCount(0);
+    setMaxEmails(50);
   }, []);
 
   return {
@@ -219,6 +226,8 @@ export function useEmailDump(): UseEmailDumpReturn {
     searchResults,
     extractedEmails,
     savedCount,
+    maxEmails,
+    setMaxEmails,
     isSearching,
     isExtracting,
     isSaving,

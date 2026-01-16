@@ -43,12 +43,14 @@ serve(async (req) => {
     }
 
     // Get request body
-    const { emailAddresses } = await req.json();
+    const { emailAddresses, maxEmails = 50 } = await req.json();
     if (!emailAddresses || !Array.isArray(emailAddresses) || emailAddresses.length === 0) {
       throw new Error("Email addresses are required");
     }
 
-    console.log(`Fetching emails for ${emailAddresses.length} addresses`);
+    // Validate and cap maxEmails
+    const emailLimit = Math.min(Math.max(10, maxEmails), 200);
+    console.log(`Fetching emails for ${emailAddresses.length} addresses, max: ${emailLimit}`);
 
     // Get user's Gmail connection
     const { data: integration, error: integrationError } = await supabase
@@ -180,8 +182,8 @@ serve(async (req) => {
       return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
     });
 
-    // Limit to 50 most recent
-    const limitedEmails = allEmails.slice(0, 50);
+    // Limit to user-specified max (already validated above)
+    const limitedEmails = allEmails.slice(0, emailLimit);
 
     return new Response(
       JSON.stringify({ emails: limitedEmails }),
