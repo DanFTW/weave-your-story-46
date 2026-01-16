@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Receipt, Plus, Loader2, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,13 +16,7 @@ interface ReceiptMemoryListProps {
   onAddNew: () => void;
 }
 
-export interface ReceiptMemoryListRef {
-  refresh: () => Promise<void>;
-  addOptimisticMemory: (content: string) => void;
-}
-
-export const ReceiptMemoryList = forwardRef<ReceiptMemoryListRef, ReceiptMemoryListProps>(
-  function ReceiptMemoryList({ onAddNew }, ref) {
+export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
   const { listMemories, isListing } = useLiamMemory();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -38,23 +32,6 @@ export const ReceiptMemoryList = forwardRef<ReceiptMemoryListRef, ReceiptMemoryL
     }
     setHasLoaded(true);
   }, [listMemories]);
-
-  // Add a memory optimistically (shows immediately before API confirms)
-  const addOptimisticMemory = useCallback((content: string) => {
-    const optimisticMemory: Memory = {
-      id: `optimistic-${Date.now()}`,
-      content,
-      tag: 'RECEIPTS',
-      createdAt: new Date().toISOString(),
-    };
-    setMemories(prev => [optimisticMemory, ...prev]);
-  }, []);
-
-  // Expose refresh and optimistic add methods to parent
-  useImperativeHandle(ref, () => ({
-    refresh: fetchMemories,
-    addOptimisticMemory,
-  }), [fetchMemories, addOptimisticMemory]);
 
   useEffect(() => {
     fetchMemories();
@@ -184,4 +161,4 @@ export const ReceiptMemoryList = forwardRef<ReceiptMemoryListRef, ReceiptMemoryL
       </div>
     </div>
   );
-});
+}
