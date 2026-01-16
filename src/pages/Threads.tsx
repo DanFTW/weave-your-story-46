@@ -7,8 +7,8 @@ import { sampleThreads } from "@/data/threads";
 import { getThreadConfig } from "@/data/threadConfigs";
 import { Thread } from "@/types/threads";
 
-// Threads that have full flow implementations
-const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests'];
+// Threads that navigate directly to overview (no detail sheet)
+const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests', 'llm-import', 'gmail-sent', 'gmail-incoming'];
 
 export default function Threads() {
   const navigate = useNavigate();
