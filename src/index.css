@@ -136,8 +136,8 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
+    /* Remove body padding - let individual components handle safe areas */
+    /* This allows gradients to extend behind the status bar */
   }
 }
 
@@ -168,8 +168,14 @@
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
   }
 
+  /* Header safe area - extends gradient behind status bar */
   .pt-safe-top {
-    padding-top: max(3.5rem, calc(env(safe-area-inset-top) + 2rem));
+    padding-top: max(3rem, calc(env(safe-area-inset-top) + 0.75rem));
+  }
+
+  /* For gradient headers that should extend behind status bar */
+  .pt-status-bar {
+    padding-top: calc(env(safe-area-inset-top) + 0.75rem);
   }
 
   .pb-nav {

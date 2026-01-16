@@ -41,7 +41,7 @@ export function FlowPreview({
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
+      <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses[config.gradient])}>
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}

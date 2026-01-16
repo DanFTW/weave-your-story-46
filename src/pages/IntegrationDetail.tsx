@@ -163,7 +163,8 @@ export default function IntegrationDetail() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.3 }}
           onClick={handleBack}
-          className="absolute top-12 left-5 z-10 w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform"
+          className="absolute left-5 z-10 w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform"
+          style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
         >
           <ChevronLeft className="w-5 h-5 text-white" />
         </motion.button>

@@ -41,7 +41,7 @@ export function ProfileHeader({ name, handle, avatarUrl, onEditClick }: ProfileH
         />
         
         {/* Content */}
-        <div className="relative z-10 flex flex-col items-center pt-16 pb-12">
+        <div className="relative z-10 flex flex-col items-center pt-status-bar pb-12">
           {/* Top bar with title and edit button */}
           <div className="w-full flex items-center justify-between px-5 mb-8">
             <div className="w-[72px]" /> {/* Spacer for centering */}

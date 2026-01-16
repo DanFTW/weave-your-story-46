@@ -14,7 +14,10 @@ export function MarqueeBanner() {
   ));
 
   return (
-    <div className="w-full overflow-hidden bg-card/80 backdrop-blur-sm py-4 border-b border-border/50">
+    <div 
+      className="w-full overflow-hidden bg-card/80 backdrop-blur-sm py-4 border-b border-border/50"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}
+    >
       <motion.div
         className="flex"
         animate={{ x: [0, -2880] }}
