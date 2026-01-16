@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2 } from "lucide-react";
+import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -15,6 +15,7 @@ interface MemoryCardProps {
 export const categoryConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; gradient: string; label: string }> = {
   quick_note: { icon: NotebookPen, gradient: "bg-gradient-to-r from-indigo-500 to-blue-600", label: "Quick Note" },
   default: { icon: NotebookPen, gradient: "bg-gradient-to-r from-indigo-500 to-blue-600", label: "Quick Note" },
+  email: { icon: Mail, gradient: "bg-gradient-to-r from-blue-500 to-cyan-500", label: "Email" },
   family: { icon: Users, gradient: "bg-gradient-to-r from-fuchsia-500 to-purple-500", label: "Family Memory" },
   family_memory: { icon: Users, gradient: "bg-gradient-to-r from-fuchsia-500 to-purple-500", label: "Family Memory" },
   work: { icon: Briefcase, gradient: "bg-gradient-to-r from-emerald-400 to-teal-500", label: "Work Memory" },
@@ -26,8 +27,8 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   personal: { icon: Heart, gradient: "bg-gradient-to-r from-rose-400 to-red-500", label: "Personal Memory" },
   personal_memory: { icon: Heart, gradient: "bg-gradient-to-r from-rose-400 to-red-500", label: "Personal Memory" },
   lifestyle: { icon: Coffee, gradient: "bg-gradient-to-r from-violet-400 to-purple-500", label: "Lifestyle Memory" },
-  receipts: { icon: ShoppingBag, gradient: "bg-gradient-to-r from-teal-400 to-cyan-500", label: "Receipt" },
-  receipt: { icon: ShoppingBag, gradient: "bg-gradient-to-r from-teal-400 to-cyan-500", label: "Receipt" },
+  receipts: { icon: Receipt, gradient: "bg-gradient-to-r from-green-500 to-emerald-500", label: "Receipt" },
+  receipt: { icon: Receipt, gradient: "bg-gradient-to-r from-green-500 to-emerald-500", label: "Receipt" },
   interests: { icon: Heart, gradient: "bg-gradient-to-r from-pink-400 to-rose-500", label: "Interests" },
 };
 
@@ -44,11 +45,13 @@ export function getCategoryConfig(category?: string, tag?: string) {
   }
   // Check if category or tag contains known keywords
   const combined = `${category || ''} ${tag || ''}`.toLowerCase();
+  if (combined.includes('email')) return categoryConfig.email;
   if (combined.includes('family')) return categoryConfig.family;
   if (combined.includes('work')) return categoryConfig.work;
   if (combined.includes('food')) return categoryConfig.food;
   if (combined.includes('shopping')) return categoryConfig.shopping;
   if (combined.includes('personal')) return categoryConfig.personal;
+  if (combined.includes('receipt')) return categoryConfig.receipt;
   
   return categoryConfig.default;
 }
