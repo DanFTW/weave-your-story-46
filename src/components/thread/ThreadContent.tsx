@@ -19,12 +19,14 @@ export function ThreadContent({ subtitle, description, steps, onStepClick }: Thr
         {description}
       </p>
 
-      {/* Steps */}
-      <div className="space-y-3">
-        {steps.map((step) => (
+      {/* Workflow Steps */}
+      <div className="pl-1">
+        {steps.map((step, index) => (
           <ThreadStepCard
             key={step.id}
             step={step}
+            stepNumber={index + 1}
+            isLast={index === steps.length - 1}
             onClick={() => onStepClick?.(step.id)}
           />
         ))}
