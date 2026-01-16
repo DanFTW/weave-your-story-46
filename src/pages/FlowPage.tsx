@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { getFlowConfig } from "@/data/flowConfigs";
@@ -22,7 +22,7 @@ import { FlowConfigured } from "@/components/flows/FlowConfigured";
 // Receipt-specific components
 import { ReceiptUploader } from "@/components/flows/ReceiptUploader";
 import { ReceiptPreview } from "@/components/flows/ReceiptPreview";
-import { ReceiptMemoryList, ReceiptMemoryListHandle } from "@/components/flows/ReceiptMemoryList";
+import { ReceiptMemoryList } from "@/components/flows/ReceiptMemoryList";
 
 // LLM Import components
 import { LLMImportCategoryList } from "@/components/flows/llm-import/LLMImportCategoryList";
@@ -47,7 +47,6 @@ export default function FlowPage() {
   const [isConfirming, setIsConfirming] = useState(false);
   
   // Receipt-specific state
-  const receiptListRef = useRef<ReceiptMemoryListHandle>(null);
   const [receiptPhase, setReceiptPhase] = useState<'list' | 'upload' | 'preview'>('list');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -109,9 +108,6 @@ export default function FlowPage() {
     setIsConfirming(true);
     
     try {
-      // Add optimistic update immediately for instant feedback
-      receiptListRef.current?.addOptimisticMemory(memoryString);
-      
       const success = await createMemory(memoryString, 'RECEIPTS');
       
       if (success) {
@@ -124,16 +120,9 @@ export default function FlowPage() {
         setSelectedImage(null);
         setSelectedFile(null);
         setReceiptData(null);
-        
-        // Refresh the list in background to sync with server
-        setTimeout(() => {
-          receiptListRef.current?.refresh();
-        }, 1000);
       }
     } catch (error) {
       console.error('Failed to save receipt:', error);
-      // Refresh to remove optimistic update on error
-      receiptListRef.current?.refresh();
       toast({
         title: "Save failed",
         description: "Could not save the receipt. Please try again.",
@@ -184,7 +173,7 @@ export default function FlowPage() {
         {/* Content */}
         <div className="px-5 pt-5">
           {receiptPhase === 'list' && (
-            <ReceiptMemoryList ref={receiptListRef} onAddNew={() => setReceiptPhase('upload')} />
+            <ReceiptMemoryList onAddNew={() => setReceiptPhase('upload')} />
           )}
           
           {receiptPhase === 'upload' && (
