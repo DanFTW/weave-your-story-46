@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,10 +34,25 @@ serve(async (req) => {
   }
 
   try {
-    // Get user from auth header
-    const authHeader = req.headers.get("Authorization");
+    console.log("Request method:", req.method);
+    const allHeaders = Object.fromEntries(req.headers.entries());
+    console.log("Request headers:", JSON.stringify(allHeaders));
+    
+    // Get user from auth header - check both casings
+    let authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
+    console.log("Auth header present:", !!authHeader, "value starts:", authHeader?.substring(0, 20));
+    
     if (!authHeader) {
-      throw new Error("No authorization header");
+      console.error("Missing authorization header");
+      // Return more helpful error with available headers
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "No authorization header",
+          debug: { headers: Object.keys(allHeaders) }
+        }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -45,8 +60,17 @@ serve(async (req) => {
     });
 
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    console.log("Auth result - user:", !!user, "userId:", user?.id, "error:", authError?.message, "errorCode:", authError?.code);
+    
     if (authError || !user) {
-      throw new Error("Not authenticated");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "Not authenticated",
+          debug: { authError: authError?.message, authCode: authError?.code }
+        }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Get user's Gmail connection
