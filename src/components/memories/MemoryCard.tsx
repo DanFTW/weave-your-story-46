@@ -16,6 +16,8 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   quick_note: { icon: NotebookPen, gradient: "bg-gradient-to-r from-indigo-500 to-blue-600", label: "Quick Note" },
   default: { icon: NotebookPen, gradient: "bg-gradient-to-r from-indigo-500 to-blue-600", label: "Quick Note" },
   email: { icon: Mail, gradient: "bg-gradient-to-r from-blue-500 to-cyan-500", label: "Email" },
+  email_incoming: { icon: Mail, gradient: "bg-gradient-to-r from-cyan-500 to-blue-500", label: "Incoming Email" },
+  email_outgoing: { icon: Mail, gradient: "bg-gradient-to-r from-blue-500 to-indigo-500", label: "Outgoing Email" },
   family: { icon: Users, gradient: "bg-gradient-to-r from-fuchsia-500 to-purple-500", label: "Family Memory" },
   family_memory: { icon: Users, gradient: "bg-gradient-to-r from-fuchsia-500 to-purple-500", label: "Family Memory" },
   work: { icon: Briefcase, gradient: "bg-gradient-to-r from-emerald-400 to-teal-500", label: "Work Memory" },
@@ -32,7 +34,7 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   interests: { icon: Heart, gradient: "bg-gradient-to-r from-pink-400 to-rose-500", label: "Interests" },
 };
 
-export function getCategoryConfig(category?: string, tag?: string) {
+export function getCategoryConfig(category?: string, tag?: string, content?: string) {
   // Normalize and check category first
   if (category) {
     const lowerCategory = category.toLowerCase().replace(/\s+/g, '_');
@@ -45,7 +47,17 @@ export function getCategoryConfig(category?: string, tag?: string) {
   }
   // Check if category or tag contains known keywords
   const combined = `${category || ''} ${tag || ''}`.toLowerCase();
-  if (combined.includes('email')) return categoryConfig.email;
+  
+  // For email, detect direction from content
+  if (combined.includes('email')) {
+    if (content) {
+      const lowerContent = content.toLowerCase();
+      if (lowerContent.startsWith('email sent to')) return categoryConfig.email_outgoing;
+      if (lowerContent.startsWith('email from')) return categoryConfig.email_incoming;
+    }
+    return categoryConfig.email;
+  }
+  
   if (combined.includes('family')) return categoryConfig.family;
   if (combined.includes('work')) return categoryConfig.work;
   if (combined.includes('food')) return categoryConfig.food;
@@ -67,7 +79,7 @@ function parseTags(memory: Memory): string[] {
 
 export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps) {
   const navigate = useNavigate();
-  const config = getCategoryConfig(memory.category, memory.tag);
+  const config = getCategoryConfig(memory.category, memory.tag, memory.content);
   const Icon = config.icon;
   const description = memory.content;
   const tags = parseTags(memory);
