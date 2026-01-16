@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isMedian, median } from "@/utils/median";
@@ -14,84 +14,102 @@ interface UseComposioReturn {
   connecting: boolean;
   isConnected: boolean;
   connect: (customRedirectPath?: string) => Promise<void>;
-  completeConnection: (connectionId?: string) => Promise<{ success: boolean; email?: string } | undefined>;
   disconnect: () => Promise<void>;
   checkStatus: () => Promise<void>;
 }
+
+const POLLING_INTERVAL = 2000; // 2 seconds
+const MAX_POLLING_DURATION = 120000; // 2 minutes
 
 export function useComposio(toolkit: string): UseComposioReturn {
   const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Refs for polling
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingStartTimeRef = useRef<number>(0);
+  const pendingConnectionIdRef = useRef<string | null>(null);
 
-  // Complete connection after OAuth redirect
-  const completeConnection = useCallback(async (connectionId?: string) => {
-    try {
-      // Clean up any Median callback
-      if (typeof window !== 'undefined' && window.median_appbrowser_closed) {
-        delete window.median_appbrowser_closed;
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
+    };
+  }, []);
 
-      const pendingId = connectionId || localStorage.getItem("composio_pending_connection");
-      const pendingToolkit = localStorage.getItem("composio_pending_toolkit") || toolkit;
-      
-      if (!pendingId) {
-        console.log("No pending connection ID found");
+  // Poll the database for connection status changes
+  const startPolling = useCallback(async () => {
+    pollingStartTimeRef.current = Date.now();
+    
+    const pollForConnection = async () => {
+      // Check if we've exceeded max polling duration
+      if (Date.now() - pollingStartTimeRef.current > MAX_POLLING_DURATION) {
+        console.log("Polling timed out");
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        setConnecting(false);
+        toast.error("Connection timed out. Please try again.");
         return;
       }
 
-      console.log(`Completing connection for: ${pendingId}`);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.error("No session for completing connection");
-        return;
+        // Check for connected status in database
+        const { data: integration, error } = await supabase
+          .from("user_integrations")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .eq("integration_id", toolkit.toLowerCase())
+          .eq("status", "connected")
+          .maybeSingle();
+
+        if (error) {
+          console.error("Polling error:", error);
+          return;
+        }
+
+        if (integration) {
+          console.log("Connection detected via polling!", integration);
+          
+          // Stop polling
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          
+          // Update state
+          setConnectedAccount({
+            name: integration.account_name || "",
+            email: integration.account_email || "",
+            avatarUrl: integration.account_avatar_url || undefined,
+          });
+          setIsConnected(true);
+          setConnecting(false);
+          pendingConnectionIdRef.current = null;
+          
+          toast.success(`${toolkit} connected successfully!`);
+        }
+      } catch (error) {
+        console.error("Error during polling:", error);
       }
+    };
 
-      const { data, error } = await supabase.functions.invoke("composio-callback", {
-        body: { 
-          connectionId: pendingId,
-          userId: session.user.id,
-          toolkit: pendingToolkit,
-        },
-      });
-
-      console.log("Callback response:", data);
-
-      if (error) {
-        console.error("Callback error:", error);
-        return { success: false };
-      }
-      
-      if (data?.success) {
-        setConnectedAccount({
-          name: data.name || data.account?.account_name || "",
-          email: data.email || data.account?.account_email || "",
-          avatarUrl: data.avatarUrl || data.account?.account_avatar_url,
-        });
-        setIsConnected(true);
-        localStorage.removeItem("composio_pending_connection");
-        localStorage.removeItem("composio_pending_toolkit");
-        localStorage.removeItem("median_oauth_in_progress");
-        toast.success(`${toolkit} connected successfully!`);
-        return { success: true, email: data.email };
-      }
-
-      // If not active yet, might need to retry
-      if (data?.status && data.status !== "connected" && data.status !== "ACTIVE") {
-        console.log(`Connection status: ${data.status}`);
-        return { success: false };
-      }
-
-      return { success: false };
-    } catch (error) {
-      console.error("Error completing connection:", error);
-      return { success: false };
-    }
+    // Start polling
+    pollingIntervalRef.current = setInterval(pollForConnection, POLLING_INTERVAL);
+    
+    // Also poll immediately
+    pollForConnection();
   }, [toolkit]);
 
   // Initiate OAuth connection
-  const connect = useCallback(async (customRedirectPath?: string) => {
+  const connect = useCallback(async () => {
     try {
       setConnecting(true);
       
@@ -102,25 +120,18 @@ export function useComposio(toolkit: string): UseComposioReturn {
         return;
       }
 
-      const currentPath = customRedirectPath || window.location.pathname;
-      
-      // Build redirect URL - always use standard HTTPS URL
-      // OAuth providers can't redirect to custom URL schemes (weavefabric.https://...)
-      // The appbrowser mode keeps the flow within the Median app context instead
+      // Build redirect URL to OAuth completion page
       const baseUrl = "https://weavefabric.lovable.app";
-      const redirectUrl = isMedian() 
-        ? `${baseUrl}${currentPath}?connected=true`
-        : `${window.location.origin}${currentPath}?connected=true`;
       
-      if (isMedian()) {
-        console.log(`Running in Median app, using standard HTTPS redirect with appbrowser mode`);
-      }
-
       console.log(`Initiating ${toolkit} OAuth...`);
-      console.log(`Redirect URL: ${redirectUrl}`);
+      console.log(`Running in Median: ${isMedian()}`);
 
       const { data, error } = await supabase.functions.invoke("composio-connect", {
-        body: { toolkit: toolkit.toUpperCase(), redirectUrl },
+        body: { 
+          toolkit: toolkit.toUpperCase(),
+          // Pass base URL, edge function will build complete callback URL
+          baseUrl,
+        },
       });
 
       if (error) {
@@ -138,79 +149,52 @@ export function useComposio(toolkit: string): UseComposioReturn {
         return;
       }
 
-      // Store connection ID for later
+      // Store connection ID for tracking
       if (data.connectionId) {
-        localStorage.setItem("composio_pending_connection", data.connectionId);
-        localStorage.setItem("composio_pending_toolkit", toolkit.toLowerCase());
+        pendingConnectionIdRef.current = data.connectionId;
       }
+
+      // Start polling for connection status
+      // This works regardless of localStorage isolation in Median
+      startPolling();
 
       // Handle OAuth redirect based on platform
       if (isMedian()) {
-        // Store flag indicating OAuth is in progress
-        localStorage.setItem("median_oauth_in_progress", "true");
-        
-        // Use Median's app browser to keep OAuth flow within app context
+        console.log("Opening OAuth in Median app browser...");
         const opened = median.window.open(data.redirectUrl, 'appbrowser');
         
-        if (opened) {
-          console.log("Opened OAuth in Median app browser");
-          
-          // Set up callback for when the app browser closes
-          window.median_appbrowser_closed = async () => {
-            console.log("Median app browser closed, checking connection...");
-            localStorage.removeItem("median_oauth_in_progress");
-            
-            // Give a small delay for OAuth redirect to set localStorage flag
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Check if OAuth completed (flag set by the App Browser callback page)
-            const oauthCompleted = localStorage.getItem("oauth_completed_callback");
-            
-            if (oauthCompleted) {
-              console.log("OAuth callback detected, completing connection in main webview...");
-              localStorage.removeItem("oauth_completed_callback");
-              
-              // Complete with retry logic - main webview has the session
-              const completeWithRetry = async (retries = 5): Promise<boolean> => {
-                const result = await completeConnection();
-                if (result?.success) return true;
-                if (retries > 0) {
-                  await new Promise(r => setTimeout(r, 1000));
-                  return completeWithRetry(retries - 1);
-                }
-                return false;
-              };
-              
-              const success = await completeWithRetry();
-              if (success) {
-                console.log("OAuth completed successfully in main webview");
-              } else {
-                toast.error("Failed to complete connection. Please try again.");
-              }
-            } else {
-              console.log("No OAuth callback detected - user may have cancelled");
-              toast.info("Connection cancelled or incomplete");
-            }
-            
-            setConnecting(false);
-          };
-        } else {
-          // Fallback if app browser isn't available
+        if (!opened) {
           console.log("Median app browser not available, using standard redirect");
+          // Stop polling since we're doing a full redirect
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
           window.location.assign(data.redirectUrl);
         }
       } else {
-        // Standard web redirect - use top-level window to escape iframe
-        // This is needed because Composio blocks embedding in iframes
-        const targetWindow = window.top || window;
-        targetWindow.location.assign(data.redirectUrl);
+        // Standard web - open in new window to keep current page active for polling
+        // This allows polling to continue while OAuth happens in popup
+        const popup = window.open(data.redirectUrl, '_blank', 'width=600,height=700');
+        
+        if (!popup) {
+          console.log("Popup blocked, using standard redirect");
+          // Stop polling since we're doing a full redirect
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          // Use top-level window to escape iframe
+          const targetWindow = window.top || window;
+          targetWindow.location.assign(data.redirectUrl);
+        }
       }
     } catch (error) {
       console.error("Connection error:", error);
       toast.error("Failed to connect integration");
       setConnecting(false);
     }
-  }, [toolkit, completeConnection]);
+  }, [toolkit, startPolling]);
 
   // Check existing connection status
   const checkStatus = useCallback(async () => {
@@ -224,7 +208,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
         .eq("user_id", session.user.id)
         .eq("integration_id", toolkit.toLowerCase())
         .eq("status", "connected")
-        .single();
+        .maybeSingle();
 
       if (integration) {
         setConnectedAccount({
@@ -268,7 +252,6 @@ export function useComposio(toolkit: string): UseComposioReturn {
     connecting,
     isConnected,
     connect,
-    completeConnection,
     disconnect,
     checkStatus,
   };

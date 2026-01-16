@@ -5,7 +5,22 @@ declare global {
   }
 }
 
+/**
+ * Check if we're running inside the Median native app
+ */
 const isMedian = () => !!window.median;
+
+/**
+ * Check if we're in the Median App Browser (isolated OAuth context)
+ * vs the main webview. The app browser has median object but may have
+ * different characteristics.
+ */
+const isMedianAppBrowser = () => {
+  if (!isMedian()) return false;
+  // The app browser typically has a different user agent or other markers
+  // For now, we detect based on whether we're on the oauth-complete route
+  return window.location.pathname.includes('/oauth-complete');
+};
 
 export const median = {
   haptics: {
@@ -65,4 +80,4 @@ export const median = {
   },
 };
 
-export { isMedian };
+export { isMedian, isMedianAppBrowser };

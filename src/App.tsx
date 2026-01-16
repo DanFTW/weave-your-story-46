@@ -18,6 +18,7 @@ import IntegrationDetail from "./pages/IntegrationDetail";
 import Profile from "./pages/Profile";
 import ApiKeyConfig from "./pages/ApiKeyConfig";
 import Login from "./pages/Login";
+import OAuthComplete from "./pages/OAuthComplete";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ const App = () => (
         <AuthStateListener>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/oauth-complete" element={<OAuthComplete />} />
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/" element={<Home />} />
               <Route path="/threads" element={<Threads />} />
