@@ -15,9 +15,11 @@ interface Memory {
 
 interface ReceiptMemoryListProps {
   onAddNew: () => void;
+  refreshKey?: number;
+  pendingMemory?: { content: string; createdAt: string } | null;
 }
 
-export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
+export function ReceiptMemoryList({ onAddNew, refreshKey = 0, pendingMemory }: ReceiptMemoryListProps) {
   const { listMemories, isListing } = useLiamMemory();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -36,7 +38,7 @@ export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
     };
 
     fetchMemories();
-  }, []);
+  }, [refreshKey]);
 
   // Parse receipt memory to extract store name and amount
   const parseReceiptMemory = (content: string) => {
@@ -94,19 +96,32 @@ export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
     );
   }
 
+  // Combine pending memory with fetched memories for optimistic UI
+  const displayMemories = pendingMemory
+    ? [
+        {
+          id: 'pending-' + Date.now(),
+          content: pendingMemory.content,
+          tag: 'receipts',
+          createdAt: pendingMemory.createdAt,
+        },
+        ...memories,
+      ]
+    : memories;
+
   // List of receipt memories
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {memories.length} receipt{memories.length !== 1 ? 's' : ''} saved
+          {displayMemories.length} receipt{displayMemories.length !== 1 ? 's' : ''} saved
         </p>
       </div>
 
       {/* Memory list */}
       <div className="space-y-3">
-        {memories.map((memory, index) => {
+        {displayMemories.map((memory, index) => {
           const { amount, store } = parseReceiptMemory(memory.content);
           
           return (

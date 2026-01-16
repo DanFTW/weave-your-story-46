@@ -51,6 +51,8 @@ export default function FlowPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [receiptListRefreshKey, setReceiptListRefreshKey] = useState(0);
+  const [pendingReceiptMemory, setPendingReceiptMemory] = useState<{ content: string; createdAt: string } | null>(null);
   
   // LLM Import state
   const [llmImportPhase, setLLMImportPhase] = useState<LLMImportPhase>('category-select');
@@ -108,6 +110,18 @@ export default function FlowPage() {
     setIsConfirming(true);
     
     try {
+      // Optimistically add to pending so it shows immediately
+      setPendingReceiptMemory({
+        content: memoryString,
+        createdAt: new Date().toISOString(),
+      });
+      
+      // Navigate to list immediately for optimistic UI
+      setReceiptPhase('list');
+      setSelectedImage(null);
+      setSelectedFile(null);
+      setReceiptData(null);
+      
       const success = await createMemory(memoryString, 'RECEIPTS');
       
       if (success) {
@@ -115,14 +129,22 @@ export default function FlowPage() {
           title: "Receipt saved",
           description: "Your purchase has been added to memory.",
         });
-        // Reset and go back to list
-        setReceiptPhase('list');
-        setSelectedImage(null);
-        setSelectedFile(null);
-        setReceiptData(null);
+        // Trigger a refresh to fetch the actual saved memory from API
+        setReceiptListRefreshKey(prev => prev + 1);
+        // Clear pending once the API has been updated
+        setPendingReceiptMemory(null);
+      } else {
+        // If save failed, remove pending memory
+        setPendingReceiptMemory(null);
+        toast({
+          title: "Save failed",
+          description: "Could not save the receipt. Please try again.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('Failed to save receipt:', error);
+      setPendingReceiptMemory(null);
       toast({
         title: "Save failed",
         description: "Could not save the receipt. Please try again.",
@@ -173,7 +195,11 @@ export default function FlowPage() {
         {/* Content */}
         <div className="px-5 pt-5">
           {receiptPhase === 'list' && (
-            <ReceiptMemoryList onAddNew={() => setReceiptPhase('upload')} />
+            <ReceiptMemoryList 
+              onAddNew={() => setReceiptPhase('upload')} 
+              refreshKey={receiptListRefreshKey}
+              pendingMemory={pendingReceiptMemory}
+            />
           )}
           
           {receiptPhase === 'upload' && (
