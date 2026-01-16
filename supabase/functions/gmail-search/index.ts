@@ -55,15 +55,35 @@ serve(async (req) => {
     const connectionId = integration.composio_connection_id;
     console.log(`Using connection: ${connectionId}`);
 
-    // Search emails using Composio action
-    const searchResponse = await fetch("https://backend.composio.dev/api/v2/actions/GMAIL_SEARCH_EMAILS/execute", {
+    // First, get the connected account details to retrieve the proper ID
+    const accountResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+
+    if (!accountResponse.ok) {
+      const errorText = await accountResponse.text();
+      console.error("Failed to get account:", errorText);
+      throw new Error("Failed to get connected account");
+    }
+
+    const accountData = await accountResponse.json();
+    const accountId = accountData.id || connectionId;
+    console.log(`Account ID: ${accountId}`);
+
+    // Use the v1 API with the account ID for action execution
+    const searchResponse = await fetch("https://backend.composio.dev/api/v1/actions/GMAIL_SEARCH_EMAILS/execute", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        connectedAccountId: connectionId,
+        connectedAccountId: accountId,
         input: {
           query: query,
           max_results: 20,
@@ -71,46 +91,60 @@ serve(async (req) => {
       }),
     });
 
-    const searchData = await searchResponse.json();
+    const searchText = await searchResponse.text();
     console.log(`Search response status: ${searchResponse.status}`);
 
     if (!searchResponse.ok) {
-      console.error("Composio search error:", searchData);
+      console.error("Composio search error:", searchText);
       throw new Error("Failed to search emails");
     }
+
+    let searchData;
+    try {
+      searchData = JSON.parse(searchText);
+    } catch {
+      console.error("Failed to parse search response:", searchText);
+      throw new Error("Invalid search response");
+    }
+
+    console.log(`Search data keys: ${Object.keys(searchData).join(', ')}`);
 
     // Extract unique contacts from search results
     const contacts: { email: string; name?: string }[] = [];
     const seenEmails = new Set<string>();
 
-    const messages = searchData.data?.messages || searchData.messages || [];
+    // Handle various response formats
+    const responseData = searchData.response?.data || searchData.data || searchData;
+    const messages = responseData?.messages || responseData?.results || [];
     
+    console.log(`Found ${messages.length} messages`);
+
     for (const message of messages) {
       // Extract from field
-      const from = message.from || message.sender;
+      const from = message.from || message.sender || message.From;
       if (from) {
         const emailMatch = from.match(/<([^>]+)>/) || [null, from];
         const email = emailMatch[1]?.toLowerCase().trim();
         const nameMatch = from.match(/^([^<]+)</);
         const name = nameMatch?.[1]?.trim();
 
-        if (email && !seenEmails.has(email)) {
+        if (email && email.includes('@') && !seenEmails.has(email)) {
           seenEmails.add(email);
           contacts.push({ email, name });
         }
       }
 
       // Extract to field
-      const to = message.to || message.recipient;
+      const to = message.to || message.recipient || message.To;
       if (to) {
-        const toEmails = to.split(",");
+        const toEmails = String(to).split(",");
         for (const toEmail of toEmails) {
           const emailMatch = toEmail.match(/<([^>]+)>/) || [null, toEmail];
           const email = emailMatch[1]?.toLowerCase().trim();
           const nameMatch = toEmail.match(/^([^<]+)</);
           const name = nameMatch?.[1]?.trim();
 
-          if (email && !seenEmails.has(email)) {
+          if (email && email.includes('@') && !seenEmails.has(email)) {
             seenEmails.add(email);
             contacts.push({ email, name });
           }
@@ -118,13 +152,14 @@ serve(async (req) => {
       }
     }
 
-    // Also filter by query in case Composio didn't filter properly
+    // Filter by query
+    const queryLower = query.toLowerCase();
     const filteredContacts = contacts.filter(c => 
-      c.email.toLowerCase().includes(query.toLowerCase()) ||
-      c.name?.toLowerCase().includes(query.toLowerCase())
+      c.email.toLowerCase().includes(queryLower) ||
+      c.name?.toLowerCase().includes(queryLower)
     );
 
-    console.log(`Found ${filteredContacts.length} contacts`);
+    console.log(`Found ${filteredContacts.length} matching contacts`);
 
     return new Response(
       JSON.stringify({ contacts: filteredContacts.slice(0, 10) }),
