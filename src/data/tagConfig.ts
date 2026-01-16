@@ -13,6 +13,8 @@ import {
   Coffee,
   Mail,
   Receipt,
+  User,
+  Tag,
   LucideIcon,
 } from "lucide-react";
 
@@ -42,14 +44,26 @@ export const TAG_CATEGORIES: TagConfig[] = [
   { id: 'event', label: 'Event', gradient: 'bg-gradient-to-r from-pink-400 to-rose-500', icon: Calendar },
   { id: 'reminder', label: 'Reminder', gradient: 'bg-gradient-to-r from-yellow-400 to-amber-500', icon: Bell },
   { id: 'lifestyle', label: 'Lifestyle', gradient: 'bg-gradient-to-r from-violet-400 to-purple-500', icon: Coffee },
+  { id: 'identity', label: 'Identity', gradient: 'bg-gradient-to-r from-slate-400 to-gray-500', icon: User },
 ];
 
 /**
+ * Check if a tag ID is a known/predefined tag.
+ */
+export function isKnownTag(tagId?: string): boolean {
+  if (!tagId) return false;
+  const normalized = tagId.toLowerCase().replace(/\s+/g, '_');
+  return TAG_CATEGORIES.some(t => 
+    t.id === normalized || normalized.includes(t.id) || t.id.includes(normalized)
+  );
+}
+
+/**
  * Get tag configuration by ID.
- * Falls back to 'quick_note' if not found.
+ * For unknown tags, creates a dynamic TagConfig instead of defaulting to quick_note.
  */
 export function getTagById(tagId?: string): TagConfig {
-  if (!tagId) return TAG_CATEGORIES[0];
+  if (!tagId) return TAG_CATEGORIES[0]; // Default for empty/null
   
   const normalized = tagId.toLowerCase().replace(/\s+/g, '_');
   const found = TAG_CATEGORIES.find(t => t.id === normalized);
@@ -63,7 +77,14 @@ export function getTagById(tagId?: string): TagConfig {
     }
   }
   
-  return TAG_CATEGORIES[0]; // Default to quick_note
+  // Return a dynamic TagConfig for unknown/custom tags
+  // This allows custom tags to be displayed without forcing them to quick_note
+  return {
+    id: normalized,
+    label: tagId.charAt(0).toUpperCase() + tagId.slice(1).replace(/_/g, ' '),
+    gradient: 'bg-gradient-to-r from-gray-400 to-slate-500',
+    icon: Tag,
+  };
 }
 
 /**
@@ -73,4 +94,11 @@ export function getPrimaryTags(): TagConfig[] {
   return TAG_CATEGORIES.filter(t => 
     ['quick_note', 'family', 'work', 'food', 'shopping', 'personal', 'health', 'travel'].includes(t.id)
   );
+}
+
+/**
+ * Get all valid tag IDs for AI suggestions and validation.
+ */
+export function getValidTagIds(): string[] {
+  return TAG_CATEGORIES.map(t => t.id);
 }
