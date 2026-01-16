@@ -107,22 +107,27 @@ export default function FlowPage() {
   };
 
   const handleSaveReceipt = async (memoryString: string) => {
+    console.log('[FlowPage] handleSaveReceipt called with:', memoryString.substring(0, 50));
     setIsConfirming(true);
     
+    // Optimistically add to pending so it shows immediately
+    const pendingData = {
+      content: memoryString,
+      createdAt: new Date().toISOString(),
+    };
+    console.log('[FlowPage] Setting pending memory:', pendingData);
+    setPendingReceiptMemory(pendingData);
+    
+    // Navigate to list immediately for optimistic UI
+    setReceiptPhase('list');
+    setSelectedImage(null);
+    setSelectedFile(null);
+    setReceiptData(null);
+    
     try {
-      // Optimistically add to pending so it shows immediately
-      setPendingReceiptMemory({
-        content: memoryString,
-        createdAt: new Date().toISOString(),
-      });
-      
-      // Navigate to list immediately for optimistic UI
-      setReceiptPhase('list');
-      setSelectedImage(null);
-      setSelectedFile(null);
-      setReceiptData(null);
-      
+      console.log('[FlowPage] Calling createMemory...');
       const success = await createMemory(memoryString, 'RECEIPTS');
+      console.log('[FlowPage] createMemory result:', success);
       
       if (success) {
         toast({
@@ -130,6 +135,7 @@ export default function FlowPage() {
           description: "Your purchase has been added to memory.",
         });
         // Trigger a refresh to fetch the actual saved memory from API
+        console.log('[FlowPage] Incrementing refreshKey');
         setReceiptListRefreshKey(prev => prev + 1);
         // Clear pending once the API has been updated
         setPendingReceiptMemory(null);

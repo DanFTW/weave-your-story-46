@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Receipt, Plus, Loader2, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ export function ReceiptMemoryList({ onAddNew, refreshKey = 0, pendingMemory }: R
   const { listMemories, isListing } = useLiamMemory();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
+
+  console.log('[ReceiptMemoryList] Render - refreshKey:', refreshKey, 'pendingMemory:', pendingMemory?.content?.substring(0, 50));
 
   useEffect(() => {
     const fetchMemories = async () => {
@@ -70,8 +72,25 @@ export function ReceiptMemoryList({ onAddNew, refreshKey = 0, pendingMemory }: R
     );
   }
 
-  // Empty state
-  if (hasLoaded && memories.length === 0) {
+  // Combine pending memory with fetched memories for optimistic UI
+  // Use useMemo to avoid recreating the pending memory object on every render
+  const displayMemories = useMemo(() => {
+    if (pendingMemory) {
+      return [
+        {
+          id: 'pending-receipt',
+          content: pendingMemory.content,
+          tag: 'receipts',
+          createdAt: pendingMemory.createdAt,
+        },
+        ...memories,
+      ];
+    }
+    return memories;
+  }, [pendingMemory, memories]);
+
+  // Empty state - check displayMemories to account for pending
+  if (hasLoaded && displayMemories.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 space-y-6">
         <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
@@ -95,19 +114,6 @@ export function ReceiptMemoryList({ onAddNew, refreshKey = 0, pendingMemory }: R
       </div>
     );
   }
-
-  // Combine pending memory with fetched memories for optimistic UI
-  const displayMemories = pendingMemory
-    ? [
-        {
-          id: 'pending-' + Date.now(),
-          content: pendingMemory.content,
-          tag: 'receipts',
-          createdAt: pendingMemory.createdAt,
-        },
-        ...memories,
-      ]
-    : memories;
 
   // List of receipt memories
   return (
