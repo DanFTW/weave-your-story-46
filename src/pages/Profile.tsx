@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Key } from "lucide-react";
+import { Key, LogOut } from "lucide-react";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileSettingsCard, SettingsRow } from "@/components/profile/ProfileSettingsCard";
 import { BellIcon, EyeIcon, SparkleIcon } from "@/components/profile/ProfileIcons";
@@ -9,6 +9,9 @@ import { ProfileEditDrawer } from "@/components/profile/ProfileEditDrawer";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useUserApiKeys } from "@/hooks/useUserApiKeys";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -30,6 +33,15 @@ export default function Profile() {
 
   const handleEditClick = () => {
     setEditDrawerOpen(true);
+  };
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Failed to log out");
+    } else {
+      navigate('/login');
+    }
   };
 
   return (
@@ -88,6 +100,16 @@ export default function Profile() {
 
         {/* MCP URL Swipe to Unlock */}
         <SwipeToUnlock mcpUrl={mcpUrl} />
+
+        {/* Logout Button */}
+        <Button
+          variant="outline"
+          className="w-full h-12 text-destructive border-destructive/30 hover:bg-destructive/10"
+          onClick={handleLogout}
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Log Out
+        </Button>
       </div>
 
       {/* Edit Profile Drawer */}
