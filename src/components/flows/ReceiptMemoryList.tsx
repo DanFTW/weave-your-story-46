@@ -15,17 +15,15 @@ interface Memory {
 
 interface ReceiptMemoryListProps {
   onAddNew: () => void;
-  refreshTrigger?: number;
 }
 
-export function ReceiptMemoryList({ onAddNew, refreshTrigger = 0 }: ReceiptMemoryListProps) {
+export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
   const { listMemories, isListing } = useLiamMemory();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
   useEffect(() => {
     const fetchMemories = async () => {
-      setHasLoaded(false);
       const result = await listMemories();
       if (result) {
         // Filter to only receipt memories
@@ -38,7 +36,7 @@ export function ReceiptMemoryList({ onAddNew, refreshTrigger = 0 }: ReceiptMemor
     };
 
     fetchMemories();
-  }, [refreshTrigger]);
+  }, []);
 
   // Parse receipt memory to extract store name and amount
   const parseReceiptMemory = (content: string) => {
