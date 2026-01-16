@@ -10,6 +10,7 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { useComposio } from "@/hooks/useComposio";
+import { isMedian, median } from "@/utils/median";
 
 export default function IntegrationDetail() {
   const { integrationId } = useParams<{ integrationId: string }>();
@@ -40,8 +41,33 @@ export default function IntegrationDetail() {
     if (connected === "true" && !isProcessingCallback) {
       setIsProcessingCallback(true);
       
-      // Complete the connection
-      completeConnection().then((result) => {
+      // Complete the connection with retry logic
+      const completeWithRetry = async (retries = 3): Promise<boolean> => {
+        const result = await completeConnection();
+        
+        if (result?.success) {
+          return true;
+        }
+        
+        // Retry if not immediately successful (Composio webhook delay)
+        if (retries > 0) {
+          console.log(`Connection not ready, retrying... (${retries} attempts left)`);
+          await new Promise(r => setTimeout(r, 1000));
+          return completeWithRetry(retries - 1);
+        }
+        
+        return false;
+      };
+      
+      completeWithRetry().then(async (success) => {
+        // If we're in Median App Browser, auto-close it
+        if (isMedian() && success) {
+          console.log("OAuth successful in Median, closing app browser...");
+          // Small delay to ensure UI state updates
+          await new Promise(r => setTimeout(r, 500));
+          median.appbrowser.close();
+        }
+        
         // Remove the query param from URL
         navigate(`/integration/${integrationId}`, { replace: true });
         setIsProcessingCallback(false);

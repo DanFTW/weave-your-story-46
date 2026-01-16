@@ -41,6 +41,19 @@ export const median = {
       return false;
     },
   },
+  appbrowser: {
+    /**
+     * Close the currently open app browser
+     * This returns the user to the main webview after OAuth completion
+     */
+    close: (): boolean => {
+      if (isMedian() && window.median?.appbrowser?.close) {
+        window.median.appbrowser.close();
+        return true;
+      }
+      return false;
+    },
+  },
   /**
    * Get the app's custom URL scheme configured in Median App Studio
    * Format: scheme.https://domain/path will be intercepted by the app
