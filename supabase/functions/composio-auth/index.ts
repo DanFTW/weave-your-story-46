@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3";
-const GMAIL_AUTH_CONFIG_ID = "ac_JO3RFglIYYKs";
 
 interface InitiateRequest {
   action: "initiate";
@@ -27,6 +26,69 @@ interface DisconnectRequest {
 }
 
 type RequestBody = InitiateRequest | StatusRequest | DisconnectRequest;
+
+// Helper to get or create a Composio-managed auth config for a toolkit
+async function getOrCreateManagedAuthConfig(
+  apiKey: string,
+  toolkit: string
+): Promise<string> {
+  const toolkitUpper = toolkit.toUpperCase();
+  
+  // First, try to find an existing managed auth config for this toolkit
+  console.log(`Looking for existing managed auth config for ${toolkitUpper}`);
+  
+  const listResponse = await fetch(
+    `${COMPOSIO_API_BASE}/auth-configs?toolkit=${toolkitUpper}`,
+    {
+      headers: { "x-api-key": apiKey },
+    }
+  );
+
+  if (listResponse.ok) {
+    const configs = await listResponse.json();
+    console.log(`Found ${configs.items?.length || 0} auth configs for ${toolkitUpper}`);
+    
+    // Look for an existing managed config that is active
+    const managedConfig = configs.items?.find(
+      (c: { type?: string; status?: string }) => 
+        c.type === "use_composio_managed_auth" && c.status === "ACTIVE"
+    );
+    
+    if (managedConfig) {
+      console.log(`Using existing managed auth config: ${managedConfig.id}`);
+      return managedConfig.id;
+    }
+  } else {
+    console.log(`List auth configs failed: ${listResponse.status}`);
+  }
+
+  // If none exists, create a new managed auth config
+  console.log(`Creating new managed auth config for ${toolkitUpper}`);
+  
+  const createResponse = await fetch(`${COMPOSIO_API_BASE}/auth-configs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      toolkit: toolkitUpper,
+      name: `${toolkit} Managed Auth`,
+      type: "use_composio_managed_auth",
+      auth_scheme: "OAUTH2",
+    }),
+  });
+
+  if (!createResponse.ok) {
+    const errorText = await createResponse.text();
+    console.error("Failed to create auth config:", createResponse.status, errorText);
+    throw new Error(`Failed to create auth configuration: ${errorText}`);
+  }
+
+  const newConfig = await createResponse.json();
+  console.log(`Created managed auth config: ${newConfig.id}`);
+  return newConfig.id;
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -85,6 +147,14 @@ serve(async (req) => {
         console.log(`Initiating OAuth for integration: ${integrationId}`);
         console.log(`Redirect URL: ${redirectUrl}`);
         
+        // Get or create a managed auth config for this integration
+        const authConfigId = await getOrCreateManagedAuthConfig(
+          COMPOSIO_API_KEY,
+          integrationId
+        );
+        
+        console.log(`Using auth config: ${authConfigId}`);
+        
         // Create connection request to Composio
         const composioResponse = await fetch(`${COMPOSIO_API_BASE}/connected_accounts`, {
           method: "POST",
@@ -94,7 +164,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             auth_config: {
-              id: GMAIL_AUTH_CONFIG_ID,
+              id: authConfigId,
             },
             connection: {
               status: "INITIALIZING",
