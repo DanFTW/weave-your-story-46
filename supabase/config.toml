@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.process-receipt]
 verify_jwt = false
+
+[functions.composio-auth]
+verify_jwt = false

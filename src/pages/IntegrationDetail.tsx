@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
 import { IntegrationLargeIcon } from "@/components/integrations/IntegrationLargeIcon";
@@ -9,23 +8,21 @@ import { IntegrationConnectButton } from "@/components/integrations/IntegrationC
 import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationCapabilityTag";
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
-
-// Mock connected account data - will be replaced with real data from OAuth
-interface ConnectedAccount {
-  avatarUrl?: string;
-  name: string;
-  email: string;
-}
+import { useIntegrationConnection } from "@/hooks/useIntegrationConnection";
 
 export default function IntegrationDetail() {
   const { integrationId } = useParams<{ integrationId: string }>();
   const navigate = useNavigate();
   
-  // For demo purposes, toggle between connected/disconnected states
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
-
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
+  
+  const {
+    isConnected,
+    isLoading,
+    connectionData,
+    initiateConnection,
+    disconnect,
+  } = useIntegrationConnection(integrationId || "");
 
   if (!integration) {
     return (
@@ -35,20 +32,14 @@ export default function IntegrationDetail() {
     );
   }
 
-  const handleConnect = () => {
-    // TODO: Implement actual OAuth flow
-    // For now, simulate a successful connection
-    setIsConnected(true);
-    setConnectedAccount({
-      name: "Mari Kondo",
-      email: "doesitbringjoy@domain.com",
-      avatarUrl: undefined, // Will show initials fallback
-    });
+  const handleConnect = async () => {
+    await initiateConnection();
   };
 
-  const handleChangeAccount = () => {
-    // TODO: Implement account change flow
-    console.log("Change account");
+  const handleChangeAccount = async () => {
+    // Disconnect and reconnect
+    await disconnect();
+    await initiateConnection();
   };
 
   const handleDone = () => {
@@ -104,72 +95,81 @@ export default function IntegrationDetail() {
         transition={{ duration: 0.4, delay: 0.2 }}
         className="flex-1 bg-card rounded-t-3xl -mt-6 relative z-10 px-6 pt-8 pb-8 flex flex-col"
       >
-        {/* Details Section */}
-        <section>
-          <h2 className="text-2xl font-bold text-foreground mb-3">Details</h2>
-          <p className="text-base text-muted-foreground leading-relaxed">
-            {integration.description}
-          </p>
-        </section>
-
-        {/* Connected State: Account Section */}
-        {isConnected && connectedAccount ? (
-          <>
-            <div className="mt-8">
-              <IntegrationConnectedAccount
-                avatarUrl={connectedAccount.avatarUrl}
-                name={connectedAccount.name}
-                email={connectedAccount.email}
-                onChangeAccount={handleChangeAccount}
-              />
-            </div>
-
-            {/* Divider */}
-            <div className="my-6 border-t border-border" />
-
-            {/* Capabilities Section */}
-            <section>
-              <h2 className="text-lg font-semibold text-foreground mb-4">Capabilities</h2>
-              <div className="flex flex-wrap gap-2">
-                {integration.capabilities.map((capability) => (
-                  <IntegrationCapabilityTag key={capability} label={capability} />
-                ))}
-              </div>
-            </section>
-
-            {/* Associated threads (placeholder) */}
-            <section className="mt-6">
-              <h2 className="text-lg font-semibold text-muted-foreground/60 mb-4">Associated threads</h2>
-              {/* Threads will be added here */}
-            </section>
-
-            {/* Spacer to push button to bottom */}
-            <div className="flex-1 min-h-8" />
-
-            {/* Done Button */}
-            <div className="mt-auto">
-              <IntegrationDoneButton onClick={handleDone} />
-            </div>
-          </>
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          </div>
         ) : (
           <>
-            {/* Disconnected State: Connect Button */}
-            <div className="mt-8">
-              <IntegrationConnectButton onClick={handleConnect} />
-            </div>
-
-            {/* Divider */}
-            <div className="my-8 border-t border-border" />
-
-            {/* Capabilities Section */}
+            {/* Details Section */}
             <section>
-              <h2 className="text-lg font-semibold text-foreground mb-4">Capabilities</h2>
-              <div className="flex flex-wrap gap-2">
-                {integration.capabilities.map((capability) => (
-                  <IntegrationCapabilityTag key={capability} label={capability} />
-                ))}
-              </div>
+              <h2 className="text-2xl font-bold text-foreground mb-3">Details</h2>
+              <p className="text-base text-muted-foreground leading-relaxed">
+                {integration.description}
+              </p>
             </section>
+
+            {/* Connected State: Account Section */}
+            {isConnected && connectionData ? (
+              <>
+                <div className="mt-8">
+                  <IntegrationConnectedAccount
+                    avatarUrl={connectionData.avatarUrl}
+                    name={connectionData.name || "Connected Account"}
+                    email={connectionData.email || "Email not available"}
+                    onChangeAccount={handleChangeAccount}
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="my-6 border-t border-border" />
+
+                {/* Capabilities Section */}
+                <section>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Capabilities</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {integration.capabilities.map((capability) => (
+                      <IntegrationCapabilityTag key={capability} label={capability} />
+                    ))}
+                  </div>
+                </section>
+
+                {/* Associated threads (placeholder) */}
+                <section className="mt-6">
+                  <h2 className="text-lg font-semibold text-muted-foreground/60 mb-4">Associated threads</h2>
+                  {/* Threads will be added here */}
+                </section>
+
+                {/* Spacer to push button to bottom */}
+                <div className="flex-1 min-h-8" />
+
+                {/* Done Button */}
+                <div className="mt-auto">
+                  <IntegrationDoneButton onClick={handleDone} />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Disconnected State: Connect Button */}
+                <div className="mt-8">
+                  <IntegrationConnectButton onClick={handleConnect} />
+                </div>
+
+                {/* Divider */}
+                <div className="my-8 border-t border-border" />
+
+                {/* Capabilities Section */}
+                <section>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">Capabilities</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {integration.capabilities.map((capability) => (
+                      <IntegrationCapabilityTag key={capability} label={capability} />
+                    ))}
+                  </div>
+                </section>
+              </>
+            )}
           </>
         )}
       </motion.div>
