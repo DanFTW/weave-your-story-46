@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt } from "lucide-react";
+import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -9,6 +9,41 @@ interface MemoryCardProps {
   memory: Memory;
   index: number;
   isStacked?: boolean;
+}
+
+// Parse email content into structured parts
+function parseEmailContent(content: string): {
+  direction: 'incoming' | 'outgoing';
+  contact: string;
+  date: string;
+  subject: string;
+  body: string;
+} | null {
+  // Match: Email from <contact> on <date>: "<subject>" - <body>
+  const incomingMatch = content.match(/^Email from (.+?) on (.+?): "(.+?)" - ([\s\S]*)$/);
+  if (incomingMatch) {
+    return {
+      direction: 'incoming',
+      contact: incomingMatch[1],
+      date: incomingMatch[2],
+      subject: incomingMatch[3],
+      body: incomingMatch[4],
+    };
+  }
+  
+  // Match: Email sent to <contact> on <date>: "<subject>" - <body>
+  const outgoingMatch = content.match(/^Email sent to (.+?) on (.+?): "(.+?)" - ([\s\S]*)$/);
+  if (outgoingMatch) {
+    return {
+      direction: 'outgoing',
+      contact: outgoingMatch[1],
+      date: outgoingMatch[2],
+      subject: outgoingMatch[3],
+      body: outgoingMatch[4],
+    };
+  }
+  
+  return null;
 }
 
 // Map categories to icons and gradients
@@ -77,6 +112,52 @@ function parseTags(memory: Memory): string[] {
   return tags.slice(0, 3);
 }
 
+// Component to render formatted email content in card
+function EmailCardContent({ content }: { content: string }) {
+  const parsed = parseEmailContent(content);
+  
+  if (!parsed) {
+    return (
+      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+        {content}
+      </p>
+    );
+  }
+  
+  const DirectionIcon = parsed.direction === 'incoming' ? ArrowDownLeft : ArrowUpRight;
+  const directionLabel = parsed.direction === 'incoming' ? 'From' : 'To';
+  
+  return (
+    <div className="space-y-3">
+      {/* Email metadata */}
+      <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
+        <div className="flex items-start gap-2 text-sm">
+          <DirectionIcon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <span className="text-muted-foreground">{directionLabel}: </span>
+            <span className="text-foreground font-medium break-all">{parsed.contact}</span>
+          </div>
+        </div>
+        <div className="flex items-start gap-2 text-sm pl-6">
+          <span className="text-muted-foreground">Subject: </span>
+          <span className="text-foreground font-medium">{parsed.subject}</span>
+        </div>
+        <div className="flex items-start gap-2 text-sm pl-6">
+          <span className="text-muted-foreground">Date: </span>
+          <span className="text-foreground">{parsed.date}</span>
+        </div>
+      </div>
+      
+      {/* Full email body - no truncation */}
+      <div className="border-l-2 border-muted pl-3">
+        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+          {parsed.body}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps) {
   const navigate = useNavigate();
   const config = getCategoryConfig(memory.category, memory.tag, memory.content);
@@ -122,9 +203,17 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
       
       {/* Content Body */}
       <div className="px-3 py-3">
-        <p className="text-sm text-foreground leading-relaxed mb-2.5">
-          {description}
-        </p>
+        {/* Check if this is an email and render formatted content */}
+        {(memory.category?.toLowerCase() === 'email' || memory.tag?.toLowerCase() === 'email' || 
+          description.startsWith('Email from') || description.startsWith('Email sent to')) ? (
+          <div className="mb-2.5">
+            <EmailCardContent content={description} />
+          </div>
+        ) : (
+          <p className="text-sm text-foreground leading-relaxed mb-2.5 whitespace-pre-wrap">
+            {description}
+          </p>
+        )}
         
         {/* Tags */}
         {tags.length > 0 && (
