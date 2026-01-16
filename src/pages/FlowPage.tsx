@@ -175,7 +175,10 @@ export default function FlowPage() {
         {/* Content */}
         <div className="px-5 pt-5">
           {receiptPhase === 'list' && (
-            <ReceiptMemoryList key={receiptListKey} onAddNew={() => setReceiptPhase('upload')} />
+            <ReceiptMemoryList 
+              onAddNew={() => setReceiptPhase('upload')} 
+              refreshTrigger={receiptListKey}
+            />
           )}
           
           {receiptPhase === 'upload' && (

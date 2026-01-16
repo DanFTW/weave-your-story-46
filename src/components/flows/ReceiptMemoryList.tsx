@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Receipt, Plus, Loader2, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,28 +15,30 @@ interface Memory {
 
 interface ReceiptMemoryListProps {
   onAddNew: () => void;
+  refreshTrigger?: number;
 }
 
-export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
+export function ReceiptMemoryList({ onAddNew, refreshTrigger = 0 }: ReceiptMemoryListProps) {
   const { listMemories, isListing } = useLiamMemory();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
-  useEffect(() => {
-    const fetchMemories = async () => {
-      const result = await listMemories();
-      if (result) {
-        // Filter to only receipt memories
-        const receiptMemories = result.filter(
-          (m) => m.tag?.toLowerCase() === 'receipts' || m.tag?.toLowerCase() === 'receipt'
-        );
-        setMemories(receiptMemories);
-      }
-      setHasLoaded(true);
-    };
+  const fetchMemories = useCallback(async () => {
+    const result = await listMemories();
+    if (result) {
+      // Filter to only receipt memories
+      const receiptMemories = result.filter(
+        (m) => m.tag?.toLowerCase() === 'receipts' || m.tag?.toLowerCase() === 'receipt'
+      );
+      setMemories(receiptMemories);
+    }
+    setHasLoaded(true);
+  }, [listMemories]);
 
+  // Fetch on mount and when refreshTrigger changes
+  useEffect(() => {
     fetchMemories();
-  }, []);
+  }, [refreshTrigger, fetchMemories]);
 
   // Parse receipt memory to extract store name and amount
   const parseReceiptMemory = (content: string) => {
