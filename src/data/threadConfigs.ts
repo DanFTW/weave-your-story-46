@@ -1,4 +1,4 @@
-import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste } from "lucide-react";
+import { Mail, Send, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -94,6 +94,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         title: "Save Memory",
         description: "Receipt saved to your brain",
         icon: Wifi,
+        badge: "XD BRAIN",
+      },
+    ],
+  },
+  "email-dump": {
+    id: "email-dump",
+    title: "Email Dump",
+    subtitle: "Extract emails as memories",
+    description: "Search your Gmail contacts and save email conversations as memories.",
+    gradient: "blue",
+    icon: Inbox,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to your emails",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+      },
+      {
+        id: "search",
+        type: "setup",
+        title: "Search Contacts",
+        description: "Find emails by contact",
+        icon: Search,
+      },
+      {
+        id: "save",
+        type: "save",
+        title: "Save to Memory",
+        description: "Extract and save as memories",
+        icon: Download,
         badge: "XD BRAIN",
       },
     ],

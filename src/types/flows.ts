@@ -31,6 +31,7 @@ export interface FlowConfig {
   singleEntry?: boolean; // If true, only one entry (like food preferences)
   isReceiptFlow?: boolean; // If true, uses receipt scanning UI
   isLLMImportFlow?: boolean; // If true, uses LLM import UI
+  isEmailDumpFlow?: boolean; // If true, uses email dump UI
 }
 
 // Single data entry (e.g., one family member)
