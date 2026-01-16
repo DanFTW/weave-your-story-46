@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader } from "@/components/PageHeader";
 import { MemoryFilterBar } from "@/components/memories/MemoryFilterBar";
 import { MemoryList } from "@/components/memories/MemoryList";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
@@ -7,6 +6,7 @@ import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { Memory } from "@/types/memory";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
 
 export default function Memories() {
   const [activeFilter, setActiveFilter] = useState("all");
@@ -47,21 +47,28 @@ export default function Memories() {
   return (
     <div className="pb-nav">
       <div className="px-5">
-        <div className="flex items-start justify-between">
-          <PageHeader 
-            title="Memories" 
-            subtitle="All your saved memories" 
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isListing || isRefreshing}
-            className="mt-6 shrink-0"
-          >
-            <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
+        <motion.header
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="pt-safe-top pb-6"
+        >
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold text-foreground tracking-tight">
+              Memories
+            </h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={isListing || isRefreshing}
+              className="shrink-0"
+            >
+              <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+          <p className="text-muted-foreground mt-1 text-sm">All your saved memories</p>
+        </motion.header>
         
         {/* Filter Bar */}
         <div className="mt-6 mb-8">
