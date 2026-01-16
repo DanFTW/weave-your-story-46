@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -298,6 +298,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "EMAIL",
     fields: [],
     isEmailDumpFlow: true,
+  },
+  "email-automation": {
+    id: "email-automation",
+    title: "Email Automation",
+    subtitle: "Monitor contacts automatically",
+    description: "Automatically save emails from specific contacts as memories.",
+    gradient: "teal",
+    icon: Mail,
+    entryName: "contact",
+    entryNamePlural: "contacts",
+    memoryTag: "email",
+    fields: [],
+    isEmailAutomationFlow: true,
   },
 };
 

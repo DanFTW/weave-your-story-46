@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      email_automation_contacts: {
+        Row: {
+          contact_name: string | null
+          created_at: string | null
+          email_address: string
+          id: string
+          incoming_trigger_id: string | null
+          is_active: boolean | null
+          monitor_incoming: boolean | null
+          monitor_outgoing: boolean | null
+          outgoing_trigger_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          contact_name?: string | null
+          created_at?: string | null
+          email_address: string
+          id?: string
+          incoming_trigger_id?: string | null
+          is_active?: boolean | null
+          monitor_incoming?: boolean | null
+          monitor_outgoing?: boolean | null
+          outgoing_trigger_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          contact_name?: string | null
+          created_at?: string | null
+          email_address?: string
+          id?: string
+          incoming_trigger_id?: string | null
+          is_active?: boolean | null
+          monitor_incoming?: boolean | null
+          monitor_outgoing?: boolean | null
+          outgoing_trigger_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

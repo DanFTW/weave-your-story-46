@@ -32,6 +32,9 @@ import { LLMImportSuccess } from "@/components/flows/llm-import/LLMImportSuccess
 // Email Dump components
 import { EmailDumpFlow } from "@/components/flows/email-dump/EmailDumpFlow";
 
+// Email Automation components
+import { EmailAutomationFlow } from "@/components/flows/email-automation";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -150,6 +153,12 @@ export default function FlowPage() {
   
   if (config.isEmailDumpFlow) {
     return <EmailDumpFlow />;
+  }
+
+  // === EMAIL AUTOMATION FLOW RENDER ===
+  
+  if (config.isEmailAutomationFlow) {
+    return <EmailAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===
