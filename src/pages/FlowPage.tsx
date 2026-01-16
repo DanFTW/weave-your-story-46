@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { getFlowConfig } from "@/data/flowConfigs";
@@ -22,6 +22,7 @@ import { FlowConfigured } from "@/components/flows/FlowConfigured";
 // Receipt-specific components
 import { ReceiptUploader } from "@/components/flows/ReceiptUploader";
 import { ReceiptPreview } from "@/components/flows/ReceiptPreview";
+import { ReceiptMemoryListRef } from "@/components/flows/ReceiptMemoryList";
 import { ReceiptMemoryList } from "@/components/flows/ReceiptMemoryList";
 
 // LLM Import components
@@ -51,7 +52,7 @@ export default function FlowPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-  const [receiptListKey, setReceiptListKey] = useState(0); // Key to force re-fetch on save
+  const receiptListRef = useRef<ReceiptMemoryListRef>(null);
   
   // LLM Import state
   const [llmImportPhase, setLLMImportPhase] = useState<LLMImportPhase>('category-select');
@@ -117,14 +118,19 @@ export default function FlowPage() {
           description: "Your purchase has been added to memory.",
         });
         
-        // Increment key to force ReceiptMemoryList to remount and re-fetch
-        setReceiptListKey(prev => prev + 1);
+        // Optimistically add the memory to the list immediately
+        receiptListRef.current?.addOptimisticMemory(memoryString);
         
         // Reset and go back to list
         setReceiptPhase('list');
         setSelectedImage(null);
         setSelectedFile(null);
         setReceiptData(null);
+        
+        // Also do a background refresh after a delay to get the real ID from API
+        setTimeout(() => {
+          receiptListRef.current?.refresh();
+        }, 2000);
       }
     } catch (error) {
       console.error('Failed to save receipt:', error);
@@ -178,7 +184,7 @@ export default function FlowPage() {
         {/* Content */}
         <div className="px-5 pt-5">
           {receiptPhase === 'list' && (
-            <ReceiptMemoryList key={receiptListKey} onAddNew={() => setReceiptPhase('upload')} />
+            <ReceiptMemoryList ref={receiptListRef} onAddNew={() => setReceiptPhase('upload')} />
           )}
           
           {receiptPhase === 'upload' && (
