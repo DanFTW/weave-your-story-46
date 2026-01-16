@@ -55,11 +55,12 @@ function formatEmailAsMemory(email: EmailPayload, isIncoming: boolean): string {
   }
 }
 
-// Import private key for signing
+// Import private key for signing - handles both PKCS#8 and EC PRIVATE KEY formats
 async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
+  // Handle both PKCS#8 (-----BEGIN PRIVATE KEY-----) and EC (-----BEGIN EC PRIVATE KEY-----) formats
   const pemContent = pemKey
-    .replace(/-----BEGIN EC PRIVATE KEY-----/g, '')
-    .replace(/-----END EC PRIVATE KEY-----/g, '')
+    .replace(/-----BEGIN (EC )?PRIVATE KEY-----/g, '')
+    .replace(/-----END (EC )?PRIVATE KEY-----/g, '')
     .replace(/\s/g, '');
   
   const binaryDer = Uint8Array.from(atob(pemContent), c => c.charCodeAt(0));
@@ -122,9 +123,15 @@ async function saveMemoryToLiam(
   userKey: string
 ): Promise<boolean> {
   try {
+    console.log("Importing private key, length:", privateKey.length);
+    console.log("Private key format starts with:", privateKey.substring(0, 30));
+    
     const cryptoKey = await importPrivateKey(privateKey);
+    console.log("Private key imported successfully");
+    
     const requestBody = { text: memoryText, tags: ['email'] };
     const signature = await signRequest(cryptoKey, requestBody);
+    console.log("Request signed successfully");
 
     const response = await fetch(`${LIAM_API_BASE}/memory/create`, {
       method: 'POST',
@@ -143,10 +150,11 @@ async function saveMemoryToLiam(
       return false;
     }
 
-    console.log('Memory saved successfully');
+    console.log('Memory saved successfully to LIAM');
     return true;
   } catch (error) {
     console.error('Failed to save memory:', error);
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
     return false;
   }
 }

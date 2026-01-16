@@ -124,7 +124,7 @@ serve(async (req) => {
                 body: JSON.stringify({
                   connected_account_id: connectedAccountId,
                   trigger_config: {
-                    interval: 5,
+                    interval: 1,
                     query: `from:${contact.email}`,
                     labelIds: "INBOX",
                     userId: "me",
@@ -163,7 +163,7 @@ serve(async (req) => {
                 body: JSON.stringify({
                   connected_account_id: connectedAccountId,
                   trigger_config: {
-                    interval: 5,
+                    interval: 1,
                     query: `to:${contact.email}`,
                     userId: "me",
                   },
