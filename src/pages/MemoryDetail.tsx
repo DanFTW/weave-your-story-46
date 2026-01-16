@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock, Pencil } from "lucide-react";
+import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock, Pencil, Mail, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { Memory } from "@/types/memory";
@@ -9,6 +9,105 @@ import { getTagById } from "@/data/tagConfig";
 import { TagSelectionSheet } from "@/components/memories/TagSelectionSheet";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
+
+// Parse email content into structured parts
+function parseEmailContent(content: string): {
+  direction: 'incoming' | 'outgoing';
+  contact: string;
+  date: string;
+  subject: string;
+  body: string;
+} | null {
+  // Match: Email from <contact> on <date>: "<subject>" - <body>
+  const incomingMatch = content.match(/^Email from (.+?) on (.+?): "(.+?)" - ([\s\S]*)$/);
+  if (incomingMatch) {
+    return {
+      direction: 'incoming',
+      contact: incomingMatch[1],
+      date: incomingMatch[2],
+      subject: incomingMatch[3],
+      body: incomingMatch[4],
+    };
+  }
+  
+  // Match: Email sent to <contact> on <date>: "<subject>" - <body>
+  const outgoingMatch = content.match(/^Email sent to (.+?) on (.+?): "(.+?)" - ([\s\S]*)$/);
+  if (outgoingMatch) {
+    return {
+      direction: 'outgoing',
+      contact: outgoingMatch[1],
+      date: outgoingMatch[2],
+      subject: outgoingMatch[3],
+      body: outgoingMatch[4],
+    };
+  }
+  
+  return null;
+}
+
+// Component to display formatted email content
+function EmailContent({ content }: { content: string }) {
+  const parsed = parseEmailContent(content);
+  
+  if (!parsed) {
+    // Fallback to plain text if parsing fails
+    return (
+      <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">
+        {content}
+      </p>
+    );
+  }
+  
+  const DirectionIcon = parsed.direction === 'incoming' ? ArrowDownLeft : ArrowUpRight;
+  const directionLabel = parsed.direction === 'incoming' ? 'From' : 'To';
+  const directionColor = parsed.direction === 'incoming' 
+    ? 'text-cyan-600 dark:text-cyan-400' 
+    : 'text-blue-600 dark:text-blue-400';
+  
+  return (
+    <div className="space-y-4">
+      {/* Direction Badge */}
+      <div className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full",
+        parsed.direction === 'incoming' 
+          ? "bg-cyan-100 dark:bg-cyan-900/30" 
+          : "bg-blue-100 dark:bg-blue-900/30"
+      )}>
+        <DirectionIcon className={cn("h-3.5 w-3.5", directionColor)} />
+        <span className={cn("text-xs font-medium", directionColor)}>
+          {parsed.direction === 'incoming' ? 'Incoming Email' : 'Outgoing Email'}
+        </span>
+      </div>
+      
+      {/* Email Header */}
+      <div className="rounded-xl bg-muted/50 p-4 space-y-2">
+        <div className="flex items-start gap-2">
+          <span className="text-sm text-muted-foreground min-w-[50px]">{directionLabel}:</span>
+          <span className="text-sm text-foreground font-medium">{parsed.contact}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-sm text-muted-foreground min-w-[50px]">Date:</span>
+          <span className="text-sm text-foreground">{parsed.date}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-sm text-muted-foreground min-w-[50px]">Subject:</span>
+          <span className="text-sm text-foreground font-medium">{parsed.subject}</span>
+        </div>
+      </div>
+      
+      {/* Email Body */}
+      <div className="rounded-xl border border-border/50 p-4">
+        <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1.5">
+          <Mail className="h-4 w-4" />
+          Message
+        </p>
+        <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">
+          {parsed.body}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function MemoryDetail() {
   const { memoryId } = useParams<{ memoryId: string }>();
@@ -162,9 +261,15 @@ export default function MemoryDetail() {
           </div>
 
           {/* Memory Content */}
-          <p className="text-base leading-relaxed text-foreground mt-4">
-            {memory.content}
-          </p>
+          <div className="mt-4">
+            {memory.category?.toLowerCase() === 'email' || memory.tag?.toLowerCase() === 'email' ? (
+              <EmailContent content={memory.content} />
+            ) : (
+              <p className="text-base leading-relaxed text-foreground">
+                {memory.content}
+              </p>
+            )}
+          </div>
 
           {/* Memory Details */}
           <div className="mt-6 space-y-3">
