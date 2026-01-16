@@ -127,26 +127,28 @@ export function FlowConfigured({
     <div className="min-h-screen bg-background">
       {/* Header with success message */}
       <div className={cn("relative px-5 pt-12 pb-6", gradientClasses[config.gradient])}>
-        <button
-          onClick={() => navigate('/threads')}
-          className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-4"
-        >
-          <ChevronLeft className="w-6 h-6 text-white" />
-        </button>
-        
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+          <button
+            onClick={() => navigate('/threads')}
+            className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+          >
+            <ChevronLeft className="w-6 h-6 text-white" />
+          </button>
+          
+          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
             <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />
           </div>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-white">
+          
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold text-white truncate">
               {config.title}
             </h1>
-            <p className="text-white/70 text-sm">
+            <p className="text-white/70 text-sm truncate">
               {savedMemories.length} memories saved
             </p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+          
+          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
             <Check className="w-5 h-5 text-white" />
           </div>
         </div>
