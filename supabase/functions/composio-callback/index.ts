@@ -23,6 +23,17 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
+// Map Composio app keys to our integration IDs
+const APP_TO_TOOLKIT: Record<string, string> = {
+  "gmail": "gmail",
+  "googlemail": "gmail", 
+  "google_gmail": "gmail",
+  "spotify": "spotify",
+  "instagram": "instagram",
+  "youtube": "youtube",
+  "pinterest": "pinterest",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -30,23 +41,25 @@ serve(async (req) => {
 
   try {
     if (!COMPOSIO_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Missing required environment variables");
+      console.error("Missing required environment variables");
+      throw new Error("Server configuration error");
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { connectionId, userId, toolkit } = await req.json();
+    const { connectionId, userId, toolkit: toolkitFromRequest } = await req.json();
 
-    console.log(`Processing callback for connectionId: ${connectionId}`);
-    console.log(`User ID: ${userId}, Toolkit: ${toolkit}`);
+    console.log(`composio-callback: Processing connectionId=${connectionId}, userId=${userId}, toolkit=${toolkitFromRequest}`);
 
     if (!connectionId) {
+      console.error("composio-callback: Missing connectionId");
       return new Response(
-        JSON.stringify({ error: "Missing connectionId" }),
+        JSON.stringify({ success: false, error: "Missing connectionId" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Fetch connection details from Composio
+    // Fetch connection details from Composio v3 API
+    console.log(`composio-callback: Fetching connection details from Composio...`);
     const composioResponse = await fetch(
       `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
       {
@@ -55,32 +68,76 @@ serve(async (req) => {
     );
 
     const responseText = await composioResponse.text();
-    console.log(`Composio status response: ${composioResponse.status}`);
+    console.log(`composio-callback: Composio response status=${composioResponse.status}`);
+    console.log(`composio-callback: Composio response body=${responseText}`);
 
     if (!composioResponse.ok) {
-      console.error("Failed to fetch connection:", composioResponse.status, responseText);
-      throw new Error("Failed to fetch connection details");
-    }
-
-    const accountData = JSON.parse(responseText);
-    const status = accountData.status || "UNKNOWN";
-    
-    console.log(`Connection status: ${status}`);
-
-    if (status !== "ACTIVE" && status !== "active") {
+      console.error("composio-callback: Failed to fetch connection from Composio");
       return new Response(
         JSON.stringify({ 
           success: false, 
-          status, 
-          message: "Connection not active yet" 
+          error: "Failed to verify connection with provider",
+          status: composioResponse.status 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const accountData = JSON.parse(responseText);
+    const connectionStatus = accountData.status || "UNKNOWN";
+    
+    console.log(`composio-callback: Connection status=${connectionStatus}`);
+    console.log(`composio-callback: Account data keys: ${Object.keys(accountData).join(", ")}`);
+
+    if (connectionStatus !== "ACTIVE" && connectionStatus !== "active") {
+      console.log("composio-callback: Connection not active yet");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          status: connectionStatus, 
+          message: "Connection not active yet. Please complete the OAuth flow." 
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Extract toolkit from Composio response if not provided
+    // The response contains app_unique_id or appUniqueId which identifies the service
+    let toolkit = toolkitFromRequest?.toLowerCase();
+    
+    if (!toolkit) {
+      const appId = accountData.app_unique_id || accountData.appUniqueId || 
+                    accountData.app_id || accountData.appId ||
+                    accountData.app?.key || accountData.app?.name || "";
+      
+      const normalizedAppId = appId.toLowerCase().replace(/[^a-z]/g, "");
+      toolkit = APP_TO_TOOLKIT[normalizedAppId] || normalizedAppId || "unknown";
+      
+      console.log(`composio-callback: Resolved toolkit from Composio: appId=${appId} -> toolkit=${toolkit}`);
+    }
+
+    // Extract user ID from the connection if not provided (for App Browser context)
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+      // Try to get user_id from the Composio connection data
+      // Composio stores the user_id we passed during connection initiation
+      resolvedUserId = accountData.user_id || accountData.userId || accountData.member_id;
+      console.log(`composio-callback: Resolved userId from Composio: ${resolvedUserId}`);
+    }
+
+    if (!resolvedUserId) {
+      console.error("composio-callback: Could not determine user ID");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "Could not determine user. Please try reconnecting." 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Extract user info from the OAuth data
-    // For Google OAuth, the id_token contains user profile information
-    const data = accountData.data || {};
+    const data = accountData.data || accountData.connection_params || {};
     let accountEmail: string | null = null;
     let accountName: string | null = null;
     let accountAvatarUrl: string | null = null;
@@ -92,25 +149,27 @@ serve(async (req) => {
         accountEmail = (jwtPayload.email as string) || null;
         accountName = (jwtPayload.name as string) || null;
         accountAvatarUrl = (jwtPayload.picture as string) || null;
-        console.log(`Extracted from id_token - email: ${accountEmail}, name: ${accountName}, picture: ${accountAvatarUrl}`);
+        console.log(`composio-callback: Extracted from id_token - email=${accountEmail}, name=${accountName}`);
       }
     }
 
-    // Fallback to other possible locations
+    // Fallback to other possible locations in the response
     if (!accountEmail) {
-      const connectionData = accountData.connectionData || accountData.connection_params || {};
-      accountEmail = connectionData.user_email || connectionData.email || accountData.user_email || null;
-      accountName = connectionData.name || connectionData.display_name || null;
+      accountEmail = data.user_email || data.email || 
+                     accountData.user_email || accountData.email || null;
+      accountName = data.name || data.display_name || 
+                    accountData.name || accountData.display_name || null;
+      console.log(`composio-callback: Fallback extraction - email=${accountEmail}, name=${accountName}`);
     }
 
-    console.log(`Final account info - email: ${accountEmail}, name: ${accountName}, avatar: ${accountAvatarUrl}`);
+    console.log(`composio-callback: Final account info - email=${accountEmail}, name=${accountName}, toolkit=${toolkit}`);
 
-    // Upsert to user_integrations table
-    const { data: savedData, error } = await supabase
+    // Upsert to user_integrations table using service role (works from App Browser context)
+    const { data: savedData, error: dbError } = await supabase
       .from("user_integrations")
       .upsert({
-        user_id: userId,
-        integration_id: toolkit?.toLowerCase() || "gmail",
+        user_id: resolvedUserId,
+        integration_id: toolkit,
         composio_connection_id: connectionId,
         status: "connected",
         account_email: accountEmail,
@@ -124,16 +183,23 @@ serve(async (req) => {
       .select()
       .single();
 
-    if (error) {
-      console.error("Database error:", error);
-      throw error;
+    if (dbError) {
+      console.error("composio-callback: Database error:", dbError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "Failed to save connection. Please try again." 
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log(`Saved integration:`, savedData);
+    console.log(`composio-callback: Successfully saved integration:`, savedData);
 
     return new Response(
       JSON.stringify({
         success: true,
+        toolkit,
         account: savedData,
         email: accountEmail,
         name: accountName,
@@ -144,9 +210,12 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("Error in composio-callback:", error);
+    console.error("composio-callback: Unexpected error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ 
+        success: false, 
+        error: error instanceof Error ? error.message : "An unexpected error occurred" 
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
