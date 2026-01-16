@@ -6,7 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v2";
+// Composio v3 API base
+const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3";
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -44,7 +45,6 @@ serve(async (req) => {
     
     if (!authHeader) {
       console.error("Missing authorization header");
-      // Return more helpful error with available headers
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -73,7 +73,7 @@ serve(async (req) => {
       );
     }
 
-    // Get user's Gmail connection
+    // Get user's Gmail connection (connected_account_id in v3 terminology)
     const { data: integration } = await supabaseClient
       .from("user_integrations")
       .select("composio_connection_id")
@@ -86,7 +86,9 @@ serve(async (req) => {
       throw new Error("Gmail not connected");
     }
 
-    const connectionId = integration.composio_connection_id;
+    const connectedAccountId = integration.composio_connection_id;
+    console.log("Using connected_account_id:", connectedAccountId);
+    
     const body = await req.json();
     const { action } = body;
 
@@ -99,88 +101,88 @@ serve(async (req) => {
       const contacts: ContactInput[] = body.contacts;
       const results: TriggerResult[] = [];
       const webhookUrl = `${SUPABASE_URL}/functions/v1/email-automation-webhook`;
+      console.log("Webhook URL:", webhookUrl);
 
       for (const contact of contacts) {
         let incomingTriggerId: string | undefined;
         let outgoingTriggerId: string | undefined;
 
         try {
-          // Create incoming email trigger if enabled
+          // Create incoming email trigger if enabled using v3 API
           if (contact.monitorIncoming) {
-            console.log(`Creating incoming trigger for ${contact.email}`);
-            const incomingResponse = await fetch(`${COMPOSIO_API_BASE}/triggers/enable/${connectionId}/GMAIL_NEW_GMAIL_MESSAGE`, {
-              method: "POST",
-              headers: {
-                "x-api-key": COMPOSIO_API_KEY,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                triggerConfig: {
-                  interval: 5,
-                  query: `from:${contact.email}`,
-                  labelIds: "INBOX",
-                  userId: "me",
-                },
-              }),
-            });
-
-            const incomingData = await incomingResponse.json();
-            console.log("Incoming trigger response:", JSON.stringify(incomingData));
-
-            if (incomingResponse.ok && incomingData.triggerId) {
-              incomingTriggerId = incomingData.triggerId;
-              
-              // Set webhook for this trigger
-              await fetch(`${COMPOSIO_API_BASE}/triggers/set_callback_url`, {
+            console.log(`Creating incoming trigger for ${contact.email} using v3 API`);
+            
+            // v3 API: POST /trigger_instances/{slug}/upsert
+            const incomingResponse = await fetch(
+              `${COMPOSIO_API_BASE}/trigger_instances/GMAIL_NEW_GMAIL_MESSAGE/upsert`,
+              {
                 method: "POST",
                 headers: {
                   "x-api-key": COMPOSIO_API_KEY,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  callbackURL: webhookUrl,
-                  triggerId: incomingTriggerId,
+                  connected_account_id: connectedAccountId,
+                  trigger_config: {
+                    interval: 5,
+                    query: `from:${contact.email}`,
+                    labelIds: "INBOX",
+                    userId: "me",
+                  },
+                  webhook_url: webhookUrl,
                 }),
-              });
+              }
+            );
+
+            const incomingText = await incomingResponse.text();
+            console.log("Incoming trigger response status:", incomingResponse.status);
+            console.log("Incoming trigger response:", incomingText);
+
+            if (incomingResponse.ok) {
+              const incomingData = JSON.parse(incomingText);
+              // v3 returns trigger_instance_id or id
+              incomingTriggerId = incomingData.trigger_instance_id || incomingData.id || incomingData.triggerId;
+              console.log("Incoming trigger ID:", incomingTriggerId);
+            } else {
+              console.error("Failed to create incoming trigger:", incomingText);
             }
           }
 
-          // Create outgoing email trigger if enabled
+          // Create outgoing email trigger if enabled using v3 API
           if (contact.monitorOutgoing) {
-            console.log(`Creating outgoing trigger for ${contact.email}`);
-            const outgoingResponse = await fetch(`${COMPOSIO_API_BASE}/triggers/enable/${connectionId}/GMAIL_EMAIL_SENT_TRIGGER`, {
-              method: "POST",
-              headers: {
-                "x-api-key": COMPOSIO_API_KEY,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                triggerConfig: {
-                  interval: 5,
-                  query: `to:${contact.email}`,
-                  userId: "me",
-                },
-              }),
-            });
-
-            const outgoingData = await outgoingResponse.json();
-            console.log("Outgoing trigger response:", JSON.stringify(outgoingData));
-
-            if (outgoingResponse.ok && outgoingData.triggerId) {
-              outgoingTriggerId = outgoingData.triggerId;
-              
-              // Set webhook for this trigger
-              await fetch(`${COMPOSIO_API_BASE}/triggers/set_callback_url`, {
+            console.log(`Creating outgoing trigger for ${contact.email} using v3 API`);
+            
+            const outgoingResponse = await fetch(
+              `${COMPOSIO_API_BASE}/trigger_instances/GMAIL_EMAIL_SENT_TRIGGER/upsert`,
+              {
                 method: "POST",
                 headers: {
                   "x-api-key": COMPOSIO_API_KEY,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  callbackURL: webhookUrl,
-                  triggerId: outgoingTriggerId,
+                  connected_account_id: connectedAccountId,
+                  trigger_config: {
+                    interval: 5,
+                    query: `to:${contact.email}`,
+                    userId: "me",
+                  },
+                  webhook_url: webhookUrl,
                 }),
-              });
+              }
+            );
+
+            const outgoingText = await outgoingResponse.text();
+            console.log("Outgoing trigger response status:", outgoingResponse.status);
+            console.log("Outgoing trigger response:", outgoingText);
+
+            if (outgoingResponse.ok) {
+              const outgoingData = JSON.parse(outgoingText);
+              // v3 returns trigger_instance_id or id
+              outgoingTriggerId = outgoingData.trigger_instance_id || outgoingData.id || outgoingData.triggerId;
+              console.log("Outgoing trigger ID:", outgoingTriggerId);
+            } else {
+              console.error("Failed to create outgoing trigger:", outgoingText);
             }
           }
 
@@ -209,7 +211,7 @@ serve(async (req) => {
             email: contact.email,
             incomingTriggerId,
             outgoingTriggerId,
-            success: true,
+            success: !!(incomingTriggerId || outgoingTriggerId),
           });
         } catch (error) {
           console.error(`Failed to create triggers for ${contact.email}:`, error);
@@ -236,21 +238,29 @@ serve(async (req) => {
       const { contactId, incomingTriggerId, outgoingTriggerId } = body;
 
       try {
-        // Disable triggers in Composio
+        // Delete triggers in Composio using v3 API
         if (incomingTriggerId) {
-          console.log(`Disabling incoming trigger: ${incomingTriggerId}`);
-          await fetch(`${COMPOSIO_API_BASE}/triggers/disable/${incomingTriggerId}`, {
-            method: "POST",
-            headers: { "x-api-key": COMPOSIO_API_KEY },
-          });
+          console.log(`Deleting incoming trigger: ${incomingTriggerId} using v3 API`);
+          const deleteResponse = await fetch(
+            `${COMPOSIO_API_BASE}/trigger_instances/manage/${incomingTriggerId}`,
+            {
+              method: "DELETE",
+              headers: { "x-api-key": COMPOSIO_API_KEY },
+            }
+          );
+          console.log("Delete incoming response:", deleteResponse.status, await deleteResponse.text());
         }
 
         if (outgoingTriggerId) {
-          console.log(`Disabling outgoing trigger: ${outgoingTriggerId}`);
-          await fetch(`${COMPOSIO_API_BASE}/triggers/disable/${outgoingTriggerId}`, {
-            method: "POST",
-            headers: { "x-api-key": COMPOSIO_API_KEY },
-          });
+          console.log(`Deleting outgoing trigger: ${outgoingTriggerId} using v3 API`);
+          const deleteResponse = await fetch(
+            `${COMPOSIO_API_BASE}/trigger_instances/manage/${outgoingTriggerId}`,
+            {
+              method: "DELETE",
+              headers: { "x-api-key": COMPOSIO_API_KEY },
+            }
+          );
+          console.log("Delete outgoing response:", deleteResponse.status, await deleteResponse.text());
         }
 
         // Delete from database
