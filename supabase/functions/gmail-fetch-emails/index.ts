@@ -75,7 +75,7 @@ serve(async (req) => {
       // Build query for from OR to
       const query = `from:${email} OR to:${email}`;
 
-      const searchResponse = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEARCH_EMAILS", {
+      const searchResponse = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_FETCH_EMAILS", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

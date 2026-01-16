@@ -56,7 +56,7 @@ serve(async (req) => {
     console.log(`Using connection: ${connectionId}`);
 
     // Use Composio v3 API for action execution
-    const searchResponse = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEARCH_EMAILS", {
+    const searchResponse = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_FETCH_EMAILS", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
