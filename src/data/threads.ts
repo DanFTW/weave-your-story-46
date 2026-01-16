@@ -1,4 +1,4 @@
-import { Send, Mail, Users, Utensils, Receipt, Heart, MessageSquare } from "lucide-react";
+import { Send, Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
@@ -28,6 +28,15 @@ export const sampleThreads: Thread[] = [
     status: "active",
     type: "flow",
     category: "purchases",
+  },
+  {
+    id: "email-dump",
+    title: "Email Dump",
+    icon: Inbox,
+    gradient: "blue",
+    status: "active",
+    type: "flow",
+    category: "email",
   },
   {
     id: "gmail-sent",

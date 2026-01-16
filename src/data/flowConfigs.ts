@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -285,6 +285,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "imported",
     fields: [],
     isLLMImportFlow: true,
+  },
+  "email-dump": {
+    id: "email-dump",
+    title: "Email Dump",
+    subtitle: "Extract emails as memories",
+    description: "Search your Gmail contacts and save email conversations as memories.",
+    gradient: "blue",
+    icon: Inbox,
+    entryName: "email",
+    entryNamePlural: "emails",
+    memoryTag: "EMAIL",
+    fields: [],
+    isEmailDumpFlow: true,
   },
 };
 

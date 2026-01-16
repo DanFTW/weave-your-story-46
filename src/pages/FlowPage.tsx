@@ -29,6 +29,9 @@ import { LLMImportCategoryList } from "@/components/flows/llm-import/LLMImportCa
 import { LLMImportConfig } from "@/components/flows/llm-import/LLMImportConfig";
 import { LLMImportSuccess } from "@/components/flows/llm-import/LLMImportSuccess";
 
+// Email Dump components
+import { EmailDumpFlow } from "@/components/flows/email-dump/EmailDumpFlow";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -142,6 +145,12 @@ export default function FlowPage() {
     setSelectedImage(null);
     setSelectedFile(null);
   };
+
+  // === EMAIL DUMP FLOW RENDER ===
+  
+  if (config.isEmailDumpFlow) {
+    return <EmailDumpFlow />;
+  }
 
   // === RECEIPT FLOW RENDER ===
   

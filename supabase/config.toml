@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.composio-callback]
 verify_jwt = false
+
+[functions.gmail-search]
+verify_jwt = false
+
+[functions.gmail-fetch-emails]
+verify_jwt = false
