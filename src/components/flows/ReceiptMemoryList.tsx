@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Receipt, Plus, Loader2, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
+import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 
 interface Memory {
@@ -16,34 +17,24 @@ interface ReceiptMemoryListProps {
   onAddNew: () => void;
 }
 
-export interface ReceiptMemoryListRef {
-  refresh: () => Promise<void>;
-}
-
-export const ReceiptMemoryList = forwardRef<ReceiptMemoryListRef, ReceiptMemoryListProps>(
-  function ReceiptMemoryList({ onAddNew }, ref) {
+export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
   const { listMemories, isListing } = useLiamMemory();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
-  const fetchMemories = useCallback(async () => {
-    const result = await listMemories();
-    if (result) {
-      // Filter to only receipt memories
-      const receiptMemories = result.filter(
-        (m) => m.tag?.toLowerCase() === 'receipts' || m.tag?.toLowerCase() === 'receipt'
-      );
-      setMemories(receiptMemories);
-    }
-    setHasLoaded(true);
-  }, [listMemories]);
-
-  // Expose refresh method to parent
-  useImperativeHandle(ref, () => ({
-    refresh: fetchMemories,
-  }), [fetchMemories]);
-
   useEffect(() => {
+    const fetchMemories = async () => {
+      const result = await listMemories();
+      if (result) {
+        // Filter to only receipt memories
+        const receiptMemories = result.filter(
+          (m) => m.tag?.toLowerCase() === 'receipts' || m.tag?.toLowerCase() === 'receipt'
+        );
+        setMemories(receiptMemories);
+      }
+      setHasLoaded(true);
+    };
+
     fetchMemories();
   }, []);
 
@@ -171,4 +162,4 @@ export const ReceiptMemoryList = forwardRef<ReceiptMemoryListRef, ReceiptMemoryL
       </div>
     </div>
   );
-});
+}
