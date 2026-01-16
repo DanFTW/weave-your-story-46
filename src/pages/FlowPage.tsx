@@ -117,20 +117,17 @@ export default function FlowPage() {
           title: "Receipt saved",
           description: "Your purchase has been added to memory.",
         });
-        
-        // Optimistically add the memory to the list immediately
-        receiptListRef.current?.addOptimisticMemory(memoryString);
-        
         // Reset and go back to list
         setReceiptPhase('list');
         setSelectedImage(null);
         setSelectedFile(null);
         setReceiptData(null);
         
-        // Also do a background refresh after a delay to get the real ID from API
+        // Refresh the receipt list to show the new memory
+        // Small delay to allow LIAM API to process
         setTimeout(() => {
           receiptListRef.current?.refresh();
-        }, 2000);
+        }, 500);
       }
     } catch (error) {
       console.error('Failed to save receipt:', error);
