@@ -55,36 +55,16 @@ serve(async (req) => {
     const connectionId = integration.composio_connection_id;
     console.log(`Using connection: ${connectionId}`);
 
-    // First, get the connected account details to retrieve the proper ID
-    const accountResponse = await fetch(
-      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
-      {
-        headers: {
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-      }
-    );
-
-    if (!accountResponse.ok) {
-      const errorText = await accountResponse.text();
-      console.error("Failed to get account:", errorText);
-      throw new Error("Failed to get connected account");
-    }
-
-    const accountData = await accountResponse.json();
-    const accountId = accountData.id || connectionId;
-    console.log(`Account ID: ${accountId}`);
-
-    // Use the v1 API with the account ID for action execution
-    const searchResponse = await fetch("https://backend.composio.dev/api/v1/actions/GMAIL_SEARCH_EMAILS/execute", {
+    // Use Composio v3 API for action execution
+    const searchResponse = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEARCH_EMAILS", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        connectedAccountId: accountId,
-        input: {
+        connected_account_id: connectionId,
+        arguments: {
           query: query,
           max_results: 20,
         },
@@ -113,9 +93,9 @@ serve(async (req) => {
     const contacts: { email: string; name?: string }[] = [];
     const seenEmails = new Set<string>();
 
-    // Handle various response formats
-    const responseData = searchData.response?.data || searchData.data || searchData;
-    const messages = responseData?.messages || responseData?.results || [];
+    // Handle various response formats from v3 API
+    const responseData = searchData.data || searchData.response?.data || searchData;
+    const messages = responseData?.messages || responseData?.results || responseData?.threadsList || [];
     
     console.log(`Found ${messages.length} messages`);
 
