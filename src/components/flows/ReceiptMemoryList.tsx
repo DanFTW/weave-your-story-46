@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from "react";
 import { motion } from "framer-motion";
 import { Receipt, Plus, Loader2, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
-import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 
 interface Memory {
@@ -13,17 +12,22 @@ interface Memory {
   createdAt: string;
 }
 
+export interface ReceiptMemoryListHandle {
+  addOptimisticMemory: (content: string) => void;
+  refresh: () => Promise<void>;
+}
+
 interface ReceiptMemoryListProps {
   onAddNew: () => void;
 }
 
-export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
-  const { listMemories, isListing } = useLiamMemory();
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [hasLoaded, setHasLoaded] = useState(false);
+export const ReceiptMemoryList = forwardRef<ReceiptMemoryListHandle, ReceiptMemoryListProps>(
+  function ReceiptMemoryList({ onAddNew }, ref) {
+    const { listMemories, isListing } = useLiamMemory();
+    const [memories, setMemories] = useState<Memory[]>([]);
+    const [hasLoaded, setHasLoaded] = useState(false);
 
-  useEffect(() => {
-    const fetchMemories = async () => {
+    const fetchMemories = useCallback(async () => {
       const result = await listMemories();
       if (result) {
         // Filter to only receipt memories
@@ -33,10 +37,28 @@ export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
         setMemories(receiptMemories);
       }
       setHasLoaded(true);
-    };
+    }, [listMemories]);
 
-    fetchMemories();
-  }, []);
+    // Add optimistic memory for instant UI feedback
+    const addOptimisticMemory = useCallback((content: string) => {
+      const optimisticMemory: Memory = {
+        id: `optimistic-${Date.now()}`,
+        content,
+        tag: 'RECEIPTS',
+        createdAt: new Date().toISOString(),
+      };
+      setMemories(prev => [optimisticMemory, ...prev]);
+    }, []);
+
+    // Expose methods via ref
+    useImperativeHandle(ref, () => ({
+      addOptimisticMemory,
+      refresh: fetchMemories,
+    }), [addOptimisticMemory, fetchMemories]);
+
+    useEffect(() => {
+      fetchMemories();
+    }, [fetchMemories]);
 
   // Parse receipt memory to extract store name and amount
   const parseReceiptMemory = (content: string) => {
@@ -162,4 +184,4 @@ export function ReceiptMemoryList({ onAddNew }: ReceiptMemoryListProps) {
       </div>
     </div>
   );
-}
+});
