@@ -113,14 +113,14 @@ export function useComposio(toolkit: string): UseComposioReturn {
       
       if (data?.success) {
         setConnectedAccount({
-          name: data.account?.account_name || "",
+          name: data.name || data.account?.account_name || "",
           email: data.email || data.account?.account_email || "",
-          avatarUrl: data.account?.account_avatar_url,
+          avatarUrl: data.avatarUrl || data.account?.account_avatar_url,
         });
         setIsConnected(true);
         localStorage.removeItem("composio_pending_connection");
         localStorage.removeItem("composio_pending_toolkit");
-        toast.success("Gmail connected successfully!");
+        toast.success(`${toolkit} connected successfully!`);
         return { success: true, email: data.email };
       }
 
