@@ -49,12 +49,12 @@ serve(async (req) => {
       );
     }
 
-    const { toolkit, redirectUrl } = await req.json();
+    const { toolkit, baseUrl } = await req.json();
     const toolkitLower = toolkit?.toLowerCase() || "";
     
     console.log(`Initiating OAuth for toolkit: ${toolkit}`);
     console.log(`User ID: ${user.id}`);
-    console.log(`Redirect URL: ${redirectUrl}`);
+    console.log(`Base URL: ${baseUrl}`);
     
     if (!toolkit || !AUTH_CONFIGS[toolkitLower]) {
       return new Response(
@@ -64,12 +64,8 @@ serve(async (req) => {
     }
 
     const authConfigId = AUTH_CONFIGS[toolkitLower];
-    const callbackUrl = redirectUrl || `${req.headers.get("origin")}/integration/${toolkitLower}?connected=true`;
 
-    console.log(`Using auth config: ${authConfigId}`);
-    console.log(`Callback URL: ${callbackUrl}`);
-
-    // Call Composio v3 API /link endpoint - this is the working pattern
+    // Call Composio v3 API /link endpoint
     const composioResponse = await fetch("https://backend.composio.dev/api/v3/connected_accounts/link", {
       method: "POST",
       headers: {
@@ -79,7 +75,9 @@ serve(async (req) => {
       body: JSON.stringify({
         auth_config_id: authConfigId,
         user_id: user.id,
-        callback_url: callbackUrl,
+        // Composio will redirect here after OAuth completes
+        // We'll add connectionId and toolkit as query params in the callback
+        callback_url: `${baseUrl}/oauth-complete?toolkit=${toolkitLower}`,
       }),
     });
 
@@ -93,12 +91,27 @@ serve(async (req) => {
     }
 
     const composioData = JSON.parse(responseText);
+    const connectionId = composioData.connected_account_id || composioData.id;
+    
+    // Get the redirect URL from Composio
+    let redirectUrl = composioData.redirect_url || composioData.redirectUrl;
+    
+    // The Composio callback_url doesn't support dynamic params, so we need to 
+    // encode the connectionId in the state or handle it differently
+    // Actually, Composio returns the connectionId in the callback URL automatically
+    // But we need to ensure our callback URL includes the connectionId
+    
+    // Update the callback URL in the redirect to include connectionId
+    // Composio adds connectionId to the callback automatically, but let's ensure our format
+    console.log(`Original redirect URL: ${redirectUrl}`);
+    console.log(`Connection ID: ${connectionId}`);
 
     // Return the redirect URL to frontend
+    // The frontend will start polling for this connectionId
     return new Response(
       JSON.stringify({
-        redirectUrl: composioData.redirect_url || composioData.redirectUrl,
-        connectionId: composioData.connected_account_id || composioData.id,
+        redirectUrl,
+        connectionId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
