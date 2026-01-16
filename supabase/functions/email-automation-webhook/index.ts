@@ -168,11 +168,34 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("Received webhook from Composio");
+  // Check for test mode query parameter
+  const url = new URL(req.url);
+  const isTestMode = url.searchParams.get("test") === "true";
+
+  console.log("Received webhook from Composio", isTestMode ? "(TEST MODE)" : "");
 
   try {
     const payload: TriggerPayload = await req.json();
     console.log("Webhook payload:", JSON.stringify(payload, null, 2));
+
+    // If test mode, just log and return success
+    if (isTestMode) {
+      console.log("TEST MODE: Webhook received successfully, not processing");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "Test webhook received",
+          testMode: true,
+          receivedAt: new Date().toISOString(),
+          payload: {
+            trigger_name: payload.trigger_name,
+            trigger_id: payload.trigger_id,
+            hasPayload: !!payload.payload,
+          }
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const triggerName = payload.trigger_name || payload.metadata?.trigger_name;
     const triggerId = payload.trigger_id;
@@ -204,17 +227,21 @@ serve(async (req) => {
     const triggerColumn = isIncoming ? 'incoming_trigger_id' : 'outgoing_trigger_id';
     const { data: contact, error: contactError } = await adminClient
       .from('email_automation_contacts')
-      .select('user_id')
+      .select('user_id, email_address')
       .eq(triggerColumn, triggerId)
       .single();
 
     if (contactError || !contact) {
       console.log("Could not find contact for trigger:", triggerId);
+      console.log("Looking in column:", triggerColumn);
+      console.log("Contact error:", contactError);
       return new Response(
         JSON.stringify({ success: true, message: "Trigger not found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log(`Found contact: ${contact.email_address} for user: ${contact.user_id}`);
 
     // Get user's API keys
     const { data: apiKeys, error: apiKeysError } = await adminClient
@@ -245,7 +272,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: saved, 
-        message: saved ? "Memory saved" : "Failed to save memory" 
+        message: saved ? "Memory saved" : "Failed to save memory",
+        email: contact.email_address,
+        type: isIncoming ? "incoming" : "outgoing",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -33,6 +33,8 @@ export function EmailAutomationFlow() {
     isSearching,
     isActivating,
     isLoading,
+    isCheckingStatus,
+    triggerStatuses,
     searchContacts,
     selectContact,
     deselectContact,
@@ -41,6 +43,8 @@ export function EmailAutomationFlow() {
     activateMonitoring,
     deactivateContact,
     loadMonitoredContacts,
+    checkTriggerStatus,
+    enableTrigger,
     reset,
   } = useEmailAutomation();
 
@@ -198,8 +202,12 @@ export function EmailAutomationFlow() {
           <ActiveMonitoring
             contacts={monitoredContacts}
             isLoading={isLoading}
+            isCheckingStatus={isCheckingStatus}
+            triggerStatuses={triggerStatuses}
             onAddMore={() => setPhase('contact-search')}
             onRemove={deactivateContact}
+            onCheckStatus={checkTriggerStatus}
+            onEnableTrigger={enableTrigger}
           />
         )}
       </div>
