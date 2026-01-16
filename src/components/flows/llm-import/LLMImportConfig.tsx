@@ -52,21 +52,21 @@ export function LLMImportConfig({ category, onBack, onProcess, isProcessing }: L
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="px-5 pt-12 pb-6">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span>Back</span>
-        </button>
-        
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+          <button
+            onClick={onBack}
+            className="w-11 h-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
+          </button>
+          
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
             <Icon className="w-6 h-6 text-primary" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">{category.title}</h1>
-            <p className="text-sm text-muted-foreground">Import from your LLM</p>
+          
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-foreground truncate">{category.title}</h1>
+            <p className="text-sm text-muted-foreground truncate">Import from your LLM</p>
           </div>
         </div>
       </div>

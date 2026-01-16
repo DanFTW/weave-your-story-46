@@ -142,20 +142,21 @@ export function EmailDumpFlow() {
     <div className="min-h-screen bg-background pb-nav">
       {/* Header */}
       <div className={cn("relative px-5 pt-12 pb-6", gradientClasses.blue)}>
-        <button
-          onClick={handleBack}
-          className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center mb-4"
-        >
-          <ChevronLeft className="w-6 h-6 text-white" />
-        </button>
-        
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+          <button
+            onClick={handleBack}
+            className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+          >
+            <ChevronLeft className="w-6 h-6 text-white" />
+          </button>
+          
+          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
             <Inbox className="w-6 h-6 text-white" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">Email Dump</h1>
-            <p className="text-white/70 text-sm">
+          
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-white truncate">Email Dump</h1>
+            <p className="text-white/70 text-sm truncate">
               {phase === 'contact-search' && 'Select email addresses'}
               {phase === 'preview' && `${extractedEmails.length} emails to save`}
             </p>
