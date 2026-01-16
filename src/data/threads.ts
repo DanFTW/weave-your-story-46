@@ -1,4 +1,4 @@
-import { Send, Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
@@ -39,20 +39,12 @@ export const sampleThreads: Thread[] = [
     category: "email",
   },
   {
-    id: "gmail-sent",
-    title: "Save sent emails as memories",
-    icon: Send,
-    gradient: "blue",
-    status: "setup",
-    type: "automation",
-    category: "email",
-  },
-  {
-    id: "gmail-incoming",
-    title: "Save incoming emails as memories",
+    id: "email-automation",
+    title: "Save Emails from Contacts",
+    description: "Automatically save emails from specific contacts as memories",
     icon: Mail,
     gradient: "teal",
-    status: "setup",
+    status: "active",
     type: "automation",
     category: "email",
   },

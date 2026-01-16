@@ -32,6 +32,7 @@ export interface FlowConfig {
   isReceiptFlow?: boolean; // If true, uses receipt scanning UI
   isLLMImportFlow?: boolean; // If true, uses LLM import UI
   isEmailDumpFlow?: boolean; // If true, uses email dump UI
+  isEmailAutomationFlow?: boolean; // If true, uses email automation UI
 }
 
 // Single data entry (e.g., one family member)
