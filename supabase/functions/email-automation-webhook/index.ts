@@ -8,54 +8,50 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-// LIAM API base URL - using askbuddy proxy which works from edge functions
-// Official docs show api.liam.netxd.com but has DNS issues from Supabase
 const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api";
 
-// Original nested payload format
-interface EmailPayload {
+// Normalized email data structure
+interface EmailData {
   from?: string;
-  to?: string | string[];
+  to?: string;
   subject?: string;
   body?: string;
-  snippet?: string;
   date?: string;
   messageId?: string;
   threadId?: string;
 }
 
-// Composio V3 flat payload format (email data at root level)
-interface V3Payload {
-  sender?: string;           // "Ben Ornstein <ben@weave.cloud>"
-  to?: string;               // "Shane Grady <shane@weave.cloud>"
-  subject?: string;
-  message_text?: string;     // Body content
-  message_timestamp?: string;
-  message_id?: string;
-  thread_id?: string;
+// Composio wrapped format (current production format)
+interface ComposioWrappedPayload {
   id?: string;
-  label_ids?: string[];
-  attachment_list?: unknown[];
-  preview?: unknown;
-  payload?: unknown;
-  trigger_name?: string;
-  trigger_id?: string;
-  connection_id?: string;
-}
-
-// Original nested format
-interface NestedPayload {
-  trigger_name?: string;
-  trigger_id?: string;
-  connection_id?: string;
-  payload?: EmailPayload;
+  timestamp?: string;
+  type?: string;  // "composio.trigger.message"
   metadata?: {
-    trigger_name?: string;
+    log_id?: string;
+    trigger_slug?: string;  // "GMAIL_NEW_GMAIL_MESSAGE" or "GMAIL_EMAIL_SENT_TRIGGER"
+    trigger_id?: string;
+    connected_account_id?: string;
+  };
+  data?: {
+    sender?: string;
+    to?: string;
+    recipients?: string;
+    subject?: string;
+    message_text?: string;  // For incoming emails
+    message_id?: string;
+    message_timestamp?: string;
+    thread_id?: string;
+    payload?: {
+      parts?: Array<{
+        body?: { data?: string };
+        mimeType?: string;
+      }>;
+    };
   };
 }
 
 // Format email as a memory string
-function formatEmailAsMemory(email: EmailPayload, isIncoming: boolean): string {
+function formatEmailAsMemory(email: EmailData, isIncoming: boolean): string {
   const date = email.date 
     ? new Date(email.date).toLocaleDateString('en-US', {
         year: 'numeric',
@@ -64,20 +60,50 @@ function formatEmailAsMemory(email: EmailPayload, isIncoming: boolean): string {
       })
     : 'Unknown date';
   
-  const body = email.body || email.snippet || '';
+  const body = email.body || '';
   const cleanBody = String(body).replace(/\s+/g, ' ').trim();
   
   if (isIncoming) {
     return `Email from ${email.from} on ${date}: "${email.subject}" - ${cleanBody}`;
   } else {
-    const toStr = Array.isArray(email.to) ? email.to.join(', ') : email.to;
-    return `Email sent to ${toStr} on ${date}: "${email.subject}" - ${cleanBody}`;
+    return `Email sent to ${email.to} on ${date}: "${email.subject}" - ${cleanBody}`;
   }
 }
 
-// Import private key for signing - handles both PKCS#8 and EC PRIVATE KEY formats
+// Decode base64 email body
+function decodeBase64Body(data: string | undefined): string {
+  if (!data) return '';
+  try {
+    // Replace URL-safe base64 characters
+    const normalized = data.replace(/-/g, '+').replace(/_/g, '/');
+    return atob(normalized);
+  } catch {
+    return '';
+  }
+}
+
+// Extract body from email parts
+function extractBodyFromParts(parts?: Array<{ body?: { data?: string }; mimeType?: string }>): string {
+  if (!parts || parts.length === 0) return '';
+  
+  // Prefer text/plain, fall back to text/html
+  const textPart = parts.find(p => p.mimeType === 'text/plain');
+  const htmlPart = parts.find(p => p.mimeType === 'text/html');
+  
+  const part = textPart || htmlPart;
+  if (part?.body?.data) {
+    const decoded = decodeBase64Body(part.body.data);
+    // Strip HTML tags if it was HTML
+    if (htmlPart && !textPart) {
+      return decoded.replace(/<[^>]*>/g, '').trim();
+    }
+    return decoded.trim();
+  }
+  return '';
+}
+
+// Import private key for signing
 async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
-  // Handle both PKCS#8 (-----BEGIN PRIVATE KEY-----) and EC (-----BEGIN EC PRIVATE KEY-----) formats
   const pemContent = pemKey
     .replace(/-----BEGIN (EC )?PRIVATE KEY-----/g, '')
     .replace(/-----END (EC )?PRIVATE KEY-----/g, '')
@@ -143,27 +169,22 @@ async function saveMemoryToLiam(
   userKey: string
 ): Promise<boolean> {
   try {
-    console.log("Importing private key, length:", privateKey.length);
-    console.log("Private key format starts with:", privateKey.substring(0, 30));
-    
+    console.log("Saving memory to LIAM...");
     const cryptoKey = await importPrivateKey(privateKey);
-    console.log("Private key imported successfully");
     
-    // Body format matches liam-memory edge function: userKey, content, tag
     const requestBody = { 
       userKey, 
       content: memoryText, 
       tag: 'EMAIL' 
     };
     const signature = await signRequest(cryptoKey, requestBody);
-    console.log("Request signed successfully");
 
     const response = await fetch(`${LIAM_API_BASE}/memory/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apiKey': apiKey,       // lowercase as per LIAM docs
-        'signature': signature, // lowercase as per LIAM docs
+        'apiKey': apiKey,
+        'signature': signature,
       },
       body: JSON.stringify(requestBody),
     });
@@ -178,127 +199,100 @@ async function saveMemoryToLiam(
     return true;
   } catch (error) {
     console.error('Failed to save memory:', error);
-    console.error('Error details:', error instanceof Error ? error.message : String(error));
     return false;
   }
 }
 
-// Detect if payload is V3 format (flat structure with message_text, sender, etc.)
-function isV3Format(payload: unknown): payload is V3Payload {
-  if (typeof payload !== 'object' || payload === null) return false;
-  const p = payload as Record<string, unknown>;
-  // V3 format has message_text and sender at root level
-  return 'message_text' in p && 'sender' in p;
-}
-
-// Normalize payload to our internal format
-function normalizePayload(rawPayload: unknown): {
-  emailData: EmailPayload | null;
+// Parse the Composio wrapped payload format
+function parseComposioPayload(raw: ComposioWrappedPayload): {
+  emailData: EmailData | null;
   triggerName: string | undefined;
   triggerId: string | undefined;
-  format: 'v3' | 'nested';
 } {
-  if (isV3Format(rawPayload)) {
-    // V3 format: email data is at root level with different field names
-    console.log("Detected V3 (flat) payload format");
-    return {
-      emailData: {
-        from: rawPayload.sender,
-        to: rawPayload.to,
-        subject: rawPayload.subject,
-        body: rawPayload.message_text,
-        date: rawPayload.message_timestamp,
-        messageId: rawPayload.message_id || rawPayload.id,
-        threadId: rawPayload.thread_id,
-      },
-      triggerName: rawPayload.trigger_name,
-      triggerId: rawPayload.trigger_id,
-      format: 'v3',
-    };
+  const metadata = raw.metadata;
+  const data = raw.data;
+  
+  if (!metadata || !data) {
+    console.log("Missing metadata or data in payload");
+    return { emailData: null, triggerName: undefined, triggerId: undefined };
   }
-
-  // Original nested format
-  console.log("Detected nested payload format");
-  const nested = rawPayload as NestedPayload;
+  
+  // Extract body - for incoming emails it's in message_text, for outgoing it's in parts
+  let body = data.message_text || '';
+  if (!body && data.payload?.parts) {
+    body = extractBodyFromParts(data.payload.parts);
+  }
+  
   return {
-    emailData: nested.payload || null,
-    triggerName: nested.trigger_name || nested.metadata?.trigger_name,
-    triggerId: nested.trigger_id,
-    format: 'nested',
+    emailData: {
+      from: data.sender,
+      to: data.to || data.recipients,
+      subject: data.subject,
+      body,
+      date: data.message_timestamp,
+      messageId: data.message_id,
+      threadId: data.thread_id,
+    },
+    triggerName: metadata.trigger_slug,
+    triggerId: metadata.trigger_id,
   };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Check for test mode query parameter
   const url = new URL(req.url);
   const isTestMode = url.searchParams.get("test") === "true";
 
   console.log("=== Email Automation Webhook ===");
-  console.log("Received webhook from Composio", isTestMode ? "(TEST MODE)" : "");
-  console.log("Request URL:", req.url);
-  console.log("Request method:", req.method);
+  console.log("Timestamp:", new Date().toISOString());
 
   try {
     const rawPayload = await req.json();
+    console.log("Payload type:", rawPayload.type);
     console.log("Raw payload keys:", Object.keys(rawPayload));
-    console.log("Full payload:", JSON.stringify(rawPayload, null, 2));
 
-    // Normalize payload (handles both V3 and nested formats)
-    const { emailData, triggerName, triggerId, format } = normalizePayload(rawPayload);
+    // Parse Composio wrapped format
+    const { emailData, triggerName, triggerId } = parseComposioPayload(rawPayload);
     
-    console.log("Payload format:", format);
     console.log("Trigger name:", triggerName);
     console.log("Trigger ID:", triggerId);
-    console.log("Email data present:", !!emailData);
+    console.log("Has email data:", !!emailData);
     
     if (emailData) {
-      console.log("Email from:", emailData.from);
-      console.log("Email to:", emailData.to);
-      console.log("Email subject:", emailData.subject);
-      console.log("Email body length:", emailData.body?.length || 0);
+      console.log("From:", emailData.from);
+      console.log("To:", emailData.to);
+      console.log("Subject:", emailData.subject);
+      console.log("Body preview:", emailData.body?.substring(0, 100));
     }
 
-    // If test mode, just log and return success
     if (isTestMode) {
-      console.log("TEST MODE: Webhook received successfully, not processing");
       return new Response(
         JSON.stringify({ 
           success: true, 
           message: "Test webhook received",
           testMode: true,
-          receivedAt: new Date().toISOString(),
-          format,
-          payload: {
-            trigger_name: triggerName,
-            trigger_id: triggerId,
-            hasEmailData: !!emailData,
-            emailFrom: emailData?.from,
-            emailTo: emailData?.to,
-            emailSubject: emailData?.subject,
-          }
+          triggerId,
+          triggerName,
+          hasEmailData: !!emailData,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!emailData) {
-      console.log("No email data in payload");
+    if (!emailData || !triggerName || !triggerId) {
+      console.log("Missing required data - emailData:", !!emailData, "triggerName:", triggerName, "triggerId:", triggerId);
       return new Response(
-        JSON.stringify({ success: true, message: "No email data" }),
+        JSON.stringify({ success: true, message: "Missing required data" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Determine if this is incoming or outgoing
+    // Determine direction
     const isIncoming = triggerName === "GMAIL_NEW_GMAIL_MESSAGE";
     const isOutgoing = triggerName === "GMAIL_EMAIL_SENT_TRIGGER";
-
-    console.log("Trigger type - isIncoming:", isIncoming, "isOutgoing:", isOutgoing);
 
     if (!isIncoming && !isOutgoing) {
       console.log("Unknown trigger type:", triggerName);
@@ -308,11 +302,11 @@ serve(async (req) => {
       );
     }
 
-    // Find the user who owns this trigger
+    // Find the contact/user for this trigger
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    
     const triggerColumn = isIncoming ? 'incoming_trigger_id' : 'outgoing_trigger_id';
-    console.log("Looking up trigger in column:", triggerColumn, "with ID:", triggerId);
+    
+    console.log("Looking up trigger:", triggerId, "in column:", triggerColumn);
     
     const { data: contact, error: contactError } = await adminClient
       .from('email_automation_contacts')
@@ -321,23 +315,19 @@ serve(async (req) => {
       .single();
 
     if (contactError || !contact) {
-      console.log("Could not find contact for trigger:", triggerId);
-      console.log("Looking in column:", triggerColumn);
-      console.log("Contact error:", contactError);
-      
+      console.log("Trigger not found in database. ID:", triggerId);
       // Log all contacts for debugging
       const { data: allContacts } = await adminClient
         .from('email_automation_contacts')
         .select('email_address, incoming_trigger_id, outgoing_trigger_id');
-      console.log("All contacts in database:", JSON.stringify(allContacts, null, 2));
-      
+      console.log("Registered triggers:", JSON.stringify(allContacts));
       return new Response(
         JSON.stringify({ success: true, message: "Trigger not found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Found contact: ${contact.email_address} for user: ${contact.user_id}`);
+    console.log("Found contact:", contact.email_address);
 
     // Get user's API keys
     const { data: apiKeys, error: apiKeysError } = await adminClient
@@ -347,16 +337,16 @@ serve(async (req) => {
       .single();
 
     if (apiKeysError || !apiKeys) {
-      console.log("User has no API keys configured");
+      console.log("No API keys for user:", contact.user_id);
       return new Response(
-        JSON.stringify({ success: false, message: "No API keys" }),
+        JSON.stringify({ success: false, message: "No API keys configured" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Format and save the memory
     const memoryText = formatEmailAsMemory(emailData, isIncoming);
-    console.log("Saving memory:", memoryText.substring(0, 100) + "...");
+    console.log("Memory to save:", memoryText);
 
     const saved = await saveMemoryToLiam(
       memoryText,
@@ -365,22 +355,18 @@ serve(async (req) => {
       apiKeys.user_key
     );
 
-    console.log("Memory save result:", saved);
-
     return new Response(
       JSON.stringify({ 
         success: saved, 
-        message: saved ? "Memory saved" : "Failed to save memory",
-        email: contact.email_address,
+        message: saved ? "Memory saved" : "Failed to save",
+        contact: contact.email_address,
         type: isIncoming ? "incoming" : "outgoing",
-        format,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error("Webhook error:", error);
-    console.error("Error stack:", error instanceof Error ? error.stack : "No stack");
     return new Response(
       JSON.stringify({ 
         success: false, 
