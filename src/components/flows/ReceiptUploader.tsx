@@ -23,6 +23,7 @@ export function ReceiptUploader({
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const validateAndProcessFile = useCallback(async (file: File) => {
     setError(null);
@@ -56,6 +57,8 @@ export function ReceiptUploader({
     if (file) {
       validateAndProcessFile(file);
     }
+    // Reset input value to allow re-selecting the same file
+    e.target.value = '';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -78,20 +81,40 @@ export function ReceiptUploader({
     }
   };
 
-  const handleClick = () => {
+  const handleUploadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fileInputRef.current?.click();
+  };
+
+  const handleCameraClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    cameraInputRef.current?.click();
+  };
+
+  const handleAreaClick = () => {
+    // Default to file picker when clicking the area
     fileInputRef.current?.click();
   };
 
   return (
     <div className="space-y-4">
-      {/* Hidden file input */}
+      {/* Hidden file input for gallery/files - NO capture attribute */}
       <input
         ref={fileInputRef}
         type="file"
         accept={ACCEPTED_TYPES.join(',')}
         onChange={handleFileChange}
         className="hidden"
+      />
+      
+      {/* Hidden file input for camera - WITH capture attribute */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
         capture="environment"
+        onChange={handleFileChange}
+        className="hidden"
       />
 
       {/* Image preview or upload area */}
@@ -133,7 +156,7 @@ export function ReceiptUploader({
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          onClick={handleClick}
+          onClick={handleAreaClick}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -173,10 +196,7 @@ export function ReceiptUploader({
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={(e) => {
-                e.stopPropagation();
-                fileInputRef.current?.click();
-              }}
+              onClick={handleUploadClick}
             >
               <Upload className="w-4 h-4" />
               Upload
@@ -186,14 +206,7 @@ export function ReceiptUploader({
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Trigger camera specifically on mobile
-                if (fileInputRef.current) {
-                  fileInputRef.current.capture = 'environment';
-                  fileInputRef.current.click();
-                }
-              }}
+              onClick={handleCameraClick}
             >
               <Camera className="w-4 h-4" />
               Camera
