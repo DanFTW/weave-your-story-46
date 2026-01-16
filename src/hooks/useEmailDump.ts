@@ -129,11 +129,11 @@ export function useEmailDump(): UseEmailDumpReturn {
         return;
       }
 
-      // Convert to EmailMemory format
+      // Convert to EmailMemory format with 'email' tag (lowercase to match tagConfig)
       const memories: EmailMemory[] = emails.map((email, index) => ({
         id: `email-${Date.now()}-${index}`,
         content: formatEmailAsMemory(email),
-        tag: 'EMAIL',
+        tag: 'email',
         email,
         isEditing: false,
       }));

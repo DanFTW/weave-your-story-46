@@ -11,6 +11,8 @@ import {
   Bell,
   NotebookPen,
   Coffee,
+  Mail,
+  Receipt,
   LucideIcon,
 } from "lucide-react";
 
@@ -27,6 +29,8 @@ export interface TagConfig {
  */
 export const TAG_CATEGORIES: TagConfig[] = [
   { id: 'quick_note', label: 'Quick Note', gradient: 'bg-gradient-to-r from-indigo-500 to-blue-600', icon: NotebookPen },
+  { id: 'email', label: 'Email', gradient: 'bg-gradient-to-r from-blue-500 to-cyan-500', icon: Mail },
+  { id: 'receipts', label: 'Receipt', gradient: 'bg-gradient-to-r from-green-500 to-emerald-500', icon: Receipt },
   { id: 'family', label: 'Family', gradient: 'bg-gradient-to-r from-fuchsia-500 to-purple-500', icon: Users },
   { id: 'work', label: 'Work', gradient: 'bg-gradient-to-r from-emerald-400 to-teal-500', icon: Briefcase },
   { id: 'food', label: 'Food', gradient: 'bg-gradient-to-r from-amber-400 to-orange-500', icon: Utensils },
