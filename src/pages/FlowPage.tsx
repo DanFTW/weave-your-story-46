@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { getFlowConfig } from "@/data/flowConfigs";
@@ -22,6 +22,7 @@ import { FlowConfigured } from "@/components/flows/FlowConfigured";
 // Receipt-specific components
 import { ReceiptUploader } from "@/components/flows/ReceiptUploader";
 import { ReceiptPreview } from "@/components/flows/ReceiptPreview";
+import { ReceiptMemoryListRef } from "@/components/flows/ReceiptMemoryList";
 import { ReceiptMemoryList } from "@/components/flows/ReceiptMemoryList";
 
 // LLM Import components
@@ -51,6 +52,7 @@ export default function FlowPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const receiptListRef = useRef<ReceiptMemoryListRef>(null);
   
   // LLM Import state
   const [llmImportPhase, setLLMImportPhase] = useState<LLMImportPhase>('category-select');
@@ -120,6 +122,12 @@ export default function FlowPage() {
         setSelectedImage(null);
         setSelectedFile(null);
         setReceiptData(null);
+        
+        // Refresh the receipt list to show the new memory
+        // Small delay to allow LIAM API to process
+        setTimeout(() => {
+          receiptListRef.current?.refresh();
+        }, 500);
       }
     } catch (error) {
       console.error('Failed to save receipt:', error);
@@ -173,7 +181,7 @@ export default function FlowPage() {
         {/* Content */}
         <div className="px-5 pt-5">
           {receiptPhase === 'list' && (
-            <ReceiptMemoryList onAddNew={() => setReceiptPhase('upload')} />
+            <ReceiptMemoryList ref={receiptListRef} onAddNew={() => setReceiptPhase('upload')} />
           )}
           
           {receiptPhase === 'upload' && (
