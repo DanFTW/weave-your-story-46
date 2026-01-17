@@ -1,9 +1,12 @@
+// composio-connect edge function - handles OAuth initiation for integrations
+// Last updated: 2026-01-17T23:59:00Z - force redeploy for googlephotos support
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 // Version tracking for deployment verification
-const FUNCTION_VERSION = "1.1.0";
-console.log(`composio-connect function starting - version ${FUNCTION_VERSION}`);
+const FUNCTION_VERSION = "2.0.0";
+console.log(`[composio-connect] Function starting - version ${FUNCTION_VERSION}`);
+console.log(`[composio-connect] Timestamp: ${new Date().toISOString()}`);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,9 +16,12 @@ const corsHeaders = {
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
 // Auth config IDs from Composio dashboard
+// Gmail: Google email access
+// Google Photos: Photo library access  
+// Instagram: Social media integration (placeholder)
 const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
-  instagram: "ac_INSTAGRAM_CONFIG_ID", // TODO: Replace with actual auth config ID from Composio dashboard
+  instagram: "ac_INSTAGRAM_CONFIG_ID",
   googlephotos: "ac_nazoF6ohFfId",
 };
 
