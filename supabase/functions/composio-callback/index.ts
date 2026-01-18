@@ -32,6 +32,7 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "instagram": "instagram",
   "youtube": "youtube",
   "pinterest": "pinterest",
+  "dropbox": "dropbox",
 };
 
 serve(async (req) => {

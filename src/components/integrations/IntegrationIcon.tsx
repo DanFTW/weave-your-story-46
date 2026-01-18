@@ -8,6 +8,7 @@ import youtubeIcon from "@/assets/integrations/youtube.png";
 import spotifyIcon from "@/assets/integrations/spotify.png";
 import locationIcon from "@/assets/integrations/location.png";
 import cameraIcon from "@/assets/integrations/camera.png";
+import dropboxIcon from "@/assets/integrations/dropbox.png";
 
 interface IntegrationIconProps {
   icon: string;
@@ -23,6 +24,7 @@ const iconImages: Record<string, string> = {
   spotify: spotifyIcon,
   location: locationIcon,
   camera: cameraIcon,
+  dropbox: dropboxIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
