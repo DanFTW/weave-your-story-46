@@ -34,6 +34,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "spotify",
         status: "none",
       },
+      {
+        id: "dropbox",
+        name: "Dropbox",
+        icon: "dropbox",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -123,6 +129,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#1DB954",
       secondary: "#191414",
       tertiary: "#1ED760",
+    },
+  },
+  "dropbox": {
+    id: "dropbox",
+    name: "Dropbox",
+    icon: "dropbox",
+    status: "unconfigured",
+    description: "Dropbox allows Weave to access your files and folders. Create memories from your documents, photos, and important files stored in the cloud.",
+    capabilities: ["View files", "Browse folders", "Access shared content", "View recent activity"],
+    gradientColors: {
+      primary: "#0061FF",
+      secondary: "#0052D4",
+      tertiary: "#0040A8",
     },
   },
 };
