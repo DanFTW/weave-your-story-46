@@ -24,6 +24,8 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 }
 
 // Map Composio app keys to our integration IDs
+// IMPORTANT: Use exact toolkit names from Composio docs to avoid mapping issues
+// Google Photos toolkit = "googlephotos" (lowercase, no underscore) - docs.composio.dev/toolkits/googlephotos
 const APP_TO_TOOLKIT: Record<string, string> = {
   "gmail": "gmail",
   "googlemail": "gmail", 
@@ -32,6 +34,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "instagram": "instagram",
   "youtube": "youtube",
   "pinterest": "pinterest",
+  "googlephotos": "googlephotos", // Google Photos - verified from Composio docs
+  "google_photos": "googlephotos", // Alternate format in case Composio returns this
 };
 
 serve(async (req) => {
