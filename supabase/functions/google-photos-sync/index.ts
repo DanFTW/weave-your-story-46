@@ -107,7 +107,8 @@ async function listPhotos(connectionId: string, limit: number) {
   
   try {
     // Execute the Google Photos list media items action via Composio v3 API
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_LIST_MEDIAITEMS', {
+    // IMPORTANT: Action name uses underscores: GOOGLEPHOTOS_LIST_MEDIA_ITEMS (not MEDIAITEMS)
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_LIST_MEDIA_ITEMS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
