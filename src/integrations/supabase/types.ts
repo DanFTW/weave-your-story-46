@@ -14,44 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
-      email_automation_contacts: {
+      google_photos_sync_config: {
         Row: {
-          contact_name: string | null
-          created_at: string | null
-          email_address: string
+          auto_create_memories: boolean
+          created_at: string
           id: string
-          incoming_trigger_id: string | null
-          is_active: boolean | null
-          monitor_incoming: boolean | null
-          monitor_outgoing: boolean | null
-          outgoing_trigger_id: string | null
-          updated_at: string | null
+          last_sync_at: string | null
+          last_synced_photo_id: string | null
+          memories_created_count: number
+          photos_synced_count: number
+          sync_new_photos: boolean
+          updated_at: string
           user_id: string
         }
         Insert: {
-          contact_name?: string | null
-          created_at?: string | null
-          email_address: string
+          auto_create_memories?: boolean
+          created_at?: string
           id?: string
-          incoming_trigger_id?: string | null
-          is_active?: boolean | null
-          monitor_incoming?: boolean | null
-          monitor_outgoing?: boolean | null
-          outgoing_trigger_id?: string | null
-          updated_at?: string | null
+          last_sync_at?: string | null
+          last_synced_photo_id?: string | null
+          memories_created_count?: number
+          photos_synced_count?: number
+          sync_new_photos?: boolean
+          updated_at?: string
           user_id: string
         }
         Update: {
-          contact_name?: string | null
-          created_at?: string | null
-          email_address?: string
+          auto_create_memories?: boolean
+          created_at?: string
           id?: string
-          incoming_trigger_id?: string | null
-          is_active?: boolean | null
-          monitor_incoming?: boolean | null
-          monitor_outgoing?: boolean | null
-          outgoing_trigger_id?: string | null
-          updated_at?: string | null
+          last_sync_at?: string | null
+          last_synced_photo_id?: string | null
+          memories_created_count?: number
+          photos_synced_count?: number
+          sync_new_photos?: boolean
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
