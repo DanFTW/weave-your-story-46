@@ -82,6 +82,9 @@ export default function OAuthComplete() {
           setStatus("success");
           setMessage(`${resolvedToolkit.charAt(0).toUpperCase() + resolvedToolkit.slice(1)} connected successfully!`);
 
+          // Check if this is a popup window
+          const isPopup = window.opener && window.opener !== window;
+          
           // If we're in the Median App Browser, close it
           if (isMedian()) {
             console.log("OAuthComplete: In Median, attempting to close app browser...");
@@ -94,11 +97,31 @@ export default function OAuthComplete() {
                 setMessage("Connection complete! You can close this window.");
               }
             }, 1500);
-          } else {
-            // In regular browser, redirect back to the integration page
+          } else if (isPopup) {
+            // Popup flow - parent window will detect via polling
+            console.log("OAuthComplete: In popup, will close after showing success");
             setTimeout(() => {
-              const redirectPath = `/integration/${resolvedToolkit.toLowerCase()}`;
-              window.location.href = `${window.location.origin}${redirectPath}`;
+              try {
+                window.close();
+              } catch (e) {
+                console.log("OAuthComplete: Failed to close popup:", e);
+                setMessage("Connection complete! You can close this window.");
+              }
+            }, 2000);
+          } else {
+            // Full redirect flow - use stored return URL or construct from toolkit
+            setTimeout(() => {
+              const storedReturnUrl = sessionStorage.getItem('oauth_return_url');
+              sessionStorage.removeItem('oauth_return_url');
+              
+              if (storedReturnUrl) {
+                console.log("OAuthComplete: Redirecting to stored URL:", storedReturnUrl);
+                window.location.href = storedReturnUrl;
+              } else {
+                const redirectPath = `/integration/${resolvedToolkit.toLowerCase()}`;
+                console.log("OAuthComplete: Redirecting to:", `${window.location.origin}${redirectPath}`);
+                window.location.href = `${window.location.origin}${redirectPath}`;
+              }
             }, 1500);
           }
         } else {
@@ -129,8 +152,10 @@ export default function OAuthComplete() {
           <>
             <CheckCircle2 className="w-12 h-12 mx-auto text-green-500" />
             <p className="text-lg text-foreground font-medium">{message}</p>
-            {isMedian() && (
+            {isMedian() ? (
               <p className="text-sm text-muted-foreground">Returning to app...</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Redirecting...</p>
             )}
           </>
         )}
