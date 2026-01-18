@@ -123,25 +123,53 @@ export function useComposio(toolkit: string): UseComposioReturn {
       // Build redirect URL to OAuth completion page
       const baseUrl = "https://weavefabric.lovable.app";
       
-      console.log(`Initiating ${toolkit} OAuth...`);
+      // Use lowercase toolkit - this is the canonical format expected by Composio
+      const toolkitLower = toolkit.toLowerCase();
+      
+      console.log(`Initiating ${toolkitLower} OAuth...`);
       console.log(`Running in Median: ${isMedian()}`);
 
       const { data, error } = await supabase.functions.invoke("composio-connect", {
         body: { 
-          toolkit: toolkit.toUpperCase(),
-          // Pass base URL, edge function will build complete callback URL
+          toolkit: toolkitLower,
           baseUrl,
         },
       });
 
       if (error) {
         console.error("Connect error:", error);
-        toast.error("Failed to start connection");
+        
+        // Try to extract meaningful error message
+        let errorMessage = "Failed to start connection";
+        if (error.message) {
+          try {
+            const parsed = JSON.parse(error.message);
+            errorMessage = parsed.message || parsed.error || errorMessage;
+          } catch {
+            errorMessage = error.message;
+          }
+        }
+        
+        toast.error(errorMessage);
         setConnecting(false);
         return;
       }
 
       console.log("Connect response:", data);
+
+      // Handle structured error responses from edge function
+      if (data?.error) {
+        console.error("Connect error response:", data);
+        const errorMessage = data.message || data.error || "Failed to start connection";
+        
+        if (data.configured_toolkits) {
+          console.log("Available toolkits:", data.configured_toolkits);
+        }
+        
+        toast.error(errorMessage);
+        setConnecting(false);
+        return;
+      }
 
       if (!data?.redirectUrl) {
         toast.error("No redirect URL received");
@@ -191,7 +219,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
       }
     } catch (error) {
       console.error("Connection error:", error);
-      toast.error("Failed to connect integration");
+      toast.error("Failed to connect integration. Please try again.");
       setConnecting(false);
     }
   }, [toolkit, startPolling]);

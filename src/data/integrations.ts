@@ -11,6 +11,12 @@ export const integrationSections: IntegrationSection[] = [
         status: "unconfigured",
       },
       {
+        id: "googlephotos",
+        name: "Google Photos",
+        icon: "googlephotos",
+        status: "none",
+      },
+      {
         id: "instagram",
         name: "Instagram",
         icon: "instagram",
@@ -70,6 +76,20 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#4285F4",  // Gmail blue
       tertiary: "#34A853",   // Gmail green
       quaternary: "#FBBC05", // Gmail yellow
+    },
+  },
+  "googlephotos": {
+    id: "googlephotos",
+    name: "Google Photos",
+    icon: "googlephotos",
+    status: "none",
+    description: "Google Photos allows Weave to access your photo library. Create memories from your favorite moments, albums, and shared photos automatically.",
+    capabilities: ["View photos", "View albums", "Access library", "View shared albums"],
+    gradientColors: {
+      primary: "#EA4335",    // Google red
+      secondary: "#4285F4",  // Google blue
+      tertiary: "#FBBC05",   // Google yellow
+      quaternary: "#34A853", // Google green
     },
   },
   "instagram": {
