@@ -104,32 +104,39 @@ serve(async (req) => {
 
 async function listPhotos(connectionId: string, limit: number) {
   try {
-    // Execute the Google Photos list media items action via Composio
-    const response = await fetch('https://backend.composio.dev/api/v2/actions/GOOGLEPHOTOS_LIST_MEDIAITEMS/execute', {
+    console.log(`listPhotos: Fetching photos with connection=${connectionId}, limit=${limit}`);
+    
+    // Use Composio v3 API format (matching gmail-fetch-emails)
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_LIST_MEDIAITEMS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        connectedAccountId: connectionId,
-        input: {
+        connected_account_id: connectionId,  // v3 format (snake_case)
+        arguments: {                          // v3 format
           pageSize: limit,
         },
       }),
     });
 
+    const responseText = await response.text();
+    console.log(`listPhotos: Response status=${response.status}`);
+    console.log(`listPhotos: Response preview=${responseText.slice(0, 500)}`);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Composio API error:', response.status, errorText);
+      console.error('Composio API error:', response.status, responseText);
       throw new Error(`Failed to list photos: ${response.status}`);
     }
 
-    const data = await response.json();
-    console.log('Composio response:', JSON.stringify(data).slice(0, 500));
-
-    // Parse the response
-    const mediaItems = data?.data?.mediaItems || data?.response?.data?.mediaItems || [];
+    const data = JSON.parse(responseText);
+    
+    // Handle v3 response format - check multiple possible paths
+    const responseData = data.data || data;
+    const mediaItems = responseData?.mediaItems || responseData?.results || responseData?.response?.data?.mediaItems || [];
+    
+    console.log(`listPhotos: Found ${mediaItems.length} media items`);
     
     const photos = mediaItems.map((item: any) => ({
       id: item.id,
@@ -145,7 +152,7 @@ async function listPhotos(connectionId: string, limit: number) {
 
     return photos;
   } catch (error) {
-    console.error('List photos error:', error);
+    console.error('listPhotos error:', error);
     return [];
   }
 }
