@@ -9,6 +9,7 @@ import spotifyIcon from "@/assets/integrations/spotify.png";
 import locationIcon from "@/assets/integrations/location.png";
 import cameraIcon from "@/assets/integrations/camera.png";
 import dropboxIcon from "@/assets/integrations/dropbox.png";
+import googlephotosIcon from "@/assets/integrations/googlephotos.png";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -25,6 +26,7 @@ const iconImages: Record<string, string> = {
   location: locationIcon,
   camera: cameraIcon,
   dropbox: dropboxIcon,
+  googlephotos: googlephotosIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
