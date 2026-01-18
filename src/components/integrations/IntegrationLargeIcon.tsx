@@ -2,7 +2,6 @@ import { cn } from "@/lib/utils";
 
 // Import integration icons
 import gmailIcon from "@/assets/integrations/gmail.png";
-import googlephotosIcon from "@/assets/integrations/googlephotos.png";
 import instagramIcon from "@/assets/integrations/instagram.png";
 import pinterestIcon from "@/assets/integrations/pinterest.png";
 import youtubeIcon from "@/assets/integrations/youtube.png";
@@ -18,7 +17,6 @@ interface IntegrationLargeIconProps {
 // Map icon names to imported images
 const iconImages: Record<string, string> = {
   gmail: gmailIcon,
-  googlephotos: googlephotosIcon,
   instagram: instagramIcon,
   pinterest: pinterestIcon,
   youtube: youtubeIcon,
