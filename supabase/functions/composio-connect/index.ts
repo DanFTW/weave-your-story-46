@@ -52,11 +52,12 @@ serve(async (req) => {
     }
 
     const { toolkit, baseUrl } = await req.json();
-    const toolkitLower = toolkit?.toLowerCase() || "";
-    
-    console.log(`Initiating OAuth for toolkit: ${toolkit}`);
-    console.log(`User ID: ${user.id}`);
-    console.log(`Base URL: ${baseUrl}`);
+  const toolkitLower = toolkit?.toLowerCase() || "";
+  
+  console.log(`Initiating OAuth for toolkit: ${toolkit} (normalized: ${toolkitLower})`);
+  console.log(`User ID: ${user.id}`);
+  console.log(`Base URL: ${baseUrl}`);
+  console.log(`Available auth configs: ${Object.keys(AUTH_CONFIGS).join(", ")}`);
     
     if (!toolkit || !AUTH_CONFIGS[toolkitLower]) {
       return new Response(
