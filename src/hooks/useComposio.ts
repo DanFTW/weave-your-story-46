@@ -120,11 +120,15 @@ export function useComposio(toolkit: string): UseComposioReturn {
         return;
       }
 
-      // Build redirect URL to OAuth completion page
-      const baseUrl = "https://weavefabric.lovable.app";
+      // Build redirect URL to OAuth completion page using current origin
+      const baseUrl = window.location.origin;
+      
+      // Store return URL for redirect after OAuth completion
+      sessionStorage.setItem('oauth_return_url', `${baseUrl}/integration/${toolkit.toLowerCase()}`);
       
       console.log(`Initiating ${toolkit} OAuth...`);
       console.log(`Running in Median: ${isMedian()}`);
+      console.log(`Using base URL: ${baseUrl}`);
 
       const { data, error } = await supabase.functions.invoke("composio-connect", {
         body: { 

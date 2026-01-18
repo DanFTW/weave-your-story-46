@@ -167,7 +167,9 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
 };
 
 export function getIntegrationDetail(id: string): IntegrationDetail | undefined {
-  return integrationDetails[id];
+  // Case-insensitive lookup for robustness
+  const normalizedId = id.toLowerCase();
+  return integrationDetails[normalizedId];
 }
 
 export function getAllIntegrations(): IntegrationDetail[] {
