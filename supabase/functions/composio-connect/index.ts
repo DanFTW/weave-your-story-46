@@ -1,12 +1,5 @@
-// composio-connect edge function - handles OAuth initiation for integrations
-// Last updated: 2026-01-17T23:59:00Z - force redeploy for googlephotos support
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-
-// Version tracking for deployment verification
-const FUNCTION_VERSION = "2.0.0";
-console.log(`[composio-connect] Function starting - version ${FUNCTION_VERSION}`);
-console.log(`[composio-connect] Timestamp: ${new Date().toISOString()}`);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,12 +9,9 @@ const corsHeaders = {
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
 // Auth config IDs from Composio dashboard
-// Gmail: Google email access
-// Google Photos: Photo library access  
-// Instagram: Social media integration (placeholder)
 const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
-  instagram: "ac_INSTAGRAM_CONFIG_ID",
+  instagram: "ac_INSTAGRAM_CONFIG_ID", // TODO: Replace with actual auth config ID from Composio dashboard
   googlephotos: "ac_nazoF6ohFfId",
 };
 
@@ -64,15 +54,13 @@ serve(async (req) => {
     const { toolkit, baseUrl } = await req.json();
     const toolkitLower = toolkit?.toLowerCase() || "";
     
-    console.log(`Initiating OAuth for toolkit: ${toolkit} (normalized: ${toolkitLower})`);
+    console.log(`Initiating OAuth for toolkit: ${toolkit}`);
     console.log(`User ID: ${user.id}`);
     console.log(`Base URL: ${baseUrl}`);
-    console.log(`Available auth configs: ${Object.keys(AUTH_CONFIGS).join(', ')}`);
     
     if (!toolkit || !AUTH_CONFIGS[toolkitLower]) {
-      console.error(`Invalid toolkit: ${toolkit}, normalized: ${toolkitLower}, available: ${Object.keys(AUTH_CONFIGS).join(', ')}`);
       return new Response(
-        JSON.stringify({ error: `Invalid toolkit: ${toolkit}. Available: ${Object.keys(AUTH_CONFIGS).join(', ')}` }),
+        JSON.stringify({ error: `Invalid toolkit: ${toolkit}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
