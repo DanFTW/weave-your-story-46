@@ -139,13 +139,14 @@ async function listAlbums(connectionId: string) {
         connected_account_id: connectionId,
         arguments: {
           pageSize: 50,
+          excludeNonAppCreatedData: false, // Request ALL albums, not just app-created ones
         },
       }),
     });
 
     const responseText = await response.text();
     console.log(`listAlbums: Response status=${response.status}`);
-    console.log(`listAlbums: Response preview=${responseText.slice(0, 500)}`);
+    console.log(`listAlbums: Full response=${responseText}`);
 
     if (!response.ok) {
       console.error('Composio API error:', response.status, responseText);
@@ -153,9 +154,19 @@ async function listAlbums(connectionId: string) {
     }
 
     const data = JSON.parse(responseText);
+    console.log(`listAlbums: Parsed data structure keys=${Object.keys(data).join(', ')}`);
     
-    // Handle v3 response format
+    // Handle v3 response format - check multiple possible paths
     const responseData = data.data || data;
+    console.log(`listAlbums: responseData keys=${Object.keys(responseData || {}).join(', ')}`);
+    
+    // Check for error in response
+    if (responseData?.error || responseData?.http_error) {
+      console.error('listAlbums: API returned error:', responseData.error || responseData.http_error);
+      console.error('listAlbums: Error message:', responseData.message);
+      return [];
+    }
+    
     const albumsData = responseData?.albums || responseData?.results || responseData?.response?.data?.albums || [];
     
     console.log(`listAlbums: Found ${albumsData.length} albums`);
