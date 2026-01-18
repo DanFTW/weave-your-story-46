@@ -128,7 +128,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
 
       const { data, error } = await supabase.functions.invoke("composio-connect", {
         body: { 
-          toolkit: toolkit.toUpperCase(),
+          toolkit: toolkit.toLowerCase(),
           // Pass base URL, edge function will build complete callback URL
           baseUrl,
         },
