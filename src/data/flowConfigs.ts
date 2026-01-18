@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "google-photos-sync": {
+    id: "google-photos-sync",
+    title: "Google Photos Sync",
+    subtitle: "Sync photos to memory",
+    description: "Automatically save photos as memories.",
+    gradient: "teal",
+    icon: Camera,
+    entryName: "photo",
+    entryNamePlural: "photos",
+    memoryTag: "PHOTOS",
+    fields: [],
+    isGooglePhotosSyncFlow: true,
+  },
   interests: {
     id: "interests",
     title: "Your Interests",

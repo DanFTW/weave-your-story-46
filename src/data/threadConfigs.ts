@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "google-photos-sync": {
+    id: "google-photos-sync",
+    title: "Sync Photos to Memory",
+    subtitle: "Capture moments automatically",
+    description: "Connect Google Photos to automatically save new photos as memories. Every photo you upload becomes a searchable memory.",
+    gradient: "teal",
+    icon: Camera,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Google Photos",
+        description: "Authorize access to your photos",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Photos_icon_%282020%29.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Configure Sync",
+        description: "Choose what to sync",
+        icon: Settings,
+      },
+      {
+        id: "sync",
+        type: "save",
+        title: "Active Sync",
+        description: "Photos saved automatically",
+        icon: Wifi,
+        badge: "WEAVE FABRIC",
+      },
+    ],
+  },
   "llm-import": {
     id: "llm-import",
     title: "Import from Chat",
