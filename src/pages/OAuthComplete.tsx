@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isMedian, median } from "@/utils/median";
-import { Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /**
  * OAuth completion page - handles the callback from OAuth providers.
@@ -14,9 +15,26 @@ import { Loader2, CheckCircle2, XCircle } from "lucide-react";
  */
 export default function OAuthComplete() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Completing connection...");
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [toolkit, setToolkit] = useState<string | null>(null);
+
+  const handleRetry = () => {
+    // Get the stored return URL to determine which integration to retry
+    const storedReturnUrl = sessionStorage.getItem('oauth_return_url');
+    if (storedReturnUrl) {
+      window.location.href = storedReturnUrl;
+    } else {
+      // Fallback to integrations page
+      navigate('/integrations');
+    }
+  };
+
+  const handleGoBack = () => {
+    navigate('/integrations');
+  };
 
   useEffect(() => {
     const completeOAuth = async () => {
@@ -45,9 +63,10 @@ export default function OAuthComplete() {
         // More descriptive error message
         const allParams = Object.fromEntries(searchParams.entries());
         const paramStr = Object.keys(allParams).length > 0 
-          ? `Received params: ${JSON.stringify(allParams)}`
-          : "No query parameters received from OAuth provider.";
-        setMessage(`Connection incomplete. ${paramStr}`);
+          ? `Received: ${JSON.stringify(allParams)}`
+          : "No query parameters received.";
+        setMessage("Connection incomplete");
+        setErrorDetails(paramStr);
         return;
       }
 
@@ -72,7 +91,8 @@ export default function OAuthComplete() {
         if (error) {
           console.error("OAuthComplete: Callback error:", error);
           setStatus("error");
-          setMessage("Failed to complete connection. Please try again.");
+          setMessage("Failed to complete connection");
+          setErrorDetails(error.message || "Please try again.");
           return;
         }
 
@@ -126,12 +146,14 @@ export default function OAuthComplete() {
           }
         } else {
           setStatus("error");
-          setMessage(data?.error || data?.message || "Connection failed. Please try again.");
+          setMessage("Connection failed");
+          setErrorDetails(data?.error || data?.message || "Please try again.");
         }
       } catch (err) {
         console.error("OAuthComplete: Unexpected error:", err);
         setStatus("error");
-        setMessage("An unexpected error occurred. Please try again.");
+        setMessage("An unexpected error occurred");
+        setErrorDetails(err instanceof Error ? err.message : "Please try again.");
       }
     };
 
@@ -140,7 +162,7 @@ export default function OAuthComplete() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-4 max-w-sm">
         {status === "loading" && (
           <>
             <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
@@ -164,9 +186,18 @@ export default function OAuthComplete() {
           <>
             <XCircle className="w-12 h-12 mx-auto text-destructive" />
             <p className="text-lg text-foreground font-medium">{message}</p>
-            <p className="text-sm text-muted-foreground">
-              Please close this window and try again.
-            </p>
+            {errorDetails && (
+              <p className="text-sm text-muted-foreground">{errorDetails}</p>
+            )}
+            <div className="flex flex-col gap-2 pt-4">
+              <Button onClick={handleRetry} className="w-full gap-2">
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </Button>
+              <Button variant="outline" onClick={handleGoBack} className="w-full">
+                Back to Integrations
+              </Button>
+            </div>
           </>
         )}
       </div>

@@ -67,6 +67,17 @@ serve(async (req) => {
     }
 
     const authConfigId = AUTH_CONFIGS[toolkitLower];
+    
+    // Build the callback URL that Composio will redirect to after OAuth
+    const callbackUrl = `${baseUrl}/oauth-complete?toolkit=${toolkitLower}`;
+    
+    console.log(`=== COMPOSIO OAUTH DEBUG ===`);
+    console.log(`Auth Config ID: ${authConfigId}`);
+    console.log(`Callback URL (our app): ${callbackUrl}`);
+    console.log(`NOTE: Composio uses its own redirect_uri for Google OAuth:`);
+    console.log(`  https://backend.composio.dev/api/v3/toolkits/auth/callback`);
+    console.log(`This URI must be whitelisted in Google Cloud Console!`);
+    console.log(`============================`);
 
     // Call Composio v3 API /link endpoint
     const composioResponse = await fetch("https://backend.composio.dev/api/v3/connected_accounts/link", {
@@ -80,7 +91,7 @@ serve(async (req) => {
         user_id: user.id,
         // Composio will redirect here after OAuth completes
         // We'll add connectionId and toolkit as query params in the callback
-        callback_url: `${baseUrl}/oauth-complete?toolkit=${toolkitLower}`,
+        callback_url: callbackUrl,
       }),
     });
 
