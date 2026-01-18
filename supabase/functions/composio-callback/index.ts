@@ -32,9 +32,6 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "instagram": "instagram",
   "youtube": "youtube",
   "pinterest": "pinterest",
-  "googlephotos": "googlephotos",
-  "google_photos": "googlephotos",
-  "googlephotosnew": "googlephotos",
 };
 
 serve(async (req) => {
