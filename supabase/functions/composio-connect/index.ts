@@ -8,12 +8,13 @@ const corsHeaders = {
 
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
-// Auth config IDs from Composio dashboard
+// Auth config IDs from Composio dashboard (only for custom OAuth setups)
+// If not listed here, Composio's default managed integration will be used
 const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
   instagram: "ac_INSTAGRAM_CONFIG_ID", // TODO: Replace with actual auth config ID from Composio dashboard
   dropbox: "ac_u-LEALnVXap9",
-  googlephotos: "ac_nazoF6ohFfId",
+  // googlephotos: removed - use Composio's default managed Google Photos integration
 };
 
 serve(async (req) => {
@@ -59,14 +60,18 @@ serve(async (req) => {
     console.log(`User ID: ${user.id}`);
     console.log(`Base URL: ${baseUrl}`);
     
-    if (!toolkit || !AUTH_CONFIGS[toolkitLower]) {
+    if (!toolkit) {
       return new Response(
-        JSON.stringify({ error: `Invalid toolkit: ${toolkit}` }),
+        JSON.stringify({ error: `Toolkit is required` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Use custom auth config if available, otherwise use toolkit name for Composio's default
     const authConfigId = AUTH_CONFIGS[toolkitLower];
+    const useDefaultIntegration = !authConfigId;
+    
+    console.log(`Using ${useDefaultIntegration ? 'Composio default' : 'custom'} integration for ${toolkit}`);
     
     // Build the callback URL that Composio will redirect to after OAuth
     const callbackUrl = `${baseUrl}/oauth-complete?toolkit=${toolkitLower}`;
@@ -80,19 +85,28 @@ serve(async (req) => {
     console.log(`============================`);
 
     // Call Composio v3 API /link endpoint
+    // If we have a custom auth_config_id, use it; otherwise use toolkit_slug for default integration
+    const requestBody = useDefaultIntegration
+      ? {
+          toolkit_slug: toolkitLower,
+          user_id: user.id,
+          callback_url: callbackUrl,
+        }
+      : {
+          auth_config_id: authConfigId,
+          user_id: user.id,
+          callback_url: callbackUrl,
+        };
+    
+    console.log(`Composio request body:`, JSON.stringify(requestBody));
+    
     const composioResponse = await fetch("https://backend.composio.dev/api/v3/connected_accounts/link", {
       method: "POST",
       headers: {
         "x-api-key": COMPOSIO_API_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        auth_config_id: authConfigId,
-        user_id: user.id,
-        // Composio will redirect here after OAuth completes
-        // We'll add connectionId and toolkit as query params in the callback
-        callback_url: callbackUrl,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const responseText = await composioResponse.text();
