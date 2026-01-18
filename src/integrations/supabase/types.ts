@@ -65,6 +65,7 @@ export type Database = {
           last_synced_photo_id: string | null
           memories_created_count: number
           photos_synced_count: number
+          selected_album_ids: string[] | null
           sync_new_photos: boolean
           updated_at: string
           user_id: string
@@ -77,6 +78,7 @@ export type Database = {
           last_synced_photo_id?: string | null
           memories_created_count?: number
           photos_synced_count?: number
+          selected_album_ids?: string[] | null
           sync_new_photos?: boolean
           updated_at?: string
           user_id: string
@@ -89,6 +91,7 @@ export type Database = {
           last_synced_photo_id?: string | null
           memories_created_count?: number
           photos_synced_count?: number
+          selected_album_ids?: string[] | null
           sync_new_photos?: boolean
           updated_at?: string
           user_id?: string
