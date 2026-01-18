@@ -9,12 +9,9 @@ const corsHeaders = {
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
 // Auth config IDs from Composio dashboard
-// IMPORTANT: Use exact toolkit names from Composio docs to avoid "invalid toolkit" errors
-// Google Photos toolkit = "googlephotos" (lowercase, no underscore) - docs.composio.dev/toolkits/googlephotos
 const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
   instagram: "ac_INSTAGRAM_CONFIG_ID", // TODO: Replace with actual auth config ID from Composio dashboard
-  googlephotos: "ac_nazoF6ohFfId", // Google Photos - verified toolkit name from Composio docs
 };
 
 serve(async (req) => {
