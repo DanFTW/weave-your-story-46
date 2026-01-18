@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
   GooglePhotosSyncPhase, 
   SyncConfig, 
   PhotoItem, 
-  SyncResult 
+  SyncResult,
+  Album
 } from "@/types/googlePhotosSync";
 
 interface UseGooglePhotosSyncReturn {
@@ -18,12 +19,23 @@ interface UseGooglePhotosSyncReturn {
   isLoading: boolean;
   isSavingConfig: boolean;
   lastSyncResult: SyncResult | null;
+  
+  // Album state
+  albums: Album[];
+  selectedAlbumIds: string[];
+  albumPhotos: Record<string, PhotoItem[]>;
+  isLoadingAlbums: boolean;
 
   // Actions
   loadConfig: () => Promise<void>;
   saveConfig: (config: Partial<SyncConfig>) => Promise<boolean>;
   syncNow: () => Promise<SyncResult | null>;
   fetchRecentPhotos: () => Promise<void>;
+  
+  // Album actions
+  fetchAlbums: () => Promise<void>;
+  fetchAlbumPhotos: (albumId: string) => Promise<PhotoItem[]>;
+  setSelectedAlbumIds: (ids: string[]) => void;
 }
 
 export function useGooglePhotosSync(): UseGooglePhotosSyncReturn {
@@ -36,6 +48,12 @@ export function useGooglePhotosSync(): UseGooglePhotosSyncReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
+  
+  // Album state
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [selectedAlbumIds, setSelectedAlbumIds] = useState<string[]>([]);
+  const [albumPhotos, setAlbumPhotos] = useState<Record<string, PhotoItem[]>>({});
+  const [isLoadingAlbums, setIsLoadingAlbums] = useState(false);
 
   // Load sync configuration from database
   const loadConfig = useCallback(async () => {
@@ -67,8 +85,10 @@ export function useGooglePhotosSync(): UseGooglePhotosSyncReturn {
           memoriesCreatedCount: data.memories_created_count,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
+          selectedAlbumIds: data.selected_album_ids,
         };
         setSyncConfig(config);
+        setSelectedAlbumIds(config.selectedAlbumIds || []);
         
         // If config exists and has synced before, go to active phase
         if (config.lastSyncAt) {
@@ -92,6 +112,55 @@ export function useGooglePhotosSync(): UseGooglePhotosSyncReturn {
     }
   }, [toast]);
 
+  // Fetch albums from Google Photos
+  const fetchAlbums = useCallback(async () => {
+    setIsLoadingAlbums(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-photos-sync', {
+        body: { action: 'list-albums' },
+      });
+
+      if (error) throw error;
+
+      if (data?.albums) {
+        setAlbums(data.albums);
+      }
+    } catch (error) {
+      console.error('Failed to fetch albums:', error);
+      toast({
+        title: "Failed to load albums",
+        description: "Could not fetch your Google Photos albums.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingAlbums(false);
+    }
+  }, [toast]);
+
+  // Fetch photos from a specific album
+  const fetchAlbumPhotos = useCallback(async (albumId: string): Promise<PhotoItem[]> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('google-photos-sync', {
+        body: { action: 'list-album-photos', albumId, limit: 20 },
+      });
+
+      if (error) throw error;
+
+      const photos = data?.photos || [];
+      
+      // Cache the photos
+      setAlbumPhotos(prev => ({
+        ...prev,
+        [albumId]: photos,
+      }));
+
+      return photos;
+    } catch (error) {
+      console.error('Failed to fetch album photos:', error);
+      return [];
+    }
+  }, []);
+
   // Save sync configuration
   const saveConfig = useCallback(async (configUpdate: Partial<SyncConfig>): Promise<boolean> => {
     setIsSavingConfig(true);
@@ -103,6 +172,7 @@ export function useGooglePhotosSync(): UseGooglePhotosSyncReturn {
         user_id: session.user.id,
         sync_new_photos: configUpdate.syncNewPhotos ?? true,
         auto_create_memories: configUpdate.autoCreateMemories ?? true,
+        selected_album_ids: configUpdate.selectedAlbumIds ?? null,
         updated_at: new Date().toISOString(),
       };
 
@@ -136,6 +206,7 @@ export function useGooglePhotosSync(): UseGooglePhotosSyncReturn {
             memoriesCreatedCount: data.memories_created_count,
             createdAt: data.created_at,
             updatedAt: data.updated_at,
+            selectedAlbumIds: data.selected_album_ids,
           });
         }
       }
@@ -234,9 +305,16 @@ export function useGooglePhotosSync(): UseGooglePhotosSyncReturn {
     isLoading,
     isSavingConfig,
     lastSyncResult,
+    albums,
+    selectedAlbumIds,
+    albumPhotos,
+    isLoadingAlbums,
     loadConfig,
     saveConfig,
     syncNow,
     fetchRecentPhotos,
+    fetchAlbums,
+    fetchAlbumPhotos,
+    setSelectedAlbumIds,
   };
 }

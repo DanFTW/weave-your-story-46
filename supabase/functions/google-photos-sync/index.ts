@@ -9,7 +9,6 @@ const corsHeaders = {
 const COMPOSIO_API_KEY = Deno.env.get('COMPOSIO_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LIAM_API_KEY = Deno.env.get('LIAM_API_KEY');
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -69,6 +68,29 @@ serve(async (req) => {
 
     // Handle different actions
     switch (action) {
+      case 'list-albums': {
+        const albums = await listAlbums(connectionId);
+        return new Response(
+          JSON.stringify({ albums }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'list-album-photos': {
+        const { albumId, limit = 20 } = body;
+        if (!albumId) {
+          return new Response(
+            JSON.stringify({ error: 'albumId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const photos = await listAlbumPhotos(connectionId, albumId, limit);
+        return new Response(
+          JSON.stringify({ photos }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'list-photos': {
         const limit = body.limit || 20;
         const photos = await listPhotos(connectionId, limit);
@@ -101,6 +123,111 @@ serve(async (req) => {
     );
   }
 });
+
+// List all user albums
+async function listAlbums(connectionId: string) {
+  try {
+    console.log(`listAlbums: Fetching albums with connection=${connectionId}`);
+    
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_LIST_ALBUMS', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
+      },
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: {
+          pageSize: 50,
+        },
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log(`listAlbums: Response status=${response.status}`);
+    console.log(`listAlbums: Response preview=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error('Composio API error:', response.status, responseText);
+      throw new Error(`Failed to list albums: ${response.status}`);
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Handle v3 response format
+    const responseData = data.data || data;
+    const albumsData = responseData?.albums || responseData?.results || responseData?.response?.data?.albums || [];
+    
+    console.log(`listAlbums: Found ${albumsData.length} albums`);
+    
+    const albums = albumsData.map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      mediaItemsCount: parseInt(item.mediaItemsCount || '0', 10),
+      coverPhotoBaseUrl: item.coverPhotoBaseUrl,
+      productUrl: item.productUrl,
+    }));
+
+    return albums;
+  } catch (error) {
+    console.error('listAlbums error:', error);
+    return [];
+  }
+}
+
+// List photos from a specific album
+async function listAlbumPhotos(connectionId: string, albumId: string, limit: number) {
+  try {
+    console.log(`listAlbumPhotos: Fetching photos from album=${albumId}, limit=${limit}`);
+    
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_SEARCH_MEDIA_ITEMS', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
+      },
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: {
+          albumId: albumId,
+          pageSize: limit,
+        },
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log(`listAlbumPhotos: Response status=${response.status}`);
+    console.log(`listAlbumPhotos: Response preview=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error('Composio API error:', response.status, responseText);
+      throw new Error(`Failed to list album photos: ${response.status}`);
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Handle v3 response format
+    const responseData = data.data || data;
+    const mediaItems = responseData?.mediaItems || responseData?.results || responseData?.response?.data?.mediaItems || [];
+    
+    console.log(`listAlbumPhotos: Found ${mediaItems.length} media items`);
+    
+    return mediaItems.map((item: any) => ({
+      id: item.id,
+      filename: item.filename,
+      mimeType: item.mimeType,
+      createdAt: item.mediaMetadata?.creationTime,
+      width: item.mediaMetadata?.width,
+      height: item.mediaMetadata?.height,
+      baseUrl: item.baseUrl,
+      productUrl: item.productUrl,
+      description: item.description,
+    }));
+  } catch (error) {
+    console.error('listAlbumPhotos error:', error);
+    return [];
+  }
+}
 
 async function listPhotos(connectionId: string, limit: number) {
   try {
@@ -166,11 +293,36 @@ async function syncPhotos(supabase: any, userId: string, connectionId: string) {
     .single();
 
   const lastSyncedPhotoId = config?.last_synced_photo_id;
+  const selectedAlbumIds: string[] | null = config?.selected_album_ids;
+  
   console.log('Last synced photo ID:', lastSyncedPhotoId);
+  console.log('Selected album IDs:', selectedAlbumIds);
 
-  // Fetch recent photos
-  const photos = await listPhotos(connectionId, 50);
-  console.log(`Fetched ${photos.length} photos`);
+  let photos: any[] = [];
+  
+  // If specific albums are selected, fetch from those albums
+  if (selectedAlbumIds && selectedAlbumIds.length > 0) {
+    console.log(`Fetching photos from ${selectedAlbumIds.length} selected albums`);
+    for (const albumId of selectedAlbumIds) {
+      const albumPhotos = await listAlbumPhotos(connectionId, albumId, 50);
+      photos = photos.concat(albumPhotos);
+    }
+    // Sort by creation date (newest first) and deduplicate
+    const uniquePhotos = new Map();
+    for (const photo of photos) {
+      if (!uniquePhotos.has(photo.id)) {
+        uniquePhotos.set(photo.id, photo);
+      }
+    }
+    photos = Array.from(uniquePhotos.values()).sort((a, b) => 
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+  } else {
+    // No albums selected, fetch from all photos
+    photos = await listPhotos(connectionId, 50);
+  }
+  
+  console.log(`Fetched ${photos.length} photos total`);
 
   if (photos.length === 0) {
     return {

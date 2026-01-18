@@ -33,6 +33,14 @@ export function GooglePhotosSyncFlow() {
     saveConfig,
     syncNow,
     fetchRecentPhotos,
+    // Album-related
+    albums,
+    selectedAlbumIds,
+    albumPhotos,
+    isLoadingAlbums,
+    fetchAlbums,
+    fetchAlbumPhotos,
+    setSelectedAlbumIds,
   } = useGooglePhotosSync();
 
   // Check Google Photos connection status
@@ -51,6 +59,8 @@ export function GooglePhotosSyncFlow() {
     if (googlePhotos.isConnected) {
       // Load existing config
       loadConfig();
+      // Fetch albums
+      fetchAlbums();
       // Fetch recent photos for preview
       fetchRecentPhotos();
     } else {
@@ -73,8 +83,16 @@ export function GooglePhotosSyncFlow() {
     }
   };
 
-  const handleSaveConfig = async (config: { syncNewPhotos: boolean; autoCreateMemories: boolean }) => {
-    await saveConfig(config);
+  const handleSaveConfig = async (config: { 
+    syncNewPhotos: boolean; 
+    autoCreateMemories: boolean;
+    selectedAlbumIds: string[];
+  }) => {
+    await saveConfig({
+      syncNewPhotos: config.syncNewPhotos,
+      autoCreateMemories: config.autoCreateMemories,
+      selectedAlbumIds: config.selectedAlbumIds.length > 0 ? config.selectedAlbumIds : null,
+    });
   };
 
   const handleStartSync = () => {
@@ -154,8 +172,14 @@ export function GooglePhotosSyncFlow() {
             syncNewPhotos={syncConfig?.syncNewPhotos ?? true}
             autoCreateMemories={syncConfig?.autoCreateMemories ?? true}
             isSaving={isSavingConfig}
+            albums={albums}
+            selectedAlbumIds={selectedAlbumIds}
+            albumPhotos={albumPhotos}
+            isLoadingAlbums={isLoadingAlbums}
             onSave={handleSaveConfig}
             onStartSync={handleStartSync}
+            onAlbumSelectionChange={setSelectedAlbumIds}
+            onLoadAlbumPhotos={fetchAlbumPhotos}
           />
         )}
 
@@ -164,6 +188,7 @@ export function GooglePhotosSyncFlow() {
             syncConfig={syncConfig}
             recentPhotos={recentPhotos}
             isSyncing={isSyncing}
+            albums={albums}
             onSyncNow={syncNow}
             onConfigure={() => setPhase('configure')}
           />

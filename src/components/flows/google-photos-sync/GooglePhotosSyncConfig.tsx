@@ -1,37 +1,56 @@
-import { useState } from "react";
-import { Camera, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Camera, RefreshCw, FolderOpen } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Album, PhotoItem } from "@/types/googlePhotosSync";
+import { AlbumPicker } from "./AlbumPicker";
+import { AlbumPhotoPreview } from "./AlbumPhotoPreview";
 import { cn } from "@/lib/utils";
 
 interface GooglePhotosSyncConfigProps {
   syncNewPhotos: boolean;
   autoCreateMemories: boolean;
   isSaving: boolean;
-  onSave: (config: { syncNewPhotos: boolean; autoCreateMemories: boolean }) => Promise<void>;
+  albums: Album[];
+  selectedAlbumIds: string[];
+  albumPhotos: Record<string, PhotoItem[]>;
+  isLoadingAlbums: boolean;
+  onSave: (config: { 
+    syncNewPhotos: boolean; 
+    autoCreateMemories: boolean;
+    selectedAlbumIds: string[];
+  }) => Promise<void>;
   onStartSync: () => void;
+  onAlbumSelectionChange: (ids: string[]) => void;
+  onLoadAlbumPhotos: (albumId: string) => Promise<PhotoItem[]>;
 }
 
 export function GooglePhotosSyncConfig({
   syncNewPhotos: initialSyncNewPhotos,
   autoCreateMemories: initialAutoCreateMemories,
   isSaving,
+  albums,
+  selectedAlbumIds,
+  albumPhotos,
+  isLoadingAlbums,
   onSave,
   onStartSync,
+  onAlbumSelectionChange,
+  onLoadAlbumPhotos,
 }: GooglePhotosSyncConfigProps) {
   const [syncNewPhotos, setSyncNewPhotos] = useState(initialSyncNewPhotos);
   const [autoCreateMemories, setAutoCreateMemories] = useState(initialAutoCreateMemories);
 
   const handleSaveAndSync = async () => {
-    await onSave({ syncNewPhotos, autoCreateMemories });
+    await onSave({ syncNewPhotos, autoCreateMemories, selectedAlbumIds });
     onStartSync();
   };
 
   return (
     <div className="space-y-6">
       {/* Description */}
-      <div className="text-center px-4 py-6">
+      <div className="text-center px-4 py-4">
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
           <Camera className="w-8 h-8 text-primary" />
         </div>
@@ -39,9 +58,31 @@ export function GooglePhotosSyncConfig({
           Configure Photo Sync
         </h2>
         <p className="text-sm text-muted-foreground">
-          Choose how you want your Google Photos synced as memories.
+          Select albums to sync and configure your preferences.
         </p>
       </div>
+
+      {/* Album Picker */}
+      <div className="bg-card rounded-2xl border border-border p-4">
+        <AlbumPicker
+          albums={albums}
+          selectedAlbumIds={selectedAlbumIds}
+          onSelectionChange={onAlbumSelectionChange}
+          isLoading={isLoadingAlbums}
+        />
+      </div>
+
+      {/* Album Photo Preview */}
+      {selectedAlbumIds.length > 0 && (
+        <div className="bg-card rounded-2xl border border-border p-4">
+          <AlbumPhotoPreview
+            selectedAlbumIds={selectedAlbumIds}
+            albums={albums}
+            albumPhotos={albumPhotos}
+            onLoadAlbumPhotos={onLoadAlbumPhotos}
+          />
+        </div>
+      )}
 
       {/* Settings */}
       <div className="space-y-4 bg-card rounded-2xl border border-border p-4">
@@ -77,8 +118,10 @@ export function GooglePhotosSyncConfig({
       {/* Info Card */}
       <div className="bg-muted/50 rounded-xl p-4">
         <p className="text-xs text-muted-foreground text-center">
-          Photos will be saved with AI-generated descriptions. 
-          You can edit or delete any memory after syncing.
+          {selectedAlbumIds.length === 0 
+            ? "All photos will be synced from your entire library."
+            : `${selectedAlbumIds.length} album${selectedAlbumIds.length !== 1 ? 's' : ''} will be synced as memories.`
+          }
         </p>
       </div>
 
