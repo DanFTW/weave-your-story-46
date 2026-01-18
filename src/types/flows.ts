@@ -33,6 +33,7 @@ export interface FlowConfig {
   isLLMImportFlow?: boolean; // If true, uses LLM import UI
   isEmailDumpFlow?: boolean; // If true, uses email dump UI
   isEmailAutomationFlow?: boolean; // If true, uses email automation UI
+  isGooglePhotosSyncFlow?: boolean; // If true, uses Google Photos sync UI
 }
 
 // Single data entry (e.g., one family member)

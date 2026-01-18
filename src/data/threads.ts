@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "google-photos-sync",
+    title: "Sync Photos to Memory",
+    description: "Automatically save photos as memories",
+    icon: Camera,
+    gradient: "teal",
+    status: "active",
+    type: "automation",
+    category: "photos",
+  },
   {
     id: "llm-import",
     title: "Import from Chat",
