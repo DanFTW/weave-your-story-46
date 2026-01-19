@@ -445,29 +445,36 @@ function formatTweetAsMemory(tweet: Tweet): string {
 }
 
 // LIAM API integration with cryptographic signing
-async function createMemory(apiKeys: { api_key: string; private_key: string; user_key: string }, content: string): Promise<boolean> {
+// CRITICAL: LIAM API requires lowercase headers 'apiKey' and 'signature'
+// and 'content' field (not 'memory') in the request body
+async function createMemory(apiKeys: { api_key: string; private_key: string; user_key: string }, memoryContent: string): Promise<boolean> {
   try {
-    const body = JSON.stringify({
-      memory: content,
+    const requestBody = {
+      content: memoryContent,  // LIAM API uses 'content', not 'memory'
       userKey: apiKeys.user_key,
       tag: 'TWITTER',
-    });
+    };
+    
+    const bodyString = JSON.stringify(requestBody);
+    console.log('Creating memory with body:', bodyString.slice(0, 200));
 
-    const signature = await signRequest(apiKeys.private_key, body);
+    const signature = await signRequest(apiKeys.private_key, bodyString);
 
     const response = await fetch(LIAM_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': apiKeys.api_key,
-        'X-Signature': signature,
+        'apiKey': apiKeys.api_key,        // CRITICAL: lowercase 'apiKey' not 'X-API-Key'
+        'signature': signature,            // CRITICAL: lowercase 'signature' not 'X-Signature'
       },
-      body,
+      body: bodyString,
     });
 
+    const responseText = await response.text();
+    console.log('LIAM API response:', response.status, responseText.slice(0, 500));
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('LIAM API error:', response.status, errorText);
+      console.error('LIAM API error:', response.status, responseText);
       return false;
     }
 
