@@ -11,7 +11,7 @@ const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 // Auth config IDs from Composio dashboard
 const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
-  instagram: "ac_N2MwqGEh7F7y",
+  instagram: "ac_PnfXkWRB8Wrs",
   dropbox: "ac_u-LEALnVXap9",
   googlephotos: "ac_XQf5YL6yOEPG",
 };
