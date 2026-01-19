@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.google-photos-sync]
 verify_jwt = false
+
+[functions.composio-create-auth-config]
+verify_jwt = false
