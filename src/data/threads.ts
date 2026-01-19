@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "instagram-sync",
+    title: "Sync Instagram to Memory",
+    description: "Save your posts and comments as memories",
+    icon: Instagram,
+    gradient: "pink",
+    status: "active",
+    type: "automation",
+    category: "social",
+  },
   {
     id: "google-photos-sync",
     title: "Sync Photos to Memory",

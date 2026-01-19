@@ -34,6 +34,7 @@ export interface FlowConfig {
   isEmailDumpFlow?: boolean; // If true, uses email dump UI
   isEmailAutomationFlow?: boolean; // If true, uses email automation UI
   isGooglePhotosSyncFlow?: boolean; // If true, uses Google Photos sync UI
+  isInstagramSyncFlow?: boolean; // If true, uses Instagram sync UI
 }
 
 // Single data entry (e.g., one family member)

@@ -98,6 +98,45 @@ export type Database = {
         }
         Relationships: []
       }
+      instagram_sync_config: {
+        Row: {
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          last_synced_post_id: string | null
+          memories_created_count: number
+          posts_synced_count: number
+          sync_comments: boolean
+          sync_posts: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_synced_post_id?: string | null
+          memories_created_count?: number
+          posts_synced_count?: number
+          sync_comments?: boolean
+          sync_posts?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_synced_post_id?: string | null
+          memories_created_count?: number
+          posts_synced_count?: number
+          sync_comments?: boolean
+          sync_posts?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
