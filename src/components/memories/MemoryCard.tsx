@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram } from "lucide-react";
+import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram, Twitter } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -68,6 +68,7 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   receipt: { icon: Receipt, gradient: "bg-gradient-to-r from-green-500 to-emerald-500", label: "Receipt" },
   interests: { icon: Heart, gradient: "bg-gradient-to-r from-pink-400 to-rose-500", label: "Interests" },
   instagram: { icon: Instagram, gradient: "bg-gradient-to-r from-pink-500 via-purple-500 to-orange-400", label: "Instagram" },
+  twitter: { icon: Twitter, gradient: "bg-gradient-to-r from-gray-900 to-black", label: "Twitter" },
 };
 
 export function getCategoryConfig(category?: string, tag?: string, content?: string) {
@@ -101,6 +102,7 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
   if (combined.includes('personal')) return categoryConfig.personal;
   if (combined.includes('receipt')) return categoryConfig.receipt;
   if (combined.includes('instagram')) return categoryConfig.instagram;
+  if (combined.includes('twitter') || combined.includes('tweet')) return categoryConfig.twitter;
   
   return categoryConfig.default;
 }

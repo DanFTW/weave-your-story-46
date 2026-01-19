@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2 } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "twitter-sync": {
+    id: "twitter-sync",
+    title: "Sync Twitter to Memory",
+    subtitle: "Capture your tweets and moments",
+    description: "Connect Twitter/X to save your tweets, retweets, replies, and likes as searchable memories.",
+    gradient: "blue",
+    icon: Twitter,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Twitter",
+        description: "Authorize access to your account",
+        iconUrl: "https://abs.twimg.com/responsive-web/client-web/icon-ios.b1fc7279.png",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Choose Content",
+        description: "Select tweets, retweets, replies, likes",
+        icon: Settings,
+      },
+      {
+        id: "sync",
+        type: "save",
+        title: "Active Sync",
+        description: "Content saved automatically",
+        icon: Wifi,
+        badge: "WEAVE FABRIC",
+      },
+    ],
+  },
   "instagram-sync": {
     id: "instagram-sync",
     title: "Sync Instagram to Memory",

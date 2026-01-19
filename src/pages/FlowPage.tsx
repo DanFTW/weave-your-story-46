@@ -41,6 +41,9 @@ import { GooglePhotosSyncFlow } from "@/components/flows/google-photos-sync";
 // Instagram Sync components
 import { InstagramSyncFlow } from "@/components/flows/instagram-sync";
 
+// Twitter Sync components
+import { TwitterSyncFlow } from "@/components/flows/twitter-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -177,6 +180,12 @@ export default function FlowPage() {
   
   if (config.isInstagramSyncFlow) {
     return <InstagramSyncFlow />;
+  }
+
+  // === TWITTER SYNC FLOW RENDER ===
+  
+  if (config.isTwitterSyncFlow) {
+    return <TwitterSyncFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

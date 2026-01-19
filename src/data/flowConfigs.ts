@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "twitter-sync": {
+    id: "twitter-sync",
+    title: "Twitter Sync",
+    subtitle: "Sync tweets and likes to memory",
+    description: "Automatically save Twitter content as memories.",
+    gradient: "blue",
+    icon: Twitter,
+    entryName: "tweet",
+    entryNamePlural: "tweets",
+    memoryTag: "TWITTER",
+    fields: [],
+    isTwitterSyncFlow: true,
+  },
   "instagram-sync": {
     id: "instagram-sync",
     title: "Instagram Sync",
