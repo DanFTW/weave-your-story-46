@@ -6,16 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID')!;
-const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')!;
+const COMPOSIO_API_KEY = Deno.env.get('COMPOSIO_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-interface TokenData {
-  access_token: string;
-  refresh_token?: string;
-  expires_at: string;
-}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -60,7 +53,7 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .eq('integration_id', 'googlephotos')
       .eq('status', 'connected')
-      .maybeSingle();
+      .single();
 
     if (integrationError || !integration) {
       console.error('No Google Photos integration found:', integrationError);
@@ -70,28 +63,13 @@ serve(async (req) => {
       );
     }
 
-    // Parse stored tokens
-    let tokens: TokenData;
-    try {
-      tokens = JSON.parse(integration.composio_connection_id || '{}');
-    } catch (e) {
-      console.error('Failed to parse tokens:', e);
-      return new Response(
-        JSON.stringify({ error: 'Invalid token storage' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check if token needs refresh
-    tokens = await refreshTokenIfNeeded(supabase, integration.id, tokens);
-
-    const accessToken = tokens.access_token;
-    console.log('Using native Google OAuth token');
+    const connectionId = integration.composio_connection_id;
+    console.log('Using Composio connection:', connectionId);
 
     // Handle different actions
     switch (action) {
       case 'list-albums': {
-        const albums = await listAlbums(accessToken);
+        const albums = await listAlbums(connectionId);
         return new Response(
           JSON.stringify({ albums }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -106,7 +84,7 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const photos = await listAlbumPhotos(accessToken, albumId, limit);
+        const photos = await listAlbumPhotos(connectionId, albumId, limit);
         return new Response(
           JSON.stringify({ photos }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -115,7 +93,7 @@ serve(async (req) => {
 
       case 'list-photos': {
         const limit = body.limit || 20;
-        const photos = await listPhotos(accessToken, limit);
+        const photos = await listPhotos(connectionId, limit);
         return new Response(
           JSON.stringify({ photos }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -123,7 +101,7 @@ serve(async (req) => {
       }
 
       case 'sync': {
-        const result = await syncPhotos(supabase, user.id, accessToken);
+        const result = await syncPhotos(supabase, user.id, connectionId);
         return new Response(
           JSON.stringify(result),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -146,82 +124,50 @@ serve(async (req) => {
   }
 });
 
-// Refresh token if expired or expiring soon
-async function refreshTokenIfNeeded(supabase: any, integrationId: string, tokens: TokenData): Promise<TokenData> {
-  const expiresAt = new Date(tokens.expires_at);
-  const now = new Date();
-  const bufferMs = 5 * 60 * 1000; // 5 minute buffer
-
-  if (now.getTime() <= expiresAt.getTime() - bufferMs) {
-    // Token still valid
-    return tokens;
-  }
-
-  console.log('Token expired or expiring soon, refreshing...');
-
-  if (!tokens.refresh_token) {
-    throw new Error('Token expired and no refresh token available');
-  }
-
-  const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      refresh_token: tokens.refresh_token,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  const refreshData = await refreshResponse.json();
-
-  if (!refreshResponse.ok || !refreshData.access_token) {
-    console.error('Token refresh failed:', refreshData);
-    throw new Error('Failed to refresh token');
-  }
-
-  // Update tokens
-  const newTokens: TokenData = {
-    access_token: refreshData.access_token,
-    refresh_token: refreshData.refresh_token || tokens.refresh_token,
-    expires_at: new Date(Date.now() + (refreshData.expires_in * 1000)).toISOString(),
-  };
-
-  // Save updated tokens
-  await supabase
-    .from('user_integrations')
-    .update({
-      composio_connection_id: JSON.stringify(newTokens),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', integrationId);
-
-  console.log('Token refreshed successfully');
-  return newTokens;
-}
-
-// List all user albums using Google Photos Library API
-async function listAlbums(accessToken: string) {
+// List all user albums
+async function listAlbums(connectionId: string) {
   try {
-    console.log('listAlbums: Fetching albums with native Google API');
+    console.log(`listAlbums: Fetching albums with connection=${connectionId}`);
     
-    const response = await fetch('https://photoslibrary.googleapis.com/v1/albums?pageSize=50', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_LIST_ALBUMS', {
+      method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
       },
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: {
+          pageSize: 50,
+          excludeNonAppCreatedData: false, // Request ALL albums, not just app-created ones
+        },
+      }),
     });
 
     const responseText = await response.text();
     console.log(`listAlbums: Response status=${response.status}`);
+    console.log(`listAlbums: Full response=${responseText}`);
 
     if (!response.ok) {
-      console.error('Google Photos API error:', response.status, responseText);
-      return [];
+      console.error('Composio API error:', response.status, responseText);
+      throw new Error(`Failed to list albums: ${response.status}`);
     }
 
     const data = JSON.parse(responseText);
-    const albumsData = data.albums || [];
+    console.log(`listAlbums: Parsed data structure keys=${Object.keys(data).join(', ')}`);
+    
+    // Handle v3 response format - check multiple possible paths
+    const responseData = data.data || data;
+    console.log(`listAlbums: responseData keys=${Object.keys(responseData || {}).join(', ')}`);
+    
+    // Check for error in response
+    if (responseData?.error || responseData?.http_error) {
+      console.error('listAlbums: API returned error:', responseData.error || responseData.http_error);
+      console.error('listAlbums: Error message:', responseData.message);
+      return [];
+    }
+    
+    const albumsData = responseData?.albums || responseData?.results || responseData?.response?.data?.albums || [];
     
     console.log(`listAlbums: Found ${albumsData.length} albums`);
     
@@ -241,32 +187,39 @@ async function listAlbums(accessToken: string) {
 }
 
 // List photos from a specific album
-async function listAlbumPhotos(accessToken: string, albumId: string, limit: number) {
+async function listAlbumPhotos(connectionId: string, albumId: string, limit: number) {
   try {
     console.log(`listAlbumPhotos: Fetching photos from album=${albumId}, limit=${limit}`);
     
-    const response = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_SEARCH_MEDIA_ITEMS', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        albumId: albumId,
-        pageSize: limit,
+        connected_account_id: connectionId,
+        arguments: {
+          albumId: albumId,
+          pageSize: limit,
+        },
       }),
     });
 
     const responseText = await response.text();
     console.log(`listAlbumPhotos: Response status=${response.status}`);
+    console.log(`listAlbumPhotos: Response preview=${responseText.slice(0, 500)}`);
 
     if (!response.ok) {
-      console.error('Google Photos API error:', response.status, responseText);
-      return [];
+      console.error('Composio API error:', response.status, responseText);
+      throw new Error(`Failed to list album photos: ${response.status}`);
     }
 
     const data = JSON.parse(responseText);
-    const mediaItems = data.mediaItems || [];
+    
+    // Handle v3 response format
+    const responseData = data.data || data;
+    const mediaItems = responseData?.mediaItems || responseData?.results || responseData?.response?.data?.mediaItems || [];
     
     console.log(`listAlbumPhotos: Found ${mediaItems.length} media items`);
     
@@ -287,27 +240,39 @@ async function listAlbumPhotos(accessToken: string, albumId: string, limit: numb
   }
 }
 
-// List recent photos
-async function listPhotos(accessToken: string, limit: number) {
+async function listPhotos(connectionId: string, limit: number) {
   try {
-    console.log(`listPhotos: Fetching photos with native Google API, limit=${limit}`);
+    console.log(`listPhotos: Fetching photos with connection=${connectionId}, limit=${limit}`);
     
-    const response = await fetch(`https://photoslibrary.googleapis.com/v1/mediaItems?pageSize=${limit}`, {
+    // Use Composio v3 API format (matching gmail-fetch-emails)
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_LIST_MEDIA_ITEMS', {
+      method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
       },
+      body: JSON.stringify({
+        connected_account_id: connectionId,  // v3 format (snake_case)
+        arguments: {                          // v3 format
+          pageSize: limit,
+        },
+      }),
     });
 
     const responseText = await response.text();
     console.log(`listPhotos: Response status=${response.status}`);
+    console.log(`listPhotos: Response preview=${responseText.slice(0, 500)}`);
 
     if (!response.ok) {
-      console.error('Google Photos API error:', response.status, responseText);
-      return [];
+      console.error('Composio API error:', response.status, responseText);
+      throw new Error(`Failed to list photos: ${response.status}`);
     }
 
     const data = JSON.parse(responseText);
-    const mediaItems = data.mediaItems || [];
+    
+    // Handle v3 response format - check multiple possible paths
+    const responseData = data.data || data;
+    const mediaItems = responseData?.mediaItems || responseData?.results || responseData?.response?.data?.mediaItems || [];
     
     console.log(`listPhotos: Found ${mediaItems.length} media items`);
     
@@ -330,13 +295,13 @@ async function listPhotos(accessToken: string, limit: number) {
   }
 }
 
-async function syncPhotos(supabase: any, userId: string, accessToken: string) {
+async function syncPhotos(supabase: any, userId: string, connectionId: string) {
   // Get user's sync config
   const { data: config, error: configError } = await supabase
     .from('google_photos_sync_config')
     .select('*')
     .eq('user_id', userId)
-    .maybeSingle();
+    .single();
 
   const lastSyncedPhotoId = config?.last_synced_photo_id;
   const selectedAlbumIds: string[] | null = config?.selected_album_ids;
@@ -350,7 +315,7 @@ async function syncPhotos(supabase: any, userId: string, accessToken: string) {
   if (selectedAlbumIds && selectedAlbumIds.length > 0) {
     console.log(`Fetching photos from ${selectedAlbumIds.length} selected albums`);
     for (const albumId of selectedAlbumIds) {
-      const albumPhotos = await listAlbumPhotos(accessToken, albumId, 50);
+      const albumPhotos = await listAlbumPhotos(connectionId, albumId, 50);
       photos = photos.concat(albumPhotos);
     }
     // Sort by creation date (newest first) and deduplicate
@@ -365,7 +330,7 @@ async function syncPhotos(supabase: any, userId: string, accessToken: string) {
     );
   } else {
     // No albums selected, fetch from all photos
-    photos = await listPhotos(accessToken, 50);
+    photos = await listPhotos(connectionId, 50);
   }
   
   console.log(`Fetched ${photos.length} photos total`);
@@ -406,7 +371,7 @@ async function syncPhotos(supabase: any, userId: string, accessToken: string) {
     .from('user_api_keys')
     .select('*')
     .eq('user_id', userId)
-    .maybeSingle();
+    .single();
 
   if (!apiKeys) {
     console.error('No API keys found for user');
@@ -534,17 +499,60 @@ async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
   const pemContents = pemKey
     .replace(/-----BEGIN EC PRIVATE KEY-----/, '')
     .replace(/-----END EC PRIVATE KEY-----/, '')
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
     .replace(/\s/g, '');
   
   const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
   
-  return await crypto.subtle.importKey(
-    'pkcs8',
-    binaryDer,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign']
-  );
+  // Try PKCS8 first, then raw EC
+  try {
+    return await crypto.subtle.importKey(
+      'pkcs8',
+      binaryDer,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    );
+  } catch {
+    // Parse SEC1 format
+    const keyData = binaryDer.slice(-32);
+    const pkcs8Prefix = new Uint8Array([
+      0x30, 0x41, 0x02, 0x01, 0x00, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48,
+      0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03,
+      0x01, 0x07, 0x04, 0x27, 0x30, 0x25, 0x02, 0x01, 0x01, 0x04, 0x20
+    ]);
+    const pkcs8Key = new Uint8Array([...pkcs8Prefix, ...keyData]);
+    
+    return await crypto.subtle.importKey(
+      'pkcs8',
+      pkcs8Key,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    );
+  }
+}
+
+function toDER(signature: Uint8Array): string {
+  const r = signature.slice(0, 32);
+  const s = signature.slice(32, 64);
+  
+  function encodeInteger(bytes: Uint8Array): Uint8Array {
+    let start = 0;
+    while (start < bytes.length - 1 && bytes[start] === 0) start++;
+    let trimmed = bytes.slice(start);
+    if (trimmed[0] & 0x80) {
+      trimmed = new Uint8Array([0, ...trimmed]);
+    }
+    return new Uint8Array([0x02, trimmed.length, ...trimmed]);
+  }
+  
+  const rEncoded = encodeInteger(r);
+  const sEncoded = encodeInteger(s);
+  const der = new Uint8Array([0x30, rEncoded.length + sEncoded.length, ...rEncoded, ...sEncoded]);
+  
+  return btoa(String.fromCharCode(...der));
 }
 
 async function signRequest(privateKey: CryptoKey, body: object): Promise<string> {
@@ -557,6 +565,5 @@ async function signRequest(privateKey: CryptoKey, body: object): Promise<string>
     data
   );
   
-  // Convert to base64
-  return btoa(String.fromCharCode(...new Uint8Array(signature)));
+  return toDER(new Uint8Array(signature));
 }

@@ -2,7 +2,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, Loader2, AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
 import { IntegrationLargeIcon } from "@/components/integrations/IntegrationLargeIcon";
@@ -11,7 +10,6 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { useComposio } from "@/hooks/useComposio";
-import { useGooglePhotosAuth } from "@/hooks/useGooglePhotosAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
@@ -23,24 +21,14 @@ export default function IntegrationDetail() {
   
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
   
-  // Use native Google OAuth for Google Photos, Composio for others
-  const isGooglePhotos = integrationId?.toLowerCase() === 'googlephotos';
-  const composio = useComposio(integrationId || "gmail");
-  const googlePhotosAuth = useGooglePhotosAuth();
-  
-  // Pick the right auth hook based on integration
   const {
     connectedAccount,
     connecting,
     isConnected,
-    oauthUrl,
     connect,
     disconnect,
     checkStatus,
-    cancelConnect,
-  } = isGooglePhotos 
-    ? googlePhotosAuth 
-    : { ...composio, oauthUrl: null, cancelConnect: () => {} };
+  } = useComposio(integrationId || "gmail");
 
   // Track if we've already handled the return redirect
   const hasHandledReturn = useRef(false);
@@ -82,12 +70,7 @@ export default function IntegrationDetail() {
   const handleConnect = async () => {
     setConnectionError(null);
     try {
-      // Google Photos auth doesn't need a redirect param, it's handled internally
-      if (isGooglePhotos) {
-        await connect();
-      } else {
-        await (connect as (path?: string) => Promise<void>)(`/integration/${integrationId}`);
-      }
+      await connect(`/integration/${integrationId}`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Connection failed";
       setConnectionError(errorMsg);
@@ -101,11 +84,7 @@ export default function IntegrationDetail() {
 
   const handleChangeAccount = async () => {
     await disconnect();
-    if (isGooglePhotos) {
-      await connect();
-    } else {
-      await (connect as (path?: string) => Promise<void>)(`/integration/${integrationId}`);
-    }
+    await connect(`/integration/${integrationId}`);
   };
 
   const handleDone = () => {
@@ -168,67 +147,7 @@ export default function IntegrationDetail() {
         {isLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            <p className="text-muted-foreground">
-              {oauthUrl ? "Waiting for authorization..." : "Connecting..."}
-            </p>
-            
-            {/* Show copyable URL if OAuth URL available (popup blocked or iframe environment) */}
-            {oauthUrl && (
-              <div className="flex flex-col items-center gap-4 mt-4 p-4 bg-muted/50 rounded-xl w-full max-w-md">
-                <AlertCircle className="w-6 h-6 text-amber-500" />
-                <p className="text-sm text-center font-medium">
-                  OAuth cannot open in preview mode
-                </p>
-                <p className="text-xs text-muted-foreground text-center">
-                  Copy this URL and paste it into a new browser window:
-                </p>
-                
-                {/* Copyable URL field */}
-                <div className="w-full flex gap-2">
-                  <input
-                    type="text"
-                    value={oauthUrl}
-                    readOnly
-                    className="flex-1 text-xs p-2 bg-background border border-border rounded truncate"
-                    onClick={(e) => e.currentTarget.select()}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(oauthUrl);
-                      toast({ title: "URL copied!", description: "Paste in a new browser window" });
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                
-                <p className="text-xs text-muted-foreground text-center">
-                  After authorizing, return here – the connection will be detected automatically.
-                </p>
-
-                <p className="text-xs text-center text-muted-foreground">
-                  Tip: OAuth works better on the{" "}
-                  <a 
-                    href="https://weave-your-story-46.lovable.app/integration/googlephotos" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline"
-                  >
-                    published app
-                  </a>
-                </p>
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={cancelConnect}
-                  className="text-muted-foreground"
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
+            <p className="text-muted-foreground">Connecting...</p>
           </div>
         ) : (
           <>
