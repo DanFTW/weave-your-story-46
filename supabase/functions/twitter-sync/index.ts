@@ -123,33 +123,104 @@ serve(async (req) => {
   }
 });
 
-async function fetchTwitterTimeline(connectionId: string, limit: number): Promise<Tweet[]> {
+// Step 1: Get authenticated user's username using TWITTER_USER_LOOKUP_ME
+async function getTwitterUserInfo(connectionId: string): Promise<{ username: string; userId: string } | null> {
   try {
-    console.log('Fetching Twitter timeline with connection ID:', connectionId);
+    console.log('Fetching Twitter user info with TWITTER_USER_LOOKUP_ME...');
     
-    // Use Composio v3 API with correct parameter names (snake_case)
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/TWITTER_SEARCH_TWEETS', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/TWITTER_USER_LOOKUP_ME', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        connected_account_id: connectionId,  // v3 uses snake_case
-        arguments: {                          // v3 uses 'arguments' not 'input'
-          query: 'from:me',                   // Search for authenticated user's tweets
+        connected_account_id: connectionId,
+        arguments: {},
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log('User lookup response status:', response.status);
+    console.log('User lookup response:', responseText.slice(0, 1000));
+
+    if (!response.ok) {
+      console.error('Failed to get user info:', responseText);
+      return null;
+    }
+
+    const data = JSON.parse(responseText);
+    console.log('Parsed user lookup data keys:', Object.keys(data || {}));
+    
+    // Extract username from response - handle various structures
+    const responseData = data?.data || data;
+    console.log('responseData keys:', Object.keys(responseData || {}));
+    
+    if (responseData?.response_data) {
+      console.log('response_data keys:', Object.keys(responseData.response_data || {}));
+      console.log('response_data.data:', JSON.stringify(responseData.response_data?.data)?.slice(0, 500));
+    }
+    
+    const username = responseData?.response_data?.data?.username || 
+                     responseData?.response_data?.username ||
+                     responseData?.data?.username ||
+                     responseData?.username;
+    const userId = responseData?.response_data?.data?.id ||
+                   responseData?.response_data?.id ||
+                   responseData?.data?.id ||
+                   responseData?.id;
+    
+    console.log('Found Twitter username:', username, 'userId:', userId);
+    
+    if (username && userId) {
+      return { username, userId };
+    }
+    
+    console.error('Could not extract username/userId from response');
+    return null;
+  } catch (error) {
+    console.error('Error getting Twitter user info:', error);
+    return null;
+  }
+}
+
+// Step 2: Fetch tweets using TWITTER_RECENT_SEARCH with from:username query
+async function fetchTwitterTimeline(connectionId: string, limit: number): Promise<Tweet[]> {
+  try {
+    console.log('Fetching Twitter timeline with connection ID:', connectionId);
+    
+    // First get the authenticated user's username
+    const userInfo = await getTwitterUserInfo(connectionId);
+    if (!userInfo) {
+      console.error('Could not get Twitter username - cannot fetch timeline');
+      return [];
+    }
+    
+    console.log('Fetching tweets for user:', userInfo.username);
+    
+    // Use TWITTER_RECENT_SEARCH with from:username query (searches last 7 days)
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/TWITTER_RECENT_SEARCH', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
+      },
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: {
+          query: `from:${userInfo.username}`,
           max_results: Math.min(limit, 100),
-          'tweet.fields': 'created_at,public_metrics,referenced_tweets,in_reply_to_user_id',
+          'tweet.fields': 'created_at,public_metrics,referenced_tweets,in_reply_to_user_id,author_id',
         },
       }),
     });
 
     const responseText = await response.text();
-    console.log('Twitter API response status:', response.status);
-    console.log('Twitter API response (first 2000 chars):', responseText.slice(0, 2000));
+    console.log('Recent search response status:', response.status);
+    console.log('Recent search response (first 2000 chars):', responseText.slice(0, 2000));
 
     if (!response.ok) {
-      console.error('Failed to fetch timeline:', responseText);
+      console.error('Failed to search tweets:', responseText);
       return [];
     }
 
@@ -159,8 +230,20 @@ async function fetchTwitterTimeline(connectionId: string, limit: number): Promis
     // Parse Composio v3 response - handle multiple possible structures
     let tweetsData: any[] = [];
     
+    console.log('Top-level data keys:', Object.keys(data || {}));
+    
     // Try different response paths (v3 API structure varies)
     const responseData = data?.data || data;
+    console.log('responseData keys:', Object.keys(responseData || {}));
+    
+    if (responseData?.response_data) {
+      console.log('response_data keys:', Object.keys(responseData.response_data || {}));
+      console.log('response_data.data type:', typeof responseData.response_data?.data);
+      if (responseData.response_data?.data) {
+        console.log('response_data.data sample:', JSON.stringify(responseData.response_data.data)?.slice(0, 500));
+      }
+    }
+    
     const possiblePaths = [
       responseData?.response_data?.data,
       responseData?.response_data,
@@ -181,24 +264,25 @@ async function fetchTwitterTimeline(connectionId: string, limit: number): Promis
 
     // If still not found, try to extract from nested object
     if (tweetsData.length === 0 && typeof responseData === 'object') {
-      console.log('Response data keys:', Object.keys(responseData || {}));
-      
       // Check for nested response_data object
       if (responseData?.response_data && typeof responseData.response_data === 'object') {
-        console.log('response_data keys:', Object.keys(responseData.response_data));
         if (responseData.response_data.data && Array.isArray(responseData.response_data.data)) {
           tweetsData = responseData.response_data.data;
+          console.log('Found tweets in response_data.data, count:', tweetsData.length);
         }
       }
     }
 
-    console.log('Parsed tweets count:', tweetsData.length);
+    console.log('Final parsed tweets count:', tweetsData.length);
+    if (tweetsData.length > 0) {
+      console.log('First tweet sample:', JSON.stringify(tweetsData[0])?.slice(0, 500));
+    }
 
     for (const tweet of tweetsData) {
       tweets.push({
         id: tweet.id || tweet.tweet_id || String(Date.now()),
         text: tweet.text || tweet.full_text || '',
-        authorUsername: tweet.author_id || tweet.user?.screen_name,
+        authorUsername: userInfo.username,  // We know the username
         createdAt: tweet.created_at || new Date().toISOString(),
         retweetCount: tweet.public_metrics?.retweet_count || tweet.retweet_count,
         likeCount: tweet.public_metrics?.like_count || tweet.favorite_count,
