@@ -8,8 +8,8 @@ interface IntegrationSectionProps {
   section: IntegrationSectionType;
 }
 
-// Only Gmail is available, everything else is coming soon
-const availableIntegrations = ["gmail"];
+// Integrations that are functional and can be connected
+const availableIntegrations = ["gmail", "twitter", "instagram", "googlephotos"];
 
 export function IntegrationSection({ section }: IntegrationSectionProps) {
   const navigate = useNavigate();
@@ -38,14 +38,14 @@ export function IntegrationSection({ section }: IntegrationSectionProps) {
   }, []);
 
   const getEffectiveStatus = (integrationId: string, originalStatus: IntegrationStatus): IntegrationStatus => {
+    // First check if connected in database - this takes priority
+    if (connectionStatuses[integrationId] === "connected") {
+      return "connected";
+    }
+    
     // If not an available integration, it's coming soon
     if (!availableIntegrations.includes(integrationId)) {
       return "coming-soon";
-    }
-    
-    // Check if connected in database
-    if (connectionStatuses[integrationId] === "connected") {
-      return "connected";
     }
     
     // For available integrations without connection, show unconfigured

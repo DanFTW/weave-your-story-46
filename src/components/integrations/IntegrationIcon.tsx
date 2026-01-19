@@ -9,8 +9,8 @@ import spotifyIcon from "@/assets/integrations/spotify.png";
 import locationIcon from "@/assets/integrations/location.png";
 import cameraIcon from "@/assets/integrations/camera.png";
 import dropboxIcon from "@/assets/integrations/dropbox.png";
-import googlephotosIcon from "@/assets/integrations/googlephotos.png";
-import twitterIcon from "@/assets/integrations/twitter.png";
+import googlephotosIcon from "@/assets/integrations/googlephotos.svg";
+import twitterIcon from "@/assets/integrations/twitter.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -35,12 +35,18 @@ export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
   const iconSrc = iconImages[icon];
 
   if (iconSrc) {
+    // Twitter/X icon needs to be inverted for visibility on dark backgrounds
+    const isTwitter = icon === 'twitter';
+    
     return (
       <div className={cn("w-11 h-11 flex-shrink-0", className)}>
         <img 
           src={iconSrc} 
           alt={`${icon} icon`}
-          className="w-full h-full object-contain"
+          className={cn(
+            "w-full h-full object-contain",
+            isTwitter && "dark:invert"
+          )}
         />
       </div>
     );
