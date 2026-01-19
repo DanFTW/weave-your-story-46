@@ -172,21 +172,53 @@ export default function IntegrationDetail() {
               {oauthUrl ? "Waiting for authorization..." : "Connecting..."}
             </p>
             
-            {/* Show manual link if OAuth URL available (popup was blocked) */}
+            {/* Show copyable URL if OAuth URL available (popup blocked or iframe environment) */}
             {oauthUrl && (
-              <div className="flex flex-col items-center gap-3 mt-4 p-4 bg-muted/50 rounded-xl">
-                <p className="text-sm text-muted-foreground text-center">
-                  Popup blocked? Click below to authorize:
+              <div className="flex flex-col items-center gap-4 mt-4 p-4 bg-muted/50 rounded-xl w-full max-w-md">
+                <AlertCircle className="w-6 h-6 text-amber-500" />
+                <p className="text-sm text-center font-medium">
+                  OAuth cannot open in preview mode
                 </p>
-                <a
-                  href={oauthUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Open Google Authorization
-                </a>
+                <p className="text-xs text-muted-foreground text-center">
+                  Copy this URL and paste it into a new browser window:
+                </p>
+                
+                {/* Copyable URL field */}
+                <div className="w-full flex gap-2">
+                  <input
+                    type="text"
+                    value={oauthUrl}
+                    readOnly
+                    className="flex-1 text-xs p-2 bg-background border border-border rounded truncate"
+                    onClick={(e) => e.currentTarget.select()}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(oauthUrl);
+                      toast({ title: "URL copied!", description: "Paste in a new browser window" });
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+                
+                <p className="text-xs text-muted-foreground text-center">
+                  After authorizing, return here – the connection will be detected automatically.
+                </p>
+
+                <p className="text-xs text-center text-muted-foreground">
+                  Tip: OAuth works better on the{" "}
+                  <a 
+                    href="https://weave-your-story-46.lovable.app/integration/googlephotos" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    published app
+                  </a>
+                </p>
+                
                 <Button
                   variant="ghost"
                   size="sm"
