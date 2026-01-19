@@ -162,13 +162,6 @@ export function useComposio(toolkit: string): UseComposioReturn {
       // This works regardless of localStorage isolation in Median
       startPolling();
 
-      // Detect if running in iframe (e.g., Lovable preview)
-      const isInIframe = window !== window.top;
-      
-      // Some OAuth providers (like Instagram) have strict X-Frame-Options
-      // that block popups from iframes - they require full-page navigation
-      const requiresFullPageNavigation = ['instagram'].includes(toolkit.toLowerCase());
-
       // Handle OAuth redirect based on platform
       if (isMedian()) {
         console.log("Opening OAuth in Median app browser...");
@@ -183,17 +176,6 @@ export function useComposio(toolkit: string): UseComposioReturn {
           }
           window.location.assign(data.redirectUrl);
         }
-      } else if (requiresFullPageNavigation || isInIframe) {
-        // For strict OAuth providers OR when in iframe, use full-page redirect
-        console.log(`Using full-page redirect for ${toolkit} (iframe: ${isInIframe}, strictOAuth: ${requiresFullPageNavigation})`);
-        // Stop polling since we're doing a full redirect
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
-        // Use window.top to break out of iframe
-        const targetWindow = window.top || window;
-        targetWindow.location.assign(data.redirectUrl);
       } else {
         // Standard web - open in new window to keep current page active for polling
         // This allows polling to continue while OAuth happens in popup
