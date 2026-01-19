@@ -125,45 +125,90 @@ serve(async (req) => {
 
 async function fetchTwitterTimeline(connectionId: string, limit: number): Promise<Tweet[]> {
   try {
-    const response = await fetch('https://backend.composio.dev/api/v2/actions/TWITTER_USER_TIMELINE_BY_USER_ID/execute', {
+    console.log('Fetching Twitter timeline with connection ID:', connectionId);
+    
+    // Use Composio v3 API with correct parameter names (snake_case)
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/TWITTER_SEARCH_TWEETS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        connectedAccountId: connectionId,
-        input: {
-          max_results: limit,
+        connected_account_id: connectionId,  // v3 uses snake_case
+        arguments: {                          // v3 uses 'arguments' not 'input'
+          query: 'from:me',                   // Search for authenticated user's tweets
+          max_results: Math.min(limit, 100),
+          'tweet.fields': 'created_at,public_metrics,referenced_tweets,in_reply_to_user_id',
         },
       }),
     });
 
+    const responseText = await response.text();
+    console.log('Twitter API response status:', response.status);
+    console.log('Twitter API response (first 2000 chars):', responseText.slice(0, 2000));
+
     if (!response.ok) {
-      console.error('Failed to fetch timeline:', await response.text());
+      console.error('Failed to fetch timeline:', responseText);
       return [];
     }
 
-    const data = await response.json();
+    const data = JSON.parse(responseText);
     const tweets: Tweet[] = [];
 
-    // Parse Composio response
-    if (data?.response?.data?.data) {
-      for (const tweet of data.response.data.data) {
-        tweets.push({
-          id: tweet.id,
-          text: tweet.text || '',
-          authorUsername: tweet.author_id,
-          createdAt: tweet.created_at || new Date().toISOString(),
-          retweetCount: tweet.public_metrics?.retweet_count,
-          likeCount: tweet.public_metrics?.like_count,
-          replyCount: tweet.public_metrics?.reply_count,
-          isRetweet: tweet.text?.startsWith('RT @'),
-          isReply: tweet.in_reply_to_user_id != null,
-        });
+    // Parse Composio v3 response - handle multiple possible structures
+    let tweetsData: any[] = [];
+    
+    // Try different response paths (v3 API structure varies)
+    const responseData = data?.data || data;
+    const possiblePaths = [
+      responseData?.response_data?.data,
+      responseData?.response_data,
+      responseData?.data?.data,
+      responseData?.data,
+      responseData?.result?.data,
+      responseData?.result,
+      responseData,
+    ];
+
+    for (const path of possiblePaths) {
+      if (Array.isArray(path) && path.length > 0) {
+        tweetsData = path;
+        console.log('Found tweets array at path, count:', tweetsData.length);
+        break;
       }
     }
 
+    // If still not found, try to extract from nested object
+    if (tweetsData.length === 0 && typeof responseData === 'object') {
+      console.log('Response data keys:', Object.keys(responseData || {}));
+      
+      // Check for nested response_data object
+      if (responseData?.response_data && typeof responseData.response_data === 'object') {
+        console.log('response_data keys:', Object.keys(responseData.response_data));
+        if (responseData.response_data.data && Array.isArray(responseData.response_data.data)) {
+          tweetsData = responseData.response_data.data;
+        }
+      }
+    }
+
+    console.log('Parsed tweets count:', tweetsData.length);
+
+    for (const tweet of tweetsData) {
+      tweets.push({
+        id: tweet.id || tweet.tweet_id || String(Date.now()),
+        text: tweet.text || tweet.full_text || '',
+        authorUsername: tweet.author_id || tweet.user?.screen_name,
+        createdAt: tweet.created_at || new Date().toISOString(),
+        retweetCount: tweet.public_metrics?.retweet_count || tweet.retweet_count,
+        likeCount: tweet.public_metrics?.like_count || tweet.favorite_count,
+        replyCount: tweet.public_metrics?.reply_count,
+        isRetweet: (tweet.text || tweet.full_text || '').startsWith('RT @'),
+        isReply: tweet.in_reply_to_user_id != null || tweet.in_reply_to_status_id != null,
+      });
+    }
+
+    console.log('Returning tweets count:', tweets.length);
     return tweets;
   } catch (error) {
     console.error('Error fetching Twitter timeline:', error);
@@ -177,6 +222,8 @@ async function syncTwitterContent(
   connectionId: string
 ): Promise<{ success: boolean; tweetsSynced: number; memoriesCreated: number; error?: string }> {
   try {
+    console.log('Starting Twitter sync for user:', userId);
+    
     // Get sync config
     const { data: config } = await supabase
       .from('twitter_sync_config')
@@ -184,10 +231,14 @@ async function syncTwitterContent(
       .eq('user_id', userId)
       .maybeSingle();
 
+    console.log('Sync config:', config);
+
     // Fetch tweets
     const tweets = await fetchTwitterTimeline(connectionId, 50);
+    console.log('Fetched tweets count:', tweets.length);
     
     if (tweets.length === 0) {
+      console.log('No tweets found to sync');
       return { success: true, tweetsSynced: 0, memoriesCreated: 0 };
     }
 
@@ -199,6 +250,7 @@ async function syncTwitterContent(
       .maybeSingle();
 
     if (!apiKeys) {
+      console.error('API keys not configured for user');
       return { success: false, tweetsSynced: 0, memoriesCreated: 0, error: 'API keys not configured' };
     }
 
@@ -209,6 +261,7 @@ async function syncTwitterContent(
       .eq('user_id', userId);
 
     const syncedIds = new Set((syncedPosts || []).map((p: { twitter_post_id: string }) => p.twitter_post_id));
+    console.log('Already synced tweet IDs count:', syncedIds.size);
 
     // Filter based on config
     const tweetsToSync = tweets.filter((tweet: Tweet) => {
@@ -222,10 +275,14 @@ async function syncTwitterContent(
       return true;
     });
 
+    console.log('Tweets to sync after filtering:', tweetsToSync.length);
+
     let memoriesCreated = 0;
 
     for (const tweet of tweetsToSync) {
       const memory = formatTweetAsMemory(tweet);
+      console.log('Creating memory for tweet:', tweet.id, 'content preview:', memory.slice(0, 100));
+      
       const success = await createMemory(apiKeys, memory);
       
       if (success) {
@@ -237,6 +294,9 @@ async function syncTwitterContent(
             twitter_post_id: tweet.id,
           });
         memoriesCreated++;
+        console.log('Memory created successfully for tweet:', tweet.id);
+      } else {
+        console.error('Failed to create memory for tweet:', tweet.id);
       }
     }
 
@@ -251,6 +311,8 @@ async function syncTwitterContent(
         memories_created_count: (config?.memories_created_count || 0) + memoriesCreated,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
+
+    console.log('Sync complete. Tweets synced:', tweetsToSync.length, 'Memories created:', memoriesCreated);
 
     return {
       success: true,
@@ -320,10 +382,12 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
     });
 
     if (!response.ok) {
-      console.error('LIAM API error:', await response.text());
+      const errorText = await response.text();
+      console.error('LIAM API error:', response.status, errorText);
       return false;
     }
 
+    console.log('LIAM API success for memory creation');
     return true;
   } catch (error) {
     console.error('Create memory error:', error);
