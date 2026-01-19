@@ -10,6 +10,7 @@ import locationIcon from "@/assets/integrations/location.png";
 import cameraIcon from "@/assets/integrations/camera.png";
 import dropboxIcon from "@/assets/integrations/dropbox.png";
 import googlephotosIcon from "@/assets/integrations/googlephotos.png";
+import twitterIcon from "@/assets/integrations/twitter.png";
 
 interface IntegrationIconProps {
   icon: string;
@@ -27,6 +28,7 @@ const iconImages: Record<string, string> = {
   camera: cameraIcon,
   dropbox: dropboxIcon,
   googlephotos: googlephotosIcon,
+  twitter: twitterIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
