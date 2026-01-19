@@ -36,6 +36,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "googlephotos": "googlephotos",
   "google_photos": "googlephotos",
   "googlephoto": "googlephotos",
+  "twitter": "twitter",
+  "x": "twitter",
+  "twitter_x": "twitter",
 };
 
 serve(async (req) => {

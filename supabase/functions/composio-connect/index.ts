@@ -14,6 +14,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   instagram: "ac_N2MwqGEh7F7y",
   dropbox: "ac_u-LEALnVXap9",
   googlephotos: "ac_XQf5YL6yOEPG",
+  twitter: "ac_4qhrV_9j3cxB",
 };
 
 serve(async (req) => {

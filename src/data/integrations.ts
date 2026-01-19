@@ -46,6 +46,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "googlephotos",
         status: "unconfigured",
       },
+      {
+        id: "twitter",
+        name: "Twitter / X",
+        icon: "twitter",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -162,6 +168,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#4285F4",  // Google blue
       tertiary: "#34A853",   // Google green
       quaternary: "#FBBC05", // Google yellow
+    },
+  },
+  "twitter": {
+    id: "twitter",
+    name: "Twitter / X",
+    icon: "twitter",
+    status: "unconfigured",
+    description: "Twitter/X allows Weave to access your posts, likes, and bookmarks. Create memories from your tweets, interactions, and favorite content.",
+    capabilities: ["View posts", "View likes", "Access bookmarks", "Read profile"],
+    gradientColors: {
+      primary: "#000000",    // X black
+      secondary: "#14171A",  // X dark gray
+      tertiary: "#657786",   // X gray
     },
   },
 };
