@@ -188,6 +188,75 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_sync_config: {
+        Row: {
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          last_synced_tweet_id: string | null
+          memories_created_count: number
+          sync_likes: boolean
+          sync_replies: boolean
+          sync_retweets: boolean
+          sync_tweets: boolean
+          tweets_synced_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_synced_tweet_id?: string | null
+          memories_created_count?: number
+          sync_likes?: boolean
+          sync_replies?: boolean
+          sync_retweets?: boolean
+          sync_tweets?: boolean
+          tweets_synced_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_synced_tweet_id?: string | null
+          memories_created_count?: number
+          sync_likes?: boolean
+          sync_replies?: boolean
+          sync_retweets?: boolean
+          sync_tweets?: boolean
+          tweets_synced_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      twitter_synced_posts: {
+        Row: {
+          id: string
+          memory_id: string | null
+          synced_at: string | null
+          twitter_post_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          memory_id?: string | null
+          synced_at?: string | null
+          twitter_post_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          memory_id?: string | null
+          synced_at?: string | null
+          twitter_post_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_api_keys: {
         Row: {
           api_key: string

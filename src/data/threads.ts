@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "twitter-sync",
+    title: "Sync Twitter to Memory",
+    description: "Save your tweets, retweets, and likes as memories",
+    icon: Twitter,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "social",
+  },
   {
     id: "instagram-sync",
     title: "Sync Instagram to Memory",
