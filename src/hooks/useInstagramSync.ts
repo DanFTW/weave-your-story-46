@@ -24,6 +24,7 @@ interface UseInstagramSyncReturn {
   saveConfig: (config: Partial<InstagramSyncConfig>) => Promise<boolean>;
   syncNow: () => Promise<InstagramSyncResult | null>;
   fetchRecentPosts: () => Promise<void>;
+  resetSync: () => Promise<boolean>;
 }
 
 export function useInstagramSync(): UseInstagramSyncReturn {
@@ -219,6 +220,37 @@ export function useInstagramSync(): UseInstagramSyncReturn {
     }
   }, [toast, loadConfig]);
 
+  // Reset sync state to allow re-syncing existing posts
+  const resetSync = useCallback(async (): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('instagram-sync', {
+        body: { action: 'reset-sync' },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: "Sync reset",
+          description: "You can now re-sync your posts.",
+        });
+        await loadConfig();
+        setPhase('configure');
+        return true;
+      }
+      
+      throw new Error(data?.error || 'Reset failed');
+    } catch (error) {
+      console.error('Reset sync failed:', error);
+      toast({
+        title: "Reset failed",
+        description: error instanceof Error ? error.message : "Could not reset sync state.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  }, [toast, loadConfig]);
+
   return {
     phase,
     setPhase,
@@ -232,5 +264,6 @@ export function useInstagramSync(): UseInstagramSyncReturn {
     saveConfig,
     syncNow,
     fetchRecentPosts,
+    resetSync,
   };
 }
