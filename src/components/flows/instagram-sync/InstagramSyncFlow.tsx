@@ -33,6 +33,7 @@ export function InstagramSyncFlow() {
     saveConfig,
     syncNow,
     fetchRecentPosts,
+    resetSync,
   } = useInstagramSync();
 
   // Check Instagram connection status
@@ -159,6 +160,7 @@ export function InstagramSyncFlow() {
             isSyncing={isSyncing}
             onSyncNow={syncNow}
             onConfigure={() => setPhase('configure')}
+            onResetSync={resetSync}
           />
         )}
       </div>

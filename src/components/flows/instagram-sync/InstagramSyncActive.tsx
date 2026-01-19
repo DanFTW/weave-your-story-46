@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { RefreshCw, Settings, Image, MessageCircle, Calendar, Loader2 } from "lucide-react";
+import { RefreshCw, Settings, Image, MessageCircle, Calendar, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InstagramSyncConfig, InstagramPost } from "@/types/instagramSync";
 import { PostPreviewCard } from "./PostPreviewCard";
@@ -10,6 +10,7 @@ interface InstagramSyncActiveProps {
   isSyncing: boolean;
   onSyncNow: () => void;
   onConfigure: () => void;
+  onResetSync?: () => void;
 }
 
 export function InstagramSyncActive({
@@ -18,6 +19,7 @@ export function InstagramSyncActive({
   isSyncing,
   onSyncNow,
   onConfigure,
+  onResetSync,
 }: InstagramSyncActiveProps) {
   return (
     <div className="space-y-6">
@@ -90,24 +92,38 @@ export function InstagramSyncActive({
         </div>
       )}
 
-      {/* Sync Now Button */}
-      <Button
-        onClick={onSyncNow}
-        disabled={isSyncing}
-        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600"
-      >
-        {isSyncing ? (
-          <>
-            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            Syncing...
-          </>
-        ) : (
-          <>
-            <RefreshCw className="w-5 h-5 mr-2" />
-            Sync Now
-          </>
+      {/* Action Buttons */}
+      <div className="space-y-3">
+        <Button
+          onClick={onSyncNow}
+          disabled={isSyncing}
+          className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600"
+        >
+          {isSyncing ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Syncing...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-5 h-5 mr-2" />
+              Sync Now
+            </>
+          )}
+        </Button>
+        
+        {onResetSync && (
+          <Button
+            onClick={onResetSync}
+            variant="outline"
+            disabled={isSyncing}
+            className="w-full"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reset & Re-sync All Posts
+          </Button>
         )}
-      </Button>
+      </div>
     </div>
   );
 }
