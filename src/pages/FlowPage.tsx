@@ -38,6 +38,9 @@ import { EmailAutomationFlow } from "@/components/flows/email-automation";
 // Google Photos Sync components
 import { GooglePhotosSyncFlow } from "@/components/flows/google-photos-sync";
 
+// Instagram Sync components
+import { InstagramSyncFlow } from "@/components/flows/instagram-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -168,6 +171,12 @@ export default function FlowPage() {
   
   if (config.isGooglePhotosSyncFlow) {
     return <GooglePhotosSyncFlow />;
+  }
+
+  // === INSTAGRAM SYNC FLOW RENDER ===
+  
+  if (config.isInstagramSyncFlow) {
+    return <InstagramSyncFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

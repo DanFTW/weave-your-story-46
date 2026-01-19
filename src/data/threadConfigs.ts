@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "instagram-sync": {
+    id: "instagram-sync",
+    title: "Sync Instagram to Memory",
+    subtitle: "Capture your social moments",
+    description: "Connect Instagram to save your posts and comments as searchable memories.",
+    gradient: "pink",
+    icon: Instagram,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Instagram",
+        description: "Authorize access to your account",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Choose Content",
+        description: "Select posts and/or comments to sync",
+        icon: Settings,
+      },
+      {
+        id: "sync",
+        type: "save",
+        title: "Active Sync",
+        description: "Content saved automatically",
+        icon: Wifi,
+        badge: "WEAVE FABRIC",
+      },
+    ],
+  },
   "google-photos-sync": {
     id: "google-photos-sync",
     title: "Sync Photos to Memory",
