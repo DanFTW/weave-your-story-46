@@ -35,3 +35,12 @@ verify_jwt = false
 
 [functions.composio-create-auth-config]
 verify_jwt = false
+
+[functions.google-photos-auth]
+verify_jwt = false
+
+[functions.google-photos-callback]
+verify_jwt = false
+
+[functions.google-photos-picker]
+verify_jwt = false

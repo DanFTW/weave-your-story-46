@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Camera, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGooglePhotosSync } from "@/hooks/useGooglePhotosSync";
-import { useComposio } from "@/hooks/useComposio";
+import { useGooglePhotosAuth } from "@/hooks/useGooglePhotosAuth";
 import { GooglePhotosSyncConfig } from "./GooglePhotosSyncConfig";
 import { GooglePhotosSyncActive } from "./GooglePhotosSyncActive";
 import { SyncingScreen } from "./SyncingScreen";
@@ -19,7 +19,7 @@ const gradientClasses: Record<string, string> = {
 export function GooglePhotosSyncFlow() {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const googlePhotos = useComposio('GOOGLEPHOTOS');
+  const googlePhotos = useGooglePhotosAuth();
   
   const {
     phase,
