@@ -10,6 +10,7 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { useComposio } from "@/hooks/useComposio";
+import { useGooglePhotosAuth } from "@/hooks/useGooglePhotosAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
@@ -21,6 +22,12 @@ export default function IntegrationDetail() {
   
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
   
+  // Use native Google OAuth for Google Photos, Composio for others
+  const isGooglePhotos = integrationId?.toLowerCase() === 'googlephotos';
+  const composio = useComposio(integrationId || "gmail");
+  const googlePhotosAuth = useGooglePhotosAuth();
+  
+  // Pick the right auth hook based on integration
   const {
     connectedAccount,
     connecting,
@@ -28,7 +35,7 @@ export default function IntegrationDetail() {
     connect,
     disconnect,
     checkStatus,
-  } = useComposio(integrationId || "gmail");
+  } = isGooglePhotos ? googlePhotosAuth : composio;
 
   // Track if we've already handled the return redirect
   const hasHandledReturn = useRef(false);
@@ -70,7 +77,12 @@ export default function IntegrationDetail() {
   const handleConnect = async () => {
     setConnectionError(null);
     try {
-      await connect(`/integration/${integrationId}`);
+      // Google Photos auth doesn't need a redirect param, it's handled internally
+      if (isGooglePhotos) {
+        await connect();
+      } else {
+        await (connect as (path?: string) => Promise<void>)(`/integration/${integrationId}`);
+      }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Connection failed";
       setConnectionError(errorMsg);
@@ -84,7 +96,11 @@ export default function IntegrationDetail() {
 
   const handleChangeAccount = async () => {
     await disconnect();
-    await connect(`/integration/${integrationId}`);
+    if (isGooglePhotos) {
+      await connect();
+    } else {
+      await (connect as (path?: string) => Promise<void>)(`/integration/${integrationId}`);
+    }
   };
 
   const handleDone = () => {
