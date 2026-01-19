@@ -73,16 +73,20 @@ serve(async (req) => {
 
     switch (action) {
       case 'list-posts': {
-        // First get the Instagram User ID
+        // Try to get the Instagram User ID (optional for INSTAGRAM_GET_USER_MEDIA)
         const igUserId = await getInstagramUserId(connectionId);
-        if (!igUserId) {
+        console.log(`Instagram User ID for list-posts: ${igUserId}`);
+        
+        const { posts, error } = await fetchInstagramPosts(connectionId, igUserId, limit);
+        
+        if (error) {
+          console.error('Error listing posts:', error);
           return new Response(
-            JSON.stringify({ error: 'Failed to get Instagram user ID. Make sure you have a Business or Creator account.' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error, posts: [] }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         
-        const posts = await fetchInstagramPosts(connectionId, igUserId, limit);
         return new Response(JSON.stringify({ posts }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -154,11 +158,12 @@ async function getInstagramUserId(connectionId: string): Promise<string | null> 
   }
 }
 
-async function fetchInstagramPosts(connectionId: string, igUserId: string, limit: number): Promise<InstagramPost[]> {
+async function fetchInstagramPosts(connectionId: string, igUserId: string | null, limit: number): Promise<{ posts: InstagramPost[]; error?: string }> {
   try {
-    console.log(`Fetching Instagram posts for user ${igUserId}, limit: ${limit}`);
+    console.log(`Fetching Instagram posts, igUserId: ${igUserId}, limit: ${limit}`);
     
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_IG_USER_MEDIA', {
+    // Use INSTAGRAM_GET_USER_MEDIA which has ig_user_id as optional
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_MEDIA', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -167,8 +172,7 @@ async function fetchInstagramPosts(connectionId: string, igUserId: string, limit
       body: JSON.stringify({
         connected_account_id: connectionId,
         arguments: { 
-          ig_user_id: igUserId,  // Required parameter
-          fields: 'id,caption,media_type,media_url,permalink,timestamp,username,like_count,comments_count',
+          ...(igUserId && { ig_user_id: igUserId }),  // Optional parameter
           limit,
         },
       }),
@@ -176,43 +180,66 @@ async function fetchInstagramPosts(connectionId: string, igUserId: string, limit
 
     const responseText = await response.text();
     console.log('Instagram posts response status:', response.status);
-    console.log('Instagram posts response:', responseText.slice(0, 500));
+    console.log('Instagram posts response:', responseText.slice(0, 1000));
 
     if (!response.ok) {
       console.error('Composio API error:', responseText);
-      throw new Error('Failed to fetch Instagram posts');
+      return { posts: [], error: `Failed to fetch Instagram posts: ${response.status}` };
     }
 
     const data = JSON.parse(responseText);
     
-    // Parse the response - Composio returns data in a nested structure
+    // Parse the response - handle multiple possible structures
     const responseData = data.data || data;
-    const mediaData = responseData?.response_data?.data || 
-                      responseData?.data || 
-                      responseData?.media?.data ||
-                      [];
     
-    console.log(`Found ${Array.isArray(mediaData) ? mediaData.length : 0} Instagram posts`);
+    // Try multiple paths for the media data
+    let mediaData = responseData?.response_data?.data ||
+                    responseData?.response_data ||
+                    responseData?.data ||
+                    responseData?.media?.data ||
+                    responseData;
     
-    if (!Array.isArray(mediaData)) {
-      console.log('Media data is not an array:', typeof mediaData);
-      return [];
+    // If mediaData is still nested, try to extract
+    if (mediaData && typeof mediaData === 'object' && !Array.isArray(mediaData)) {
+      mediaData = mediaData.data || mediaData.media || [];
     }
     
-    return mediaData.map((item: any) => ({
+    console.log(`Raw media data type: ${typeof mediaData}, isArray: ${Array.isArray(mediaData)}`);
+    console.log('Media data sample:', JSON.stringify(mediaData).slice(0, 500));
+    
+    if (!Array.isArray(mediaData)) {
+      console.log('Media data is not an array, attempting to extract from object');
+      // Last resort: if it's an object with numeric keys, convert to array
+      if (typeof mediaData === 'object' && mediaData !== null) {
+        const keys = Object.keys(mediaData);
+        if (keys.some(k => !isNaN(Number(k)))) {
+          mediaData = Object.values(mediaData);
+        } else {
+          return { posts: [], error: 'Unexpected response format from Instagram API' };
+        }
+      } else {
+        return { posts: [] };
+      }
+    }
+    
+    console.log(`Found ${mediaData.length} Instagram posts`);
+    
+    const posts = mediaData.map((item: any) => ({
       id: item.id,
       caption: item.caption,
-      mediaType: item.media_type,
-      mediaUrl: item.media_url,
-      permalinkUrl: item.permalink,
+      mediaType: item.media_type || item.mediaType,
+      mediaUrl: item.media_url || item.mediaUrl,
+      permalinkUrl: item.permalink || item.permalinkUrl,
       timestamp: item.timestamp,
       username: item.username,
-      likesCount: item.like_count,
-      commentsCount: item.comments_count,
+      likesCount: item.like_count || item.likesCount,
+      commentsCount: item.comments_count || item.commentsCount,
     }));
+    
+    return { posts };
   } catch (error) {
     console.error('Error fetching posts:', error);
-    return [];
+    return { posts: [], error: error instanceof Error ? error.message : 'Unknown error fetching posts' };
   }
 }
 
@@ -222,17 +249,9 @@ async function syncInstagramContent(
   connectionId: string
 ): Promise<{ success: boolean; postsSynced: number; commentsSynced: number; memoriesCreated: number; error?: string }> {
   try {
-    // First get the Instagram User ID
+    // Try to get the Instagram User ID (optional for INSTAGRAM_GET_USER_MEDIA)
     const igUserId = await getInstagramUserId(connectionId);
-    if (!igUserId) {
-      return {
-        success: false,
-        postsSynced: 0,
-        commentsSynced: 0,
-        memoriesCreated: 0,
-        error: 'Failed to get Instagram user ID. Make sure you have a Business or Creator account.',
-      };
-    }
+    console.log(`Instagram User ID for sync: ${igUserId}`);
 
     // Get user's sync config
     const { data: config } = await supabase
@@ -245,9 +264,21 @@ async function syncInstagramContent(
     const lastSyncedPostId = config?.last_synced_post_id;
 
     // Fetch posts
-    const posts = await fetchInstagramPosts(connectionId, igUserId, 50);
+    const { posts, error: fetchError } = await fetchInstagramPosts(connectionId, igUserId, 50);
+    
+    if (fetchError) {
+      console.error('Error fetching posts for sync:', fetchError);
+      return {
+        success: false,
+        postsSynced: 0,
+        commentsSynced: 0,
+        memoriesCreated: 0,
+        error: fetchError,
+      };
+    }
     
     if (posts.length === 0) {
+      console.log('No posts found to sync');
       return { success: true, postsSynced: 0, commentsSynced: 0, memoriesCreated: 0 };
     }
 
