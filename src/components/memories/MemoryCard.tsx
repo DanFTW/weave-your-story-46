@@ -107,11 +107,22 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
   return categoryConfig.default;
 }
 
+// Tags that represent categories - already displayed in card header, so filter them out
+const CATEGORY_TAGS = new Set([
+  'twitter', 'instagram', 'email', 'receipt', 'receipts',
+  'family', 'work', 'food', 'shopping', 'personal', 'lifestyle',
+  'quick_note', 'interests', 'tweet'
+]);
+
 function parseTags(memory: Memory): string[] {
   const tags: string[] = [];
   if (memory.tag) {
     const tagParts = memory.tag.split(/[,\s]+/).filter(Boolean);
-    tags.push(...tagParts);
+    // Filter out category tags that are already shown in the header
+    const filteredTags = tagParts.filter(tag => 
+      !CATEGORY_TAGS.has(tag.toLowerCase().replace(/\s+/g, '_'))
+    );
+    tags.push(...filteredTags);
   }
   return tags.slice(0, 3);
 }
