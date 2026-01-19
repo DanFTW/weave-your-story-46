@@ -56,7 +56,7 @@ serve(async (req) => {
       .select('*')
       .eq('user_id', user.id)
       .eq('integration_id', 'twitter')
-      .eq('status', 'active')
+      .eq('status', 'connected')
       .maybeSingle();
 
     if (intError || !integration) {
