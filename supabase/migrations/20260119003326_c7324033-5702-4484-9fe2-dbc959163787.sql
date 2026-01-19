@@ -1,0 +1,1 @@
+DELETE FROM user_integrations WHERE integration_id = 'googlephotos';
