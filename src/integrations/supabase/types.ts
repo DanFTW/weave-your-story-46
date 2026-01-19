@@ -137,6 +137,30 @@ export type Database = {
         }
         Relationships: []
       }
+      instagram_synced_posts: {
+        Row: {
+          id: string
+          instagram_post_id: string
+          memory_id: string | null
+          synced_at: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          instagram_post_id: string
+          memory_id?: string | null
+          synced_at?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          instagram_post_id?: string
+          memory_id?: string | null
+          synced_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

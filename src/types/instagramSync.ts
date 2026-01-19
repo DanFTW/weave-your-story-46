@@ -43,5 +43,6 @@ export interface InstagramSyncResult {
   postsSynced: number;
   commentsSynced: number;
   memoriesCreated: number;
+  skippedDuplicates?: number;
   error?: string;
 }

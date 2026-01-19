@@ -282,7 +282,7 @@ async function syncInstagramContent(
   supabase: any,
   userId: string,
   connectionId: string
-): Promise<{ success: boolean; postsSynced: number; commentsSynced: number; memoriesCreated: number; error?: string }> {
+): Promise<{ success: boolean; postsSynced: number; commentsSynced: number; memoriesCreated: number; skippedDuplicates: number; error?: string }> {
   try {
     // Try to get the Instagram User ID (optional for INSTAGRAM_GET_USER_MEDIA)
     const igUserId = await getInstagramUserId(connectionId);
@@ -296,9 +296,8 @@ async function syncInstagramContent(
       .single();
 
     const syncPosts = config?.sync_posts ?? true;
-    const lastSyncedPostId = config?.last_synced_post_id;
 
-    // Fetch posts
+    // Fetch posts from Instagram
     const { posts, error: fetchError } = await fetchInstagramPosts(connectionId, igUserId, 50);
     
     if (fetchError) {
@@ -308,13 +307,14 @@ async function syncInstagramContent(
         postsSynced: 0,
         commentsSynced: 0,
         memoriesCreated: 0,
+        skippedDuplicates: 0,
         error: fetchError,
       };
     }
     
     if (posts.length === 0) {
       console.log('No posts found to sync');
-      return { success: true, postsSynced: 0, commentsSynced: 0, memoriesCreated: 0 };
+      return { success: true, postsSynced: 0, commentsSynced: 0, memoriesCreated: 0, skippedDuplicates: 0 };
     }
 
     // Get user's API keys for LIAM
@@ -331,49 +331,67 @@ async function syncInstagramContent(
         postsSynced: 0,
         commentsSynced: 0,
         memoriesCreated: 0,
+        skippedDuplicates: 0,
         error: 'LIAM API keys not configured. Please configure your API keys first.',
       };
     }
 
+    // Get list of already synced post IDs to prevent duplicates
+    const { data: syncedPosts } = await supabase
+      .from('instagram_synced_posts')
+      .select('instagram_post_id')
+      .eq('user_id', userId);
+    
+    const syncedPostIds = new Set((syncedPosts || []).map((p: any) => p.instagram_post_id));
+    console.log(`User has ${syncedPostIds.size} previously synced posts`);
+
     let postsSynced = 0;
     let memoriesCreated = 0;
-    let newLastSyncedPostId = lastSyncedPostId;
+    let skippedDuplicates = 0;
 
-    // Find new posts (those after lastSyncedPostId)
-    let newPosts = posts;
-    if (lastSyncedPostId) {
-      const lastIndex = posts.findIndex(p => p.id === lastSyncedPostId);
-      if (lastIndex > 0) {
-        newPosts = posts.slice(0, lastIndex);
-      } else if (lastIndex === 0) {
-        newPosts = [];
+    console.log(`Processing ${posts.length} posts from Instagram`);
+
+    // Create memories for each post (skip duplicates)
+    for (const post of posts) {
+      // Skip if already synced (prevents duplicates)
+      if (syncedPostIds.has(post.id)) {
+        console.log(`Post ${post.id} already synced, skipping`);
+        skippedDuplicates++;
+        continue;
       }
-    }
 
-    console.log(`Found ${newPosts.length} new posts to sync`);
-
-    // Create memories for each new post
-    for (const post of newPosts) {
       if (syncPosts && post.caption) {
         const memoryContent = formatPostAsMemory(post);
         const success = await createMemory(apiKeys, memoryContent);
+        
         if (success) {
-          memoriesCreated++;
-          postsSynced++;
+          // Record this post as synced to prevent future duplicates
+          const { error: insertError } = await supabase
+            .from('instagram_synced_posts')
+            .insert({
+              user_id: userId,
+              instagram_post_id: post.id,
+              synced_at: new Date().toISOString(),
+            });
+          
+          if (insertError) {
+            // If insert fails due to unique constraint, it was already synced
+            console.log(`Post ${post.id} sync record insert error (may be duplicate):`, insertError.message);
+          } else {
+            memoriesCreated++;
+            postsSynced++;
+          }
         }
-      }
-
-      // Update the newest synced post ID
-      if (!newLastSyncedPostId || post.timestamp > (posts.find(p => p.id === newLastSyncedPostId)?.timestamp || '')) {
-        newLastSyncedPostId = post.id;
       }
     }
 
-    // Update sync config
+    console.log(`Sync complete: ${postsSynced} new, ${skippedDuplicates} duplicates skipped`);
+
+    // Update sync config with totals
     const updateData = {
       user_id: userId,
       last_sync_at: new Date().toISOString(),
-      last_synced_post_id: newLastSyncedPostId || posts[0]?.id,
+      last_synced_post_id: posts[0]?.id,
       posts_synced_count: (config?.posts_synced_count || 0) + postsSynced,
       memories_created_count: (config?.memories_created_count || 0) + memoriesCreated,
       updated_at: new Date().toISOString(),
@@ -395,6 +413,7 @@ async function syncInstagramContent(
       postsSynced,
       commentsSynced: 0,
       memoriesCreated,
+      skippedDuplicates,
     };
   } catch (error) {
     console.error('Sync error:', error);
@@ -403,6 +422,7 @@ async function syncInstagramContent(
       postsSynced: 0,
       commentsSynced: 0,
       memoriesCreated: 0,
+      skippedDuplicates: 0,
       error: error instanceof Error ? error.message : 'Sync failed',
     };
   }
