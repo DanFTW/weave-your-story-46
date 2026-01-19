@@ -14,7 +14,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
   instagram: "ac_INSTAGRAM_CONFIG_ID", // TODO: Replace with actual auth config ID from Composio dashboard
   dropbox: "ac_u-LEALnVXap9",
-  googlephotos: "ac_XQf5YL6yOEPG", // Composio managed auth config
+  googlephotos: "ac_M96nlocg_hS6", // Custom auth config with photoslibrary.readonly scope
 };
 
 serve(async (req) => {
