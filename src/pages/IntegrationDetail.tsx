@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, Loader2, AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { ExternalLink } from "lucide-react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
 import { IntegrationLargeIcon } from "@/components/integrations/IntegrationLargeIcon";
@@ -32,10 +33,14 @@ export default function IntegrationDetail() {
     connectedAccount,
     connecting,
     isConnected,
+    oauthUrl,
     connect,
     disconnect,
     checkStatus,
-  } = isGooglePhotos ? googlePhotosAuth : composio;
+    cancelConnect,
+  } = isGooglePhotos 
+    ? googlePhotosAuth 
+    : { ...composio, oauthUrl: null, cancelConnect: () => {} };
 
   // Track if we've already handled the return redirect
   const hasHandledReturn = useRef(false);
@@ -163,7 +168,35 @@ export default function IntegrationDetail() {
         {isLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            <p className="text-muted-foreground">Connecting...</p>
+            <p className="text-muted-foreground">
+              {oauthUrl ? "Waiting for authorization..." : "Connecting..."}
+            </p>
+            
+            {/* Show manual link if OAuth URL available (popup was blocked) */}
+            {oauthUrl && (
+              <div className="flex flex-col items-center gap-3 mt-4 p-4 bg-muted/50 rounded-xl">
+                <p className="text-sm text-muted-foreground text-center">
+                  Popup blocked? Click below to authorize:
+                </p>
+                <a
+                  href={oauthUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open Google Authorization
+                </a>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={cancelConnect}
+                  className="text-muted-foreground"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <>

@@ -13,9 +13,11 @@ interface UseGooglePhotosAuthReturn {
   connectedAccount: GooglePhotosAccount | null;
   connecting: boolean;
   isConnected: boolean;
+  oauthUrl: string | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   checkStatus: () => Promise<void>;
+  cancelConnect: () => void;
 }
 
 const POLLING_INTERVAL = 2000; // 2 seconds
@@ -106,10 +108,14 @@ export function useGooglePhotosAuth(): UseGooglePhotosAuthReturn {
     pollForConnection();
   }, []);
 
+  // Store the OAuth URL for manual fallback
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+
   // Initiate OAuth connection using native Google OAuth
   const connect = useCallback(async () => {
     try {
       setConnecting(true);
+      setOauthUrl(null);
       
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -148,6 +154,9 @@ export function useGooglePhotosAuth(): UseGooglePhotosAuthReturn {
         return;
       }
 
+      // Store OAuth URL for manual fallback
+      setOauthUrl(data.redirectUrl);
+
       // Start polling for connection status
       startPolling();
 
@@ -166,27 +175,39 @@ export function useGooglePhotosAuth(): UseGooglePhotosAuthReturn {
           window.location.assign(data.redirectUrl);
         }
       } else {
-        // Standard web - open in new window to keep current page active for polling
-        const popup = window.open(data.redirectUrl, '_blank', 'width=600,height=700');
+        // Standard web - open as a new tab (not popup with dimensions - more reliable)
+        // Using noopener,noreferrer for security
+        const newTab = window.open(data.redirectUrl, '_blank', 'noopener,noreferrer');
         
-        if (!popup) {
-          console.log("Popup blocked, using standard redirect");
-          // Stop polling since we're doing a full redirect
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
-          // Use top-level window to escape iframe
-          const targetWindow = window.top || window;
-          targetWindow.location.assign(data.redirectUrl);
+        if (!newTab || newTab.closed) {
+          console.log("Tab blocked - showing manual instructions");
+          // Don't try to redirect in iframe - just show manual link
+          toast.info("Click the link below to authorize Google Photos", {
+            duration: 10000,
+          });
+        } else {
+          toast.info("Complete authorization in the new tab, then return here", {
+            duration: 8000,
+          });
         }
       }
     } catch (error) {
       console.error("Connection error:", error);
       toast.error("Failed to connect Google Photos");
       setConnecting(false);
+      setOauthUrl(null);
     }
   }, [startPolling]);
+
+  // Cancel connection attempt
+  const cancelConnect = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setConnecting(false);
+    setOauthUrl(null);
+  }, []);
 
   // Check existing connection status
   const checkStatus = useCallback(async () => {
@@ -243,8 +264,10 @@ export function useGooglePhotosAuth(): UseGooglePhotosAuthReturn {
     connectedAccount,
     connecting,
     isConnected,
+    oauthUrl,
     connect,
     disconnect,
     checkStatus,
+    cancelConnect,
   };
 }
