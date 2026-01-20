@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Loader2, AlertCircle } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
@@ -9,15 +9,15 @@ import { IntegrationConnectButton } from "@/components/integrations/IntegrationC
 import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationCapabilityTag";
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
+import { OAuthConfirmDialog } from "@/components/integrations/OAuthConfirmDialog";
 import { useComposio } from "@/hooks/useComposio";
 import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
 
 export default function IntegrationDetail() {
   const { integrationId } = useParams<{ integrationId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
   
@@ -67,13 +67,15 @@ export default function IntegrationDetail() {
     );
   }
 
-  const handleConnect = async () => {
-    setConnectionError(null);
+  const handleConnect = () => {
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmConnect = async () => {
     try {
       await connect(`/integration/${integrationId}`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Connection failed";
-      setConnectionError(errorMsg);
       toast({
         title: "Connection failed",
         description: errorMsg,
@@ -97,8 +99,19 @@ export default function IntegrationDetail() {
 
   const isLoading = connecting;
 
+  const returnUrl = `${window.location.origin}/integration/${integrationId}`;
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* OAuth Confirmation Dialog */}
+      <OAuthConfirmDialog
+        open={showConfirmDialog}
+        onOpenChange={setShowConfirmDialog}
+        integrationName={integration.name}
+        integrationIcon={integration.icon}
+        onConfirm={handleConfirmConnect}
+        returnUrl={returnUrl}
+      />
       {/* Gradient Header Section */}
       <div className="relative h-64 flex-shrink-0">
         <IntegrationGradientBackground colors={integration.gradientColors} />
