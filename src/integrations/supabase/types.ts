@@ -329,6 +329,72 @@ export type Database = {
         }
         Relationships: []
       }
+      youtube_sync_config: {
+        Row: {
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          last_synced_video_id: string | null
+          memories_created_count: number
+          sync_liked_videos: boolean
+          sync_subscriptions: boolean
+          sync_watch_history: boolean
+          updated_at: string
+          user_id: string
+          videos_synced_count: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_synced_video_id?: string | null
+          memories_created_count?: number
+          sync_liked_videos?: boolean
+          sync_subscriptions?: boolean
+          sync_watch_history?: boolean
+          updated_at?: string
+          user_id: string
+          videos_synced_count?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          last_synced_video_id?: string | null
+          memories_created_count?: number
+          sync_liked_videos?: boolean
+          sync_subscriptions?: boolean
+          sync_watch_history?: boolean
+          updated_at?: string
+          user_id?: string
+          videos_synced_count?: number
+        }
+        Relationships: []
+      }
+      youtube_synced_posts: {
+        Row: {
+          id: string
+          memory_id: string | null
+          synced_at: string | null
+          user_id: string
+          youtube_video_id: string
+        }
+        Insert: {
+          id?: string
+          memory_id?: string | null
+          synced_at?: string | null
+          user_id: string
+          youtube_video_id: string
+        }
+        Update: {
+          id?: string
+          memory_id?: string | null
+          synced_at?: string | null
+          user_id?: string
+          youtube_video_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

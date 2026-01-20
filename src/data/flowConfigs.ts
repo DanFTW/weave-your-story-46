@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "youtube-sync": {
+    id: "youtube-sync",
+    title: "YouTube Sync",
+    subtitle: "Sync liked videos to memory",
+    description: "Automatically save YouTube content as memories.",
+    gradient: "pink",
+    icon: Youtube,
+    entryName: "video",
+    entryNamePlural: "videos",
+    memoryTag: "YOUTUBE",
+    fields: [],
+    isYouTubeSyncFlow: true,
+  },
   "twitter-sync": {
     id: "twitter-sync",
     title: "Twitter Sync",
