@@ -107,20 +107,10 @@ serve(async (req) => {
       }
 
       case 'reset-sync': {
-        // First, clear the deduplication table to allow re-syncing all posts
-        const { error: clearError } = await supabase
-          .from('instagram_synced_posts')
-          .delete()
-          .eq('user_id', user.id);
-
-        if (clearError) {
-          console.error('Error clearing synced posts:', clearError);
-          // Continue anyway - we still want to reset the config
-        } else {
-          console.log('Cleared synced posts for user:', user.id);
-        }
-
-        // Reset the sync config state
+        // IMPORTANT: Do NOT clear instagram_synced_posts table!
+        // That table prevents duplicate memories from being created.
+        // Only reset the sync config metadata (counts, timestamps).
+        
         const { error: resetError } = await supabase
           .from('instagram_sync_config')
           .update({
@@ -140,9 +130,9 @@ serve(async (req) => {
           );
         }
 
-        console.log('Sync state reset successfully for user:', user.id);
+        console.log('Sync config reset (deduplication preserved) for user:', user.id);
         return new Response(
-          JSON.stringify({ success: true, message: 'Sync state reset successfully' }),
+          JSON.stringify({ success: true, message: 'Sync state reset. Previously synced posts will not be re-synced to prevent duplicates.' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

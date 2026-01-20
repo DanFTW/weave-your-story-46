@@ -4,7 +4,7 @@ import { Thread } from "@/types/threads";
 export const sampleThreads: Thread[] = [
   {
     id: "youtube-sync",
-    title: "Sync YouTube to Memory",
+    title: "YouTube Dump",
     description: "Save your liked videos, watch history, and subscriptions as memories",
     icon: Youtube,
     gradient: "pink",
@@ -14,7 +14,7 @@ export const sampleThreads: Thread[] = [
   },
   {
     id: "twitter-sync",
-    title: "Sync Twitter to Memory",
+    title: "Twitter Dump",
     description: "Save your tweets, retweets, and likes as memories",
     icon: Twitter,
     gradient: "blue",
@@ -24,7 +24,7 @@ export const sampleThreads: Thread[] = [
   },
   {
     id: "instagram-sync",
-    title: "Sync Instagram to Memory",
+    title: "Instagram Dump",
     description: "Save your posts and comments as memories",
     icon: Instagram,
     gradient: "pink",
@@ -34,7 +34,7 @@ export const sampleThreads: Thread[] = [
   },
   {
     id: "google-photos-sync",
-    title: "Sync Photos to Memory",
+    title: "Photos Dump",
     description: "Automatically save photos as memories",
     icon: Camera,
     gradient: "teal",

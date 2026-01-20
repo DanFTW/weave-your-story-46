@@ -124,8 +124,8 @@ export function GooglePhotosSyncFlow() {
             </div>
             
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-white truncate">Photos Sync</h1>
-              <p className="text-white/70 text-sm truncate">Syncing photos...</p>
+              <h1 className="text-xl font-bold text-white truncate">Photos Dump</h1>
+              <p className="text-white/70 text-sm truncate">Dumping photos...</p>
             </div>
           </div>
         </div>
@@ -159,7 +159,7 @@ export function GooglePhotosSyncFlow() {
           </button>
           
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-white truncate">Photos Sync</h1>
+            <h1 className="text-xl font-bold text-white truncate">Photos Dump</h1>
             <p className="text-white/70 text-sm truncate">{getSubtitle()}</p>
           </div>
         </div>
