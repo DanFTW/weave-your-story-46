@@ -107,7 +107,20 @@ serve(async (req) => {
       }
 
       case 'reset-sync': {
-        // Reset the sync state to allow re-syncing existing posts
+        // First, clear the deduplication table to allow re-syncing all posts
+        const { error: clearError } = await supabase
+          .from('instagram_synced_posts')
+          .delete()
+          .eq('user_id', user.id);
+
+        if (clearError) {
+          console.error('Error clearing synced posts:', clearError);
+          // Continue anyway - we still want to reset the config
+        } else {
+          console.log('Cleared synced posts for user:', user.id);
+        }
+
+        // Reset the sync config state
         const { error: resetError } = await supabase
           .from('instagram_sync_config')
           .update({

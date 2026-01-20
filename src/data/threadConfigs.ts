@@ -4,7 +4,7 @@ import { ThreadConfig } from "@/types/threadConfig";
 export const threadConfigs: Record<string, ThreadConfig> = {
   "youtube-sync": {
     id: "youtube-sync",
-    title: "Sync YouTube to Memory",
+    title: "YouTube Dump",
     subtitle: "Capture your video moments",
     description: "Connect YouTube to save your liked videos, watch history, and subscriptions as searchable memories.",
     gradient: "pink",
@@ -36,7 +36,7 @@ export const threadConfigs: Record<string, ThreadConfig> = {
   },
   "twitter-sync": {
     id: "twitter-sync",
-    title: "Sync Twitter to Memory",
+    title: "Twitter Dump",
     subtitle: "Capture your tweets and moments",
     description: "Connect Twitter/X to save your tweets, retweets, replies, and likes as searchable memories.",
     gradient: "blue",
@@ -68,7 +68,7 @@ export const threadConfigs: Record<string, ThreadConfig> = {
   },
   "instagram-sync": {
     id: "instagram-sync",
-    title: "Sync Instagram to Memory",
+    title: "Instagram Dump",
     subtitle: "Capture your social moments",
     description: "Connect Instagram to save your posts and comments as searchable memories.",
     gradient: "pink",
@@ -100,7 +100,7 @@ export const threadConfigs: Record<string, ThreadConfig> = {
   },
   "google-photos-sync": {
     id: "google-photos-sync",
-    title: "Sync Photos to Memory",
+    title: "Photos Dump",
     subtitle: "Capture moments automatically",
     description: "Connect Google Photos to automatically save new photos as memories. Every photo you upload becomes a searchable memory.",
     gradient: "teal",
