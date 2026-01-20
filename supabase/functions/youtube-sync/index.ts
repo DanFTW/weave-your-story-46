@@ -1,9 +1,15 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const COMPOSIO_API_KEY = Deno.env.get('COMPOSIO_API_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const LIAM_API_URL = 'https://web.askbuddy.ai/devspacexdb/api/memory/create';
 
 interface YouTubeVideo {
   id: string;
@@ -12,302 +18,556 @@ interface YouTubeVideo {
   description?: string;
   publishedAt: string;
   thumbnailUrl?: string;
-  viewCount?: number;
-  likeCount?: number;
+  videoUrl?: string;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const composioApiKey = Deno.env.get("COMPOSIO_API_KEY")!;
-
-    const authHeader = req.headers.get("Authorization");
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    
+    // Auth check
+    const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+    const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const { action } = await req.json();
-    console.log(`YouTube sync action: ${action} for user: ${user.id}`);
-
-    // Get user's YouTube connection
-    const { data: integration, error: integrationError } = await supabase
-      .from("user_integrations")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("integration_id", "youtube")
-      .eq("status", "connected")
+    // Get user's YouTube integration
+    const { data: integration, error: intError } = await supabase
+      .from('user_integrations')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('integration_id', 'youtube')
+      .eq('status', 'connected')
       .maybeSingle();
 
-    if (integrationError || !integration) {
-      return new Response(
-        JSON.stringify({ error: "YouTube not connected" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (intError || !integration) {
+      console.log('YouTube integration not found or not connected for user:', user.id);
+      return new Response(JSON.stringify({ error: 'YouTube not connected' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const connectionId = integration.composio_connection_id;
+    const { action, limit = 20 } = await req.json();
+    console.log(`YouTube sync action: ${action} for user: ${user.id}`);
 
-    if (action === "list-videos") {
-      // Fetch liked videos from YouTube via Composio
-      const videos = await fetchLikedVideos(composioApiKey, connectionId);
-      
-      return new Response(
-        JSON.stringify({ videos }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (action === "sync") {
-      // Get user's sync config
-      const { data: config } = await supabase
-        .from("youtube_sync_config")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (!config) {
-        return new Response(
-          JSON.stringify({ error: "Sync not configured" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    switch (action) {
+      case 'list-videos': {
+        const videos = await fetchLikedVideos(integration.composio_connection_id, limit);
+        return new Response(JSON.stringify({ videos }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
-      // Get already synced video IDs
-      const { data: syncedPosts } = await supabase
-        .from("youtube_synced_posts")
-        .select("youtube_video_id")
-        .eq("user_id", user.id);
-
-      const syncedVideoIds = new Set(syncedPosts?.map(p => p.youtube_video_id) || []);
-
-      // Fetch videos based on config
-      let allVideos: YouTubeVideo[] = [];
-
-      if (config.sync_liked_videos) {
-        const likedVideos = await fetchLikedVideos(composioApiKey, connectionId);
-        allVideos = [...allVideos, ...likedVideos];
+      case 'sync': {
+        const result = await syncYouTubeContent(supabase, user.id, integration.composio_connection_id);
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
-      // Filter out already synced videos
-      const newVideos = allVideos.filter(v => !syncedVideoIds.has(v.id));
-      console.log(`Found ${newVideos.length} new videos to sync`);
+      case 'reset-sync': {
+        // Delete all synced videos and reset config
+        await supabase
+          .from('youtube_synced_posts')
+          .delete()
+          .eq('user_id', user.id);
 
-      // Get user API keys for memory creation
-      const { data: apiKeys } = await supabase
-        .from("user_api_keys")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+        await supabase
+          .from('youtube_sync_config')
+          .update({
+            last_sync_at: null,
+            last_synced_video_id: null,
+            videos_synced_count: 0,
+            memories_created_count: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
 
-      let memoriesCreated = 0;
-
-      if (apiKeys && newVideos.length > 0) {
-        // Create memories for new videos
-        for (const video of newVideos.slice(0, 20)) { // Limit to 20 per sync
-          try {
-            const memoryContent = formatVideoAsMemory(video);
-            const memoryId = await createMemory(apiKeys, memoryContent, "YOUTUBE");
-
-            if (memoryId) {
-              // Record synced video
-              await supabase.from("youtube_synced_posts").insert({
-                user_id: user.id,
-                youtube_video_id: video.id,
-                memory_id: memoryId,
-              });
-              memoriesCreated++;
-            }
-          } catch (error) {
-            console.error(`Error creating memory for video ${video.id}:`, error);
-          }
-        }
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
-      // Update sync config
-      await supabase
-        .from("youtube_sync_config")
-        .update({
-          last_sync_at: new Date().toISOString(),
-          videos_synced_count: (config.videos_synced_count || 0) + newVideos.length,
-          memories_created_count: (config.memories_created_count || 0) + memoriesCreated,
-          last_synced_video_id: newVideos[0]?.id || config.last_synced_video_id,
-        })
-        .eq("user_id", user.id);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          videosSynced: newVideos.length,
-          memoriesCreated,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      default:
+        return new Response(JSON.stringify({ error: 'Unknown action' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
     }
-
-    if (action === "reset-sync") {
-      // Reset sync state but keep synced posts for deduplication
-      await supabase
-        .from("youtube_sync_config")
-        .update({
-          last_sync_at: null,
-          last_synced_video_id: null,
-          videos_synced_count: 0,
-          memories_created_count: 0,
-        })
-        .eq("user_id", user.id);
-
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    return new Response(
-      JSON.stringify({ error: "Invalid action" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   } catch (error) {
-    console.error("YouTube sync error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error('YouTube sync error:', error);
+    return new Response(JSON.stringify({ 
+      error: error instanceof Error ? error.message : 'Internal server error' 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
 
-async function fetchLikedVideos(apiKey: string, connectionId: string): Promise<YouTubeVideo[]> {
+// Fetch liked videos using YOUTUBE_LIST_PLAYLIST_ITEMS with "LL" (Liked List) playlist
+async function fetchLikedVideos(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
   try {
-    // Use Composio to execute YouTube API action
-    const response = await fetch("https://backend.composio.dev/api/v3/actions/YOUTUBE_LIST_VIDEOS/execute", {
-      method: "POST",
+    console.log('Fetching liked videos with YOUTUBE_LIST_PLAYLIST_ITEMS (playlistId: LL)...');
+    
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_PLAYLIST_ITEMS', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
         connected_account_id: connectionId,
-        input: {
-          part: "snippet,statistics",
-          myRating: "like",
-          maxResults: 20,
+        arguments: {
+          playlistId: 'LL', // "LL" = Liked List (special YouTube playlist)
+          part: 'snippet,contentDetails',
+          maxResults: Math.min(limit, 50),
         },
       }),
     });
 
+    const responseText = await response.text();
+    console.log('Liked videos response status:', response.status);
+    console.log('Liked videos response (first 2000 chars):', responseText.slice(0, 2000));
+
     if (!response.ok) {
-      console.error("Composio YouTube API error:", await response.text());
+      console.error('Failed to fetch liked videos:', responseText);
       return [];
     }
 
-    const data = await response.json();
-    console.log("YouTube API response:", JSON.stringify(data).slice(0, 500));
-
-    // Parse response - handle different response structures
-    const items = data?.data?.items || data?.response?.data?.items || data?.items || [];
-    
-    return items.map((item: any) => ({
-      id: item.id || item.snippet?.resourceId?.videoId,
-      title: item.snippet?.title || "Untitled",
-      channelTitle: item.snippet?.channelTitle,
-      description: item.snippet?.description,
-      publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
-      thumbnailUrl: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url,
-      viewCount: parseInt(item.statistics?.viewCount) || undefined,
-      likeCount: parseInt(item.statistics?.likeCount) || undefined,
-    }));
+    const data = JSON.parse(responseText);
+    return parseYouTubeVideosResponse(data);
   } catch (error) {
-    console.error("Error fetching liked videos:", error);
+    console.error('Error fetching liked videos:', error);
     return [];
   }
 }
 
-function formatVideoAsMemory(video: YouTubeVideo): string {
-  let content = `Watched: ${video.title}`;
-  
-  if (video.channelTitle) {
-    content += ` by ${video.channelTitle}`;
-  }
-  
-  if (video.description) {
-    const shortDesc = video.description.slice(0, 200);
-    content += `\n\n${shortDesc}${video.description.length > 200 ? '...' : ''}`;
-  }
-
-  return content;
-}
-
-async function createMemory(
-  apiKeys: { user_key: string; private_key: string; api_key: string },
-  content: string,
-  tag: string
-): Promise<string | null> {
+// Fetch subscriptions using YOUTUBE_LIST_SUBSCRIPTIONS
+async function fetchSubscriptions(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
   try {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(content);
-
-    // Import the private key for signing
-    const privateKeyDer = Uint8Array.from(atob(apiKeys.private_key), c => c.charCodeAt(0));
-    const privateKey = await crypto.subtle.importKey(
-      "pkcs8",
-      privateKeyDer,
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["sign"]
-    );
-
-    // Sign the content
-    const signature = await crypto.subtle.sign(
-      { name: "ECDSA", hash: "SHA-256" },
-      privateKey,
-      data
-    );
-
-    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-
-    const response = await fetch("https://web.askbuddy.ai/devspacexdb/api/memory/create", {
-      method: "POST",
+    console.log('Fetching subscriptions with YOUTUBE_LIST_SUBSCRIPTIONS...');
+    
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_SUBSCRIPTIONS', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "x-user-key": apiKeys.user_key,
-        "x-signature": signatureBase64,
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        userKey: apiKeys.user_key,
-        content,
-        tags: [tag],
-        source: "youtube",
+        connected_account_id: connectionId,
+        arguments: {
+          part: 'snippet,contentDetails',
+          mine: true,
+          maxResults: Math.min(limit, 50),
+        },
       }),
     });
 
+    const responseText = await response.text();
+    console.log('Subscriptions response status:', response.status);
+    console.log('Subscriptions response (first 2000 chars):', responseText.slice(0, 2000));
+
     if (!response.ok) {
-      console.error("Memory creation failed:", await response.text());
-      return null;
+      console.error('Failed to fetch subscriptions:', responseText);
+      return [];
     }
 
-    const result = await response.json();
-    return result.id || result.memoryId || null;
+    const data = JSON.parse(responseText);
+    return parseSubscriptionsResponse(data);
   } catch (error) {
-    console.error("Error creating memory:", error);
-    return null;
+    console.error('Error fetching subscriptions:', error);
+    return [];
   }
+}
+
+// Parse YouTube videos from various response structures
+function parseYouTubeVideosResponse(data: any): YouTubeVideo[] {
+  const videos: YouTubeVideo[] = [];
+  
+  console.log('Parsing YouTube response, top-level keys:', Object.keys(data || {}));
+  
+  // Try different response paths (Composio v3 API structure varies)
+  const responseData = data?.data || data;
+  console.log('responseData keys:', Object.keys(responseData || {}));
+  
+  if (responseData?.response_data) {
+    console.log('response_data keys:', Object.keys(responseData.response_data || {}));
+  }
+  
+  // Find items array in response
+  let items: any[] = [];
+  const possiblePaths = [
+    responseData?.response_data?.items,
+    responseData?.response_data?.data?.items,
+    responseData?.items,
+    responseData?.data?.items,
+    responseData?.result?.items,
+  ];
+
+  for (const path of possiblePaths) {
+    if (Array.isArray(path) && path.length > 0) {
+      items = path;
+      console.log('Found items array, count:', items.length);
+      break;
+    }
+  }
+
+  if (items.length === 0) {
+    console.log('No items found in response');
+    return [];
+  }
+
+  console.log('First item sample:', JSON.stringify(items[0])?.slice(0, 500));
+
+  for (const item of items) {
+    const snippet = item.snippet || {};
+    const contentDetails = item.contentDetails || {};
+    
+    // Get video ID from various possible locations
+    const videoId = contentDetails.videoId || 
+                    snippet.resourceId?.videoId || 
+                    item.id?.videoId || 
+                    item.id;
+    
+    if (!videoId || typeof videoId !== 'string') {
+      console.log('Skipping item without valid video ID:', item.id);
+      continue;
+    }
+
+    videos.push({
+      id: videoId,
+      title: snippet.title || 'Untitled Video',
+      channelTitle: snippet.channelTitle || snippet.videoOwnerChannelTitle,
+      description: snippet.description,
+      publishedAt: snippet.publishedAt || contentDetails.videoPublishedAt || new Date().toISOString(),
+      thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
+      videoUrl: `https://youtube.com/watch?v=${videoId}`,
+    });
+  }
+
+  console.log('Parsed videos count:', videos.length);
+  return videos;
+}
+
+// Parse subscriptions response
+function parseSubscriptionsResponse(data: any): YouTubeVideo[] {
+  const videos: YouTubeVideo[] = [];
+  
+  const responseData = data?.data || data;
+  
+  let items: any[] = [];
+  const possiblePaths = [
+    responseData?.response_data?.items,
+    responseData?.response_data?.data?.items,
+    responseData?.items,
+    responseData?.data?.items,
+  ];
+
+  for (const path of possiblePaths) {
+    if (Array.isArray(path) && path.length > 0) {
+      items = path;
+      break;
+    }
+  }
+
+  for (const item of items) {
+    const snippet = item.snippet || {};
+    const channelId = snippet.resourceId?.channelId || item.id;
+    
+    if (!channelId) continue;
+
+    videos.push({
+      id: `sub_${channelId}`,
+      title: `Subscribed to: ${snippet.title || 'Unknown Channel'}`,
+      channelTitle: snippet.title,
+      description: snippet.description,
+      publishedAt: snippet.publishedAt || new Date().toISOString(),
+      thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
+      videoUrl: `https://youtube.com/channel/${channelId}`,
+    });
+  }
+
+  return videos;
+}
+
+async function syncYouTubeContent(
+  supabase: any,
+  userId: string,
+  connectionId: string
+): Promise<{ success: boolean; videosSynced: number; memoriesCreated: number; error?: string }> {
+  try {
+    console.log('Starting YouTube sync for user:', userId);
+    
+    // Get sync config
+    const { data: config } = await supabase
+      .from('youtube_sync_config')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    console.log('Sync config:', JSON.stringify(config));
+
+    // Fetch content based on config
+    let allVideos: YouTubeVideo[] = [];
+
+    // Default to syncing liked videos if no config or sync_liked_videos is true
+    if (!config || config.sync_liked_videos !== false) {
+      console.log('Fetching liked videos...');
+      const likedVideos = await fetchLikedVideos(connectionId, 25);
+      console.log('Fetched liked videos count:', likedVideos.length);
+      allVideos = [...allVideos, ...likedVideos];
+    }
+
+    // Fetch subscriptions if enabled
+    if (config?.sync_subscriptions) {
+      console.log('Fetching subscriptions...');
+      const subscriptions = await fetchSubscriptions(connectionId, 25);
+      console.log('Fetched subscriptions count:', subscriptions.length);
+      allVideos = [...allVideos, ...subscriptions];
+    }
+
+    if (allVideos.length === 0) {
+      console.log('No videos found to sync');
+      return { success: true, videosSynced: 0, memoriesCreated: 0 };
+    }
+
+    // Get user's API keys for LIAM
+    const { data: apiKeys } = await supabase
+      .from('user_api_keys')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!apiKeys) {
+      console.error('API keys not configured for user');
+      return { success: false, videosSynced: 0, memoriesCreated: 0, error: 'API keys not configured' };
+    }
+
+    // Get already synced video IDs
+    const { data: syncedPosts } = await supabase
+      .from('youtube_synced_posts')
+      .select('youtube_video_id')
+      .eq('user_id', userId);
+
+    const syncedIds = new Set((syncedPosts || []).map((p: { youtube_video_id: string }) => p.youtube_video_id));
+    console.log('Already synced video IDs count:', syncedIds.size);
+
+    // Filter out already synced videos
+    const videosToSync = allVideos.filter(video => !syncedIds.has(video.id));
+    console.log('Videos to sync after filtering:', videosToSync.length);
+
+    let memoriesCreated = 0;
+
+    for (const video of videosToSync.slice(0, 20)) { // Limit to 20 per sync
+      const memory = formatVideoAsMemory(video);
+      console.log('Creating memory for video:', video.id, 'content preview:', memory.slice(0, 100));
+      
+      const success = await createMemory(apiKeys, memory);
+      
+      if (success) {
+        // Record synced video
+        await supabase
+          .from('youtube_synced_posts')
+          .insert({
+            user_id: userId,
+            youtube_video_id: video.id,
+          });
+        memoriesCreated++;
+        console.log('Memory created successfully for video:', video.id);
+      } else {
+        console.error('Failed to create memory for video:', video.id);
+      }
+    }
+
+    // Update sync config
+    await supabase
+      .from('youtube_sync_config')
+      .upsert({
+        user_id: userId,
+        last_sync_at: new Date().toISOString(),
+        last_synced_video_id: videosToSync[0]?.id,
+        videos_synced_count: (config?.videos_synced_count || 0) + videosToSync.length,
+        memories_created_count: (config?.memories_created_count || 0) + memoriesCreated,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+    console.log('Sync complete. Videos synced:', videosToSync.length, 'Memories created:', memoriesCreated);
+
+    return {
+      success: true,
+      videosSynced: videosToSync.length,
+      memoriesCreated,
+    };
+  } catch (error) {
+    console.error('Sync error:', error);
+    return { 
+      success: false, 
+      videosSynced: 0, 
+      memoriesCreated: 0, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+function formatVideoAsMemory(video: YouTubeVideo): string {
+  const date = new Date(video.publishedAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  let memory = `YouTube Video\nLiked on ${date}`;
+  
+  memory += `\n\n${video.title}`;
+  
+  if (video.channelTitle) {
+    memory += `\nby ${video.channelTitle}`;
+  }
+  
+  if (video.description) {
+    const shortDesc = video.description.slice(0, 200).trim();
+    if (shortDesc) {
+      memory += `\n\n${shortDesc}${video.description.length > 200 ? '...' : ''}`;
+    }
+  }
+
+  if (video.videoUrl) {
+    memory += `\n\n${video.videoUrl}`;
+  }
+
+  return memory;
+}
+
+// LIAM API integration with cryptographic signing
+// CRITICAL: LIAM API requires lowercase headers 'apiKey' and 'signature'
+// and 'content' field (not 'memory') in the request body
+async function createMemory(apiKeys: { api_key: string; private_key: string; user_key: string }, memoryContent: string): Promise<boolean> {
+  try {
+    const requestBody = {
+      content: memoryContent,  // LIAM API uses 'content', not 'memory'
+      userKey: apiKeys.user_key,
+      tag: 'YOUTUBE',
+    };
+    
+    const bodyString = JSON.stringify(requestBody);
+    console.log('Creating memory with body:', bodyString.slice(0, 200));
+
+    const signature = await signRequest(apiKeys.private_key, bodyString);
+
+    const response = await fetch(LIAM_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apiKey': apiKeys.api_key,        // CRITICAL: lowercase 'apiKey' not 'X-API-Key'
+        'signature': signature,            // CRITICAL: lowercase 'signature' not 'X-Signature'
+      },
+      body: bodyString,
+    });
+
+    const responseText = await response.text();
+    console.log('LIAM API response:', response.status, responseText.slice(0, 500));
+
+    if (!response.ok) {
+      console.error('LIAM API error:', response.status, responseText);
+      return false;
+    }
+
+    console.log('LIAM API success for memory creation');
+    return true;
+  } catch (error) {
+    console.error('Create memory error:', error);
+    return false;
+  }
+}
+
+// Crypto utilities for LIAM API signing (DER format required)
+function removeLeadingZeros(arr: Uint8Array): Uint8Array {
+  let i = 0;
+  while (i < arr.length - 1 && arr[i] === 0) i++;
+  return arr.slice(i);
+}
+
+function constructLength(len: number): Uint8Array {
+  if (len < 128) return new Uint8Array([len]);
+  if (len < 256) return new Uint8Array([0x81, len]);
+  return new Uint8Array([0x82, (len >> 8) & 0xff, len & 0xff]);
+}
+
+function toDER(signature: Uint8Array): Uint8Array {
+  const r = removeLeadingZeros(signature.slice(0, 32));
+  const s = removeLeadingZeros(signature.slice(32, 64));
+  
+  const rPadded = r[0] >= 0x80 ? new Uint8Array([0, ...r]) : r;
+  const sPadded = s[0] >= 0x80 ? new Uint8Array([0, ...s]) : s;
+  
+  const rLen = constructLength(rPadded.length);
+  const sLen = constructLength(sPadded.length);
+  
+  const innerLen = 1 + rLen.length + rPadded.length + 1 + sLen.length + sPadded.length;
+  const outerLen = constructLength(innerLen);
+  
+  const der = new Uint8Array(1 + outerLen.length + innerLen);
+  let offset = 0;
+  
+  der[offset++] = 0x30;
+  der.set(outerLen, offset); offset += outerLen.length;
+  der[offset++] = 0x02;
+  der.set(rLen, offset); offset += rLen.length;
+  der.set(rPadded, offset); offset += rPadded.length;
+  der[offset++] = 0x02;
+  der.set(sLen, offset); offset += sLen.length;
+  der.set(sPadded, offset);
+  
+  return der;
+}
+
+async function importPrivateKey(base64Key: string): Promise<CryptoKey> {
+  const cleanKey = base64Key
+    .replace(/-----BEGIN.*-----/g, '')
+    .replace(/-----END.*-----/g, '')
+    .replace(/\s/g, '');
+  
+  const binaryKey = Uint8Array.from(atob(cleanKey), c => c.charCodeAt(0));
+  
+  return await crypto.subtle.importKey(
+    'pkcs8',
+    binaryKey,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+}
+
+async function signRequest(privateKeyBase64: string, body: string): Promise<string> {
+  const key = await importPrivateKey(privateKeyBase64);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(body);
+  
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    data
+  );
+  
+  const derSignature = toDER(new Uint8Array(signature));
+  return btoa(String.fromCharCode(...derSignature));
 }
