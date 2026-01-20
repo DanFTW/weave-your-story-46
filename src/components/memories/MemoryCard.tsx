@@ -127,10 +127,22 @@ function parseTags(memory: Memory): string[] {
   return tags.slice(0, 3);
 }
 
-// Parse media URL from memory content (format: [media:url])
+// Parse media URL from memory content
+// Supports both new [media:url] format and legacy plain-text formats
 function parseMediaUrl(content: string): string | null {
-  const match = content.match(/\[media:(https?:\/\/[^\]]+)\]/);
-  return match ? match[1] : null;
+  // First try the new [media:url] format
+  const tagMatch = content.match(/\[media:(https?:\/\/[^\]]+)\]/);
+  if (tagMatch) return tagMatch[1];
+  
+  // Legacy: "Instagram post media link: 'URL'" (CDN image/video URLs)
+  const mediaLinkMatch = content.match(/Instagram post media link:\s*['"]?(https?:\/\/[^\s'"]+)/i);
+  if (mediaLinkMatch) return mediaLinkMatch[1];
+  
+  // Legacy: Raw scontent CDN URLs on their own line
+  const cdnMatch = content.match(/(https:\/\/scontent[^\s'"]+)/);
+  if (cdnMatch) return cdnMatch[1];
+  
+  return null;
 }
 
 // Parse link URL from memory content (format: [link:url])
@@ -139,11 +151,19 @@ function parseLinkUrl(content: string): string | null {
   return match ? match[1] : null;
 }
 
-// Clean content by removing metadata tags for display
+// Clean content by removing URLs and metadata for display
 function cleanContentForDisplay(content: string): string {
   return content
+    // Remove new-format tags
     .replace(/\[media:[^\]]+\]/g, '')
     .replace(/\[link:[^\]]+\]/g, '')
+    // Remove legacy URL lines
+    .replace(/Instagram post link:\s*['"]?https?:\/\/[^\s'"]+['"]?\s*/gi, '')
+    .replace(/Instagram post media link:\s*['"]?https?:\/\/[^\s'"]+['"]?\s*/gi, '')
+    // Remove standalone CDN URLs
+    .replace(/https:\/\/scontent[^\s]+\s*/g, '')
+    // Clean up extra whitespace and newlines
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -203,7 +223,8 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
   // Check if this is an Instagram memory and parse embedded media
   const isInstagramMemory = 
     memory.tag?.toLowerCase() === 'instagram' || 
-    memory.content.toLowerCase().startsWith('instagram');
+    memory.content.toLowerCase().startsWith('instagram') ||
+    memory.content.toLowerCase().includes('instagram post');
   const mediaUrl = isInstagramMemory ? parseMediaUrl(memory.content) : null;
   const displayContent = isInstagramMemory 
     ? cleanContentForDisplay(memory.content) 
