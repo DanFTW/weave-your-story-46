@@ -220,19 +220,20 @@ export function useInstagramSync(): UseInstagramSyncReturn {
     }
   }, [toast, loadConfig]);
 
-  // Reset sync state to allow re-syncing existing posts
+  // Force reset sync state to allow re-syncing ALL existing posts
   const resetSync = useCallback(async (): Promise<boolean> => {
     try {
+      // Use force-reset-sync to clear deduplication table and allow full re-sync
       const { data, error } = await supabase.functions.invoke('instagram-sync', {
-        body: { action: 'reset-sync' },
+        body: { action: 'force-reset-sync' },
       });
 
       if (error) throw error;
 
       if (data?.success) {
         toast({
-          title: "Sync reset",
-          description: "You can now re-sync your posts.",
+          title: "Full reset complete",
+          description: "All posts will be re-synced as new memories.",
         });
         await loadConfig();
         setPhase('configure');
@@ -241,7 +242,7 @@ export function useInstagramSync(): UseInstagramSyncReturn {
       
       throw new Error(data?.error || 'Reset failed');
     } catch (error) {
-      console.error('Reset sync failed:', error);
+      console.error('Force reset sync failed:', error);
       toast({
         title: "Reset failed",
         description: error instanceof Error ? error.message : "Could not reset sync state.",

@@ -107,10 +107,7 @@ serve(async (req) => {
       }
 
       case 'reset-sync': {
-        // IMPORTANT: Do NOT clear instagram_synced_posts table!
-        // That table prevents duplicate memories from being created.
-        // Only reset the sync config metadata (counts, timestamps).
-        
+        // Soft reset: Only reset metadata, preserve deduplication table
         const { error: resetError } = await supabase
           .from('instagram_sync_config')
           .update({
@@ -132,7 +129,52 @@ serve(async (req) => {
 
         console.log('Sync config reset (deduplication preserved) for user:', user.id);
         return new Response(
-          JSON.stringify({ success: true, message: 'Sync state reset. Previously synced posts will not be re-synced to prevent duplicates.' }),
+          JSON.stringify({ success: true, message: 'Sync state reset. Previously synced posts will not be re-synced.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'force-reset-sync': {
+        // Force reset: Clear BOTH config AND deduplication table to allow full re-sync
+        console.log('Force reset sync for user:', user.id);
+        
+        // First, clear the deduplication table
+        const { error: deleteError } = await supabase
+          .from('instagram_synced_posts')
+          .delete()
+          .eq('user_id', user.id);
+        
+        if (deleteError) {
+          console.error('Error clearing synced posts:', deleteError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to clear sync history' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Then reset the config
+        const { error: resetError } = await supabase
+          .from('instagram_sync_config')
+          .update({
+            last_synced_post_id: null,
+            last_sync_at: null,
+            posts_synced_count: 0,
+            memories_created_count: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
+
+        if (resetError) {
+          console.error('Reset sync config error:', resetError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to reset sync state' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Force reset complete - all posts can be re-synced for user:', user.id);
+        return new Response(
+          JSON.stringify({ success: true, message: 'Full reset complete. All posts will be re-synced as new memories.' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -465,6 +507,9 @@ const LIAM_API_BASE = 'https://web.askbuddy.ai/devspacexdb/api';
 
 async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   try {
+    console.log('Creating memory with LIAM API...');
+    console.log('Content preview:', content.slice(0, 150));
+    
     // Import the private key for signing
     const privateKeyPem = apiKeys.private_key;
     const privateKey = await importPrivateKey(privateKeyPem);
@@ -478,8 +523,6 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
 
     // Sign the request with proper DER format
     const signature = await signRequest(privateKey, requestBody);
-
-    console.log('Creating memory with LIAM API...');
     
     // Make request to LIAM API using working proxy
     const response = await fetch(`${LIAM_API_BASE}/memory/create`, {
@@ -499,7 +542,7 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
     }
 
     const result = await response.json();
-    console.log('Memory created successfully:', result.memoryId || 'unknown id');
+    console.log('Memory created successfully:', result?.memoryId || 'ID not returned');
     return true;
   } catch (error) {
     console.error('Create memory error:', error);
