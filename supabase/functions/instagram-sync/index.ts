@@ -22,6 +22,14 @@ interface InstagramPost {
   commentsCount?: number;
 }
 
+interface InstagramComment {
+  id: string;
+  text: string;
+  timestamp: string;
+  username?: string;
+  from?: { id: string; username: string };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -323,6 +331,93 @@ async function fetchInstagramPosts(connectionId: string, igUserId: string | null
   }
 }
 
+// Fetch comments for a specific Instagram post
+async function fetchPostComments(
+  connectionId: string,
+  mediaId: string
+): Promise<{ comments: InstagramComment[]; error?: string }> {
+  try {
+    console.log(`Fetching comments for post ${mediaId}...`);
+
+    const response = await fetch(
+      'https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_LIST_MEDIA_COMMENTS',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: { media_id: mediaId },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error fetching comments:', response.status, errorText);
+      return { comments: [], error: `Failed to fetch comments: ${response.status}` };
+    }
+
+    const data = await response.json();
+    console.log('Comments response:', JSON.stringify(data).slice(0, 500));
+
+    // Try multiple paths for the comments data
+    const responseData = data?.data || data;
+    let commentsData =
+      responseData?.response_data?.data ||
+      responseData?.response_data?.comments?.data ||
+      responseData?.data ||
+      responseData?.comments?.data ||
+      responseData?.comments ||
+      responseData;
+
+    if (commentsData && typeof commentsData === 'object' && !Array.isArray(commentsData)) {
+      commentsData = commentsData.data || [];
+    }
+
+    if (!Array.isArray(commentsData)) {
+      console.log('Comments data is not an array');
+      return { comments: [] };
+    }
+
+    console.log(`Found ${commentsData.length} comments for post ${mediaId}`);
+    return { comments: commentsData };
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    return { comments: [], error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// Format an Instagram comment as a memory string
+function formatCommentAsMemory(
+  comment: InstagramComment,
+  postCaption: string | undefined
+): string {
+  const date = comment.timestamp
+    ? new Date(comment.timestamp).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : 'Unknown date';
+
+  const commenterName = comment.from?.username || comment.username || 'Unknown user';
+
+  let memory = `Instagram Comment\n`;
+  memory += `Commented on ${date} by @${commenterName}\n\n`;
+  memory += `"${comment.text}"`;
+
+  if (postCaption) {
+    const truncatedCaption =
+      postCaption.length > 100 ? postCaption.slice(0, 100) + '...' : postCaption;
+    memory += `\n\nOn post: "${truncatedCaption}"`;
+  }
+
+  return memory;
+}
+
 async function syncInstagramContent(
   supabase: any,
   userId: string,
@@ -341,10 +436,13 @@ async function syncInstagramContent(
       .single();
 
     const syncPosts = config?.sync_posts ?? true;
+    const syncComments = config?.sync_comments ?? true;
+
+    console.log(`Sync config - posts: ${syncPosts}, comments: ${syncComments}`);
 
     // Fetch posts from Instagram
     const { posts, error: fetchError } = await fetchInstagramPosts(connectionId, igUserId, 50);
-    
+
     if (fetchError) {
       console.error('Error fetching posts for sync:', fetchError);
       return {
@@ -356,7 +454,7 @@ async function syncInstagramContent(
         error: fetchError,
       };
     }
-    
+
     if (posts.length === 0) {
       console.log('No posts found to sync');
       return { success: true, postsSynced: 0, commentsSynced: 0, memoriesCreated: 0, skippedDuplicates: 0 };
@@ -381,34 +479,32 @@ async function syncInstagramContent(
       };
     }
 
-    // Get list of already synced post IDs to prevent duplicates
+    // Get list of already synced post/comment IDs to prevent duplicates
     const { data: syncedPosts } = await supabase
       .from('instagram_synced_posts')
       .select('instagram_post_id')
       .eq('user_id', userId);
-    
+
     const syncedPostIds = new Set((syncedPosts || []).map((p: any) => p.instagram_post_id));
-    console.log(`User has ${syncedPostIds.size} previously synced posts`);
+    console.log(`User has ${syncedPostIds.size} previously synced items (posts + comments)`);
 
     let postsSynced = 0;
+    let commentsSynced = 0;
     let memoriesCreated = 0;
     let skippedDuplicates = 0;
 
     console.log(`Processing ${posts.length} posts from Instagram`);
 
-    // Create memories for each post (skip duplicates)
+    // Process each post
     for (const post of posts) {
-      // Skip if already synced (prevents duplicates)
+      // SYNC POSTS: Skip if already synced (prevents duplicates)
       if (syncedPostIds.has(post.id)) {
         console.log(`Post ${post.id} already synced, skipping`);
         skippedDuplicates++;
-        continue;
-      }
-
-      if (syncPosts && post.caption) {
+      } else if (syncPosts && post.caption) {
         const memoryContent = formatPostAsMemory(post);
         const success = await createMemory(apiKeys, memoryContent);
-        
+
         if (success) {
           // Record this post as synced to prevent future duplicates
           const { error: insertError } = await supabase
@@ -418,19 +514,59 @@ async function syncInstagramContent(
               instagram_post_id: post.id,
               synced_at: new Date().toISOString(),
             });
-          
+
           if (insertError) {
-            // If insert fails due to unique constraint, it was already synced
-            console.log(`Post ${post.id} sync record insert error (may be duplicate):`, insertError.message);
+            console.log(`Post ${post.id} sync record insert error:`, insertError.message);
           } else {
             memoriesCreated++;
             postsSynced++;
+            // Add to set so we don't re-check in same run
+            syncedPostIds.add(post.id);
+          }
+        }
+      }
+
+      // SYNC COMMENTS: Fetch and sync comments for this post if enabled
+      if (syncComments) {
+        const { comments } = await fetchPostComments(connectionId, post.id);
+
+        for (const comment of comments) {
+          // Create composite key for comment deduplication: {post_id}_comment_{comment_id}
+          const commentKey = `${post.id}_comment_${comment.id}`;
+
+          // Skip if already synced
+          if (syncedPostIds.has(commentKey)) {
+            console.log(`Comment ${comment.id} already synced, skipping`);
+            skippedDuplicates++;
+            continue;
+          }
+
+          const memoryContent = formatCommentAsMemory(comment, post.caption);
+          const success = await createMemory(apiKeys, memoryContent);
+
+          if (success) {
+            // Record this comment as synced using composite key
+            const { error: insertError } = await supabase
+              .from('instagram_synced_posts')
+              .insert({
+                user_id: userId,
+                instagram_post_id: commentKey,
+                synced_at: new Date().toISOString(),
+              });
+
+            if (insertError) {
+              console.log(`Comment ${comment.id} sync record insert error:`, insertError.message);
+            } else {
+              memoriesCreated++;
+              commentsSynced++;
+              syncedPostIds.add(commentKey);
+            }
           }
         }
       }
     }
 
-    console.log(`Sync complete: ${postsSynced} new, ${skippedDuplicates} duplicates skipped`);
+    console.log(`Sync complete: ${postsSynced} posts, ${commentsSynced} comments, ${skippedDuplicates} duplicates skipped`);
 
     // Update sync config with totals
     const updateData = {
@@ -456,7 +592,7 @@ async function syncInstagramContent(
     return {
       success: true,
       postsSynced,
-      commentsSynced: 0,
+      commentsSynced,
       memoriesCreated,
       skippedDuplicates,
     };
