@@ -13,7 +13,7 @@ interface UseComposioReturn {
   connectedAccount: ConnectedAccount | null;
   connecting: boolean;
   isConnected: boolean;
-  connect: (customRedirectPath?: string) => Promise<void>;
+  connect: (customRedirectPath?: string, forceReauth?: boolean) => Promise<void>;
   disconnect: () => Promise<void>;
   checkStatus: () => Promise<void>;
 }
@@ -116,7 +116,9 @@ export function useComposio(toolkit: string): UseComposioReturn {
   }, [toolkit, stopPolling]);
 
   // Initiate OAuth connection
-  const connect = useCallback(async () => {
+  // forceReauth: when true, forces Instagram to show login/account selection
+  // Use false for initial connections, true for account switching
+  const connect = useCallback(async (customRedirectPath?: string, forceReauth: boolean = false) => {
     try {
       setConnecting(true);
       
@@ -134,14 +136,16 @@ export function useComposio(toolkit: string): UseComposioReturn {
       // Use localStorage on mobile (survives navigation to external OAuth sites)
       // Use sessionStorage on desktop (more secure, cleared on tab close)
       const isMobile = isMobileBrowser();
-      const returnUrl = `${baseUrl}/integration/${toolkit.toLowerCase()}`;
+      const returnUrl = customRedirectPath 
+        ? `${baseUrl}${customRedirectPath}`
+        : `${baseUrl}/integration/${toolkit.toLowerCase()}`;
       if (isMobile) {
         localStorage.setItem('oauth_return_url', returnUrl);
       } else {
         sessionStorage.setItem('oauth_return_url', returnUrl);
       }
       
-      console.log(`Initiating ${toolkit} OAuth...`);
+      console.log(`Initiating ${toolkit} OAuth (forceReauth: ${forceReauth})...`);
       console.log(`Running in Median: ${isMedian()}, Mobile: ${isMobile}`);
       console.log(`Using base URL: ${baseUrl}`);
 
@@ -150,6 +154,8 @@ export function useComposio(toolkit: string): UseComposioReturn {
           toolkit: toolkit.toUpperCase(),
           // Pass base URL, edge function will build complete callback URL
           baseUrl,
+          // Only force re-auth when switching accounts
+          forceReauth,
         },
       });
 

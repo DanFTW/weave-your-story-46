@@ -73,7 +73,8 @@ export default function IntegrationDetail() {
 
   const handleConfirmConnect = async () => {
     try {
-      await connect(`/integration/${integrationId}`);
+      // Initial connection: don't force re-auth, use existing browser session if available
+      await connect(`/integration/${integrationId}`, false);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Connection failed";
       toast({
@@ -86,7 +87,8 @@ export default function IntegrationDetail() {
 
   const handleChangeAccount = async () => {
     await disconnect();
-    await connect(`/integration/${integrationId}`);
+    // Account switch: force re-auth to show login/account selection
+    await connect(`/integration/${integrationId}`, true);
   };
 
   const handleDone = () => {

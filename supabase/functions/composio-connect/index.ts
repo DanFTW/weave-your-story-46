@@ -53,7 +53,7 @@ serve(async (req) => {
       );
     }
 
-    const { toolkit, baseUrl } = await req.json();
+    const { toolkit, baseUrl, forceReauth = false } = await req.json();
     const toolkitLower = toolkit?.toLowerCase() || "";
     
     console.log(`Initiating OAuth for toolkit: ${toolkit}`);
@@ -93,9 +93,10 @@ serve(async (req) => {
         // Composio will redirect here after OAuth completes
         // We'll add connectionId and toolkit as query params in the callback
         callback_url: callbackUrl,
-        // Force re-authentication to prompt user for account selection
-        // This prevents auto-selecting a previously authorized account
-        force_reauth: true,
+        // Only force re-authentication when explicitly switching accounts
+        // This prevents auto-selecting wrong cached account while still
+        // allowing faster connection when user has active browser session
+        ...(forceReauth && { force_reauth: true }),
       }),
     });
 
