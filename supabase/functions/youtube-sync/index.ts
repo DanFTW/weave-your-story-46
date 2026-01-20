@@ -123,12 +123,12 @@ serve(async (req) => {
   }
 });
 
-// Fetch liked videos using YOUTUBE_LIST_PLAYLIST_ITEMS with "LL" (Liked List) playlist
-async function fetchLikedVideos(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
+// Step 1: Get authenticated user's YouTube channel ID
+async function getYouTubeChannelId(connectionId: string): Promise<string | null> {
   try {
-    console.log('Fetching liked videos with YOUTUBE_LIST_PLAYLIST_ITEMS (playlistId: LL)...');
+    console.log('Fetching YouTube channel ID with YOUTUBE_GET_CHANNEL_STATISTICS (mine: true)...');
     
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_PLAYLIST_ITEMS', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_GET_CHANNEL_STATISTICS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -137,7 +137,70 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
       body: JSON.stringify({
         connected_account_id: connectionId,
         arguments: {
-          playlistId: 'LL', // "LL" = Liked List (special YouTube playlist)
+          mine: true,
+          part: 'id,snippet',
+        },
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log('Channel stats response status:', response.status);
+    console.log('Channel stats response (first 2000 chars):', responseText.slice(0, 2000));
+
+    if (!response.ok) {
+      console.error('Failed to get channel ID:', responseText);
+      return null;
+    }
+
+    const data = JSON.parse(responseText);
+    const responseData = data?.data || data;
+    
+    // Look for channel ID in various response structures
+    const possiblePaths = [
+      responseData?.response_data?.items?.[0]?.id,
+      responseData?.response_data?.data?.items?.[0]?.id,
+      responseData?.items?.[0]?.id,
+      responseData?.data?.items?.[0]?.id,
+      responseData?.result?.items?.[0]?.id,
+    ];
+
+    for (const channelId of possiblePaths) {
+      if (channelId && typeof channelId === 'string') {
+        console.log('Found YouTube channel ID:', channelId);
+        return channelId;
+      }
+    }
+
+    console.log('Could not extract channel ID from response');
+    return null;
+  } catch (error) {
+    console.error('Error getting YouTube channel ID:', error);
+    return null;
+  }
+}
+
+// Step 2: Fetch liked videos using YOUTUBE_GET_CHANNEL_ACTIVITIES
+async function fetchLikedVideos(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
+  try {
+    // First get the user's channel ID
+    const channelId = await getYouTubeChannelId(connectionId);
+    if (!channelId) {
+      console.error('Could not get YouTube channel ID - cannot fetch activities');
+      return [];
+    }
+    
+    console.log('Fetching channel activities with YOUTUBE_GET_CHANNEL_ACTIVITIES for channel:', channelId);
+    
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_GET_CHANNEL_ACTIVITIES', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': COMPOSIO_API_KEY!,
+      },
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: {
+          channelId: channelId,
           part: 'snippet,contentDetails',
           maxResults: Math.min(limit, 50),
         },
@@ -145,28 +208,115 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
     });
 
     const responseText = await response.text();
-    console.log('Liked videos response status:', response.status);
-    console.log('Liked videos response (first 2000 chars):', responseText.slice(0, 2000));
+    console.log('Channel activities response status:', response.status);
+    console.log('Channel activities response (first 3000 chars):', responseText.slice(0, 3000));
 
     if (!response.ok) {
-      console.error('Failed to fetch liked videos:', responseText);
+      console.error('Failed to fetch channel activities:', responseText);
       return [];
     }
 
     const data = JSON.parse(responseText);
-    return parseYouTubeVideosResponse(data);
+    return parseChannelActivitiesResponse(data);
   } catch (error) {
     console.error('Error fetching liked videos:', error);
     return [];
   }
 }
 
-// Fetch subscriptions using YOUTUBE_LIST_SUBSCRIPTIONS
+// Parse channel activities to extract videos (likes, uploads, etc.)
+function parseChannelActivitiesResponse(data: any): YouTubeVideo[] {
+  const videos: YouTubeVideo[] = [];
+  
+  console.log('Parsing channel activities response, top-level keys:', Object.keys(data || {}));
+  
+  const responseData = data?.data || data;
+  
+  // Find items array in response
+  let items: any[] = [];
+  const possiblePaths = [
+    responseData?.response_data?.items,
+    responseData?.response_data?.data?.items,
+    responseData?.items,
+    responseData?.data?.items,
+    responseData?.result?.items,
+  ];
+
+  for (const path of possiblePaths) {
+    if (Array.isArray(path) && path.length > 0) {
+      items = path;
+      console.log('Found activities items array, count:', items.length);
+      break;
+    }
+  }
+
+  if (items.length === 0) {
+    console.log('No activity items found in response');
+    return [];
+  }
+
+  console.log('First activity item sample:', JSON.stringify(items[0])?.slice(0, 800));
+
+  for (const item of items) {
+    const snippet = item.snippet || {};
+    const contentDetails = item.contentDetails || {};
+    const activityType = snippet.type;
+    
+    console.log('Processing activity type:', activityType);
+    
+    // We're interested in: like, upload, recommendation, favorite, playlistItem
+    let videoId: string | null = null;
+    let videoTitle = snippet.title || 'Untitled Video';
+    
+    switch (activityType) {
+      case 'like':
+        videoId = contentDetails?.like?.resourceId?.videoId;
+        break;
+      case 'upload':
+        videoId = contentDetails?.upload?.videoId;
+        break;
+      case 'recommendation':
+        videoId = contentDetails?.recommendation?.resourceId?.videoId;
+        break;
+      case 'favorite':
+        videoId = contentDetails?.favorite?.resourceId?.videoId;
+        break;
+      case 'playlistItem':
+        videoId = contentDetails?.playlistItem?.resourceId?.videoId;
+        break;
+      default:
+        // Try generic extraction for unknown types
+        videoId = contentDetails?.resourceId?.videoId || 
+                  contentDetails?.videoId ||
+                  item.id?.videoId;
+    }
+    
+    if (!videoId) {
+      console.log('Activity without video ID, type:', activityType, 'contentDetails keys:', Object.keys(contentDetails));
+      continue;
+    }
+
+    videos.push({
+      id: videoId,
+      title: videoTitle,
+      channelTitle: snippet.channelTitle,
+      description: snippet.description,
+      publishedAt: snippet.publishedAt || new Date().toISOString(),
+      thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
+      videoUrl: `https://youtube.com/watch?v=${videoId}`,
+    });
+  }
+
+  console.log('Parsed videos from activities count:', videos.length);
+  return videos;
+}
+
+// Fetch subscriptions using YOUTUBE_LIST_USER_SUBSCRIPTIONS
 async function fetchSubscriptions(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
   try {
-    console.log('Fetching subscriptions with YOUTUBE_LIST_SUBSCRIPTIONS...');
+    console.log('Fetching subscriptions with YOUTUBE_LIST_USER_SUBSCRIPTIONS...');
     
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_SUBSCRIPTIONS', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_USER_SUBSCRIPTIONS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -197,75 +347,6 @@ async function fetchSubscriptions(connectionId: string, limit: number): Promise<
     console.error('Error fetching subscriptions:', error);
     return [];
   }
-}
-
-// Parse YouTube videos from various response structures
-function parseYouTubeVideosResponse(data: any): YouTubeVideo[] {
-  const videos: YouTubeVideo[] = [];
-  
-  console.log('Parsing YouTube response, top-level keys:', Object.keys(data || {}));
-  
-  // Try different response paths (Composio v3 API structure varies)
-  const responseData = data?.data || data;
-  console.log('responseData keys:', Object.keys(responseData || {}));
-  
-  if (responseData?.response_data) {
-    console.log('response_data keys:', Object.keys(responseData.response_data || {}));
-  }
-  
-  // Find items array in response
-  let items: any[] = [];
-  const possiblePaths = [
-    responseData?.response_data?.items,
-    responseData?.response_data?.data?.items,
-    responseData?.items,
-    responseData?.data?.items,
-    responseData?.result?.items,
-  ];
-
-  for (const path of possiblePaths) {
-    if (Array.isArray(path) && path.length > 0) {
-      items = path;
-      console.log('Found items array, count:', items.length);
-      break;
-    }
-  }
-
-  if (items.length === 0) {
-    console.log('No items found in response');
-    return [];
-  }
-
-  console.log('First item sample:', JSON.stringify(items[0])?.slice(0, 500));
-
-  for (const item of items) {
-    const snippet = item.snippet || {};
-    const contentDetails = item.contentDetails || {};
-    
-    // Get video ID from various possible locations
-    const videoId = contentDetails.videoId || 
-                    snippet.resourceId?.videoId || 
-                    item.id?.videoId || 
-                    item.id;
-    
-    if (!videoId || typeof videoId !== 'string') {
-      console.log('Skipping item without valid video ID:', item.id);
-      continue;
-    }
-
-    videos.push({
-      id: videoId,
-      title: snippet.title || 'Untitled Video',
-      channelTitle: snippet.channelTitle || snippet.videoOwnerChannelTitle,
-      description: snippet.description,
-      publishedAt: snippet.publishedAt || contentDetails.videoPublishedAt || new Date().toISOString(),
-      thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
-      videoUrl: `https://youtube.com/watch?v=${videoId}`,
-    });
-  }
-
-  console.log('Parsed videos count:', videos.length);
-  return videos;
 }
 
 // Parse subscriptions response
@@ -331,9 +412,9 @@ async function syncYouTubeContent(
 
     // Default to syncing liked videos if no config or sync_liked_videos is true
     if (!config || config.sync_liked_videos !== false) {
-      console.log('Fetching liked videos...');
+      console.log('Fetching liked videos via channel activities...');
       const likedVideos = await fetchLikedVideos(connectionId, 25);
-      console.log('Fetched liked videos count:', likedVideos.length);
+      console.log('Fetched videos from activities count:', likedVideos.length);
       allVideos = [...allVideos, ...likedVideos];
     }
 
@@ -458,12 +539,10 @@ function formatVideoAsMemory(video: YouTubeVideo): string {
 }
 
 // LIAM API integration with cryptographic signing
-// CRITICAL: LIAM API requires lowercase headers 'apiKey' and 'signature'
-// and 'content' field (not 'memory') in the request body
 async function createMemory(apiKeys: { api_key: string; private_key: string; user_key: string }, memoryContent: string): Promise<boolean> {
   try {
     const requestBody = {
-      content: memoryContent,  // LIAM API uses 'content', not 'memory'
+      content: memoryContent,
       userKey: apiKeys.user_key,
       tag: 'YOUTUBE',
     };
@@ -477,8 +556,8 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apiKey': apiKeys.api_key,        // CRITICAL: lowercase 'apiKey' not 'X-API-Key'
-        'signature': signature,            // CRITICAL: lowercase 'signature' not 'X-Signature'
+        'apiKey': apiKeys.api_key,
+        'signature': signature,
       },
       body: bodyString,
     });
