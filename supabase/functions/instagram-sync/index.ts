@@ -15,11 +15,13 @@ interface InstagramPost {
   caption?: string;
   mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
   mediaUrl?: string;
+  thumbnailUrl?: string;
   permalinkUrl?: string;
   timestamp: string;
   username?: string;
   likesCount?: number;
   commentsCount?: number;
+  children?: { id: string; media_type: string; media_url: string }[];
 }
 
 interface InstagramComment {
@@ -317,11 +319,13 @@ async function fetchInstagramPosts(connectionId: string, igUserId: string | null
       caption: item.caption,
       mediaType: item.media_type || item.mediaType,
       mediaUrl: item.media_url || item.mediaUrl,
+      thumbnailUrl: item.thumbnail_url || item.thumbnailUrl,
       permalinkUrl: item.permalink || item.permalinkUrl,
       timestamp: item.timestamp,
       username: item.username,
       likesCount: item.like_count || item.likesCount,
       commentsCount: item.comments_count || item.commentsCount,
+      children: item.children?.data || item.children,
     }));
     
     return { posts };
@@ -403,10 +407,27 @@ async function fetchPostComments(
   }
 }
 
+// Get the first displayable media URL from a post
+function getFirstMediaUrl(post: InstagramPost): string | undefined {
+  // For carousel posts, get the first child's media
+  if (post.mediaType === 'CAROUSEL_ALBUM' && post.children?.length) {
+    return post.children[0].media_url;
+  }
+  
+  // For videos, prefer thumbnail for static display
+  if (post.mediaType === 'VIDEO') {
+    return post.thumbnailUrl || post.mediaUrl;
+  }
+  
+  // For images, use directly
+  return post.mediaUrl;
+}
+
 // Format an Instagram comment as a memory string
 function formatCommentAsMemory(
   comment: InstagramComment,
-  postCaption: string | undefined
+  postCaption: string | undefined,
+  postMediaUrl?: string
 ): string {
   const date = comment.timestamp
     ? new Date(comment.timestamp).toLocaleDateString('en-US', {
@@ -416,16 +437,20 @@ function formatCommentAsMemory(
       })
     : 'Unknown date';
 
-  const commenterName = comment.from?.username || comment.username || 'Unknown user';
+  const commenterName = comment.from?.username || comment.username || 'someone';
 
   let memory = `Instagram Comment\n`;
-  memory += `Commented on ${date} by @${commenterName}\n\n`;
+  memory += `On ${date}, @${commenterName} commented:\n\n`;
   memory += `"${comment.text}"`;
 
+  // Include post context with full caption
   if (postCaption) {
-    const truncatedCaption =
-      postCaption.length > 100 ? postCaption.slice(0, 100) + '...' : postCaption;
-    memory += `\n\nOn post: "${truncatedCaption}"`;
+    memory += `\n\nOn your post: "${postCaption}"`;
+  }
+  
+  // Embed media URL for frontend to display
+  if (postMediaUrl) {
+    memory += `\n\n[media:${postMediaUrl}]`;
   }
 
   return memory;
@@ -554,7 +579,8 @@ async function syncInstagramContent(
             continue;
           }
 
-          const memoryContent = formatCommentAsMemory(comment, post.caption);
+          const postMediaUrl = getFirstMediaUrl(post);
+          const memoryContent = formatCommentAsMemory(comment, post.caption, postMediaUrl);
           const success = await createMemory(apiKeys, memoryContent);
 
           if (success) {
@@ -629,23 +655,42 @@ function formatPostAsMemory(post: InstagramPost): string {
     day: 'numeric',
   }) : 'Unknown date';
 
-  let memory = `Instagram Post\nPosted on ${date}`;
-  
+  let memory = `Instagram Post`;
   if (post.username) {
     memory += ` by @${post.username}`;
   }
-  
-  memory += '\n\n';
-  
+  memory += `\nPosted on ${date}\n\n`;
+
+  // Include the caption as the main content
   if (post.caption) {
-    memory += post.caption;
+    memory += `"${post.caption}"\n\n`;
   }
-  
+
+  // Add engagement WITH context referencing the post above
   if (post.likesCount !== undefined || post.commentsCount !== undefined) {
-    const engagement = [];
-    if (post.likesCount !== undefined) engagement.push(`${post.likesCount} likes`);
-    if (post.commentsCount !== undefined) engagement.push(`${post.commentsCount} comments`);
-    memory += `\n\nEngagement: ${engagement.join(', ')}`;
+    const parts = [];
+    if (post.likesCount !== undefined) {
+      parts.push(`${post.likesCount} like${post.likesCount !== 1 ? 's' : ''}`);
+    }
+    if (post.commentsCount !== undefined) {
+      parts.push(`${post.commentsCount} comment${post.commentsCount !== 1 ? 's' : ''}`);
+    }
+    if (post.caption) {
+      memory += `This post received ${parts.join(' and ')}.`;
+    } else {
+      memory += `Engagement: ${parts.join(', ')}`;
+    }
+  }
+
+  // Embed the media URL for frontend parsing
+  const mediaUrl = getFirstMediaUrl(post);
+  if (mediaUrl) {
+    memory += `\n\n[media:${mediaUrl}]`;
+  }
+
+  // Embed permalink for reference
+  if (post.permalinkUrl) {
+    memory += `\n[link:${post.permalinkUrl}]`;
   }
 
   return memory;
