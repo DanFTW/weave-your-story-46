@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "youtube-sync",
+    title: "Sync YouTube to Memory",
+    description: "Save your liked videos, watch history, and subscriptions as memories",
+    icon: Youtube,
+    gradient: "pink",
+    status: "active",
+    type: "automation",
+    category: "social",
+  },
   {
     id: "twitter-sync",
     title: "Sync Twitter to Memory",

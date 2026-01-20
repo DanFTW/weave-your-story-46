@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2 } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "youtube-sync": {
+    id: "youtube-sync",
+    title: "Sync YouTube to Memory",
+    subtitle: "Capture your video moments",
+    description: "Connect YouTube to save your liked videos, watch history, and subscriptions as searchable memories.",
+    gradient: "pink",
+    icon: Youtube,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect YouTube",
+        description: "Authorize access to your account",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Choose Content",
+        description: "Select liked videos, history, subscriptions",
+        icon: Settings,
+      },
+      {
+        id: "sync",
+        type: "save",
+        title: "Active Sync",
+        description: "Content saved automatically",
+        icon: Wifi,
+        badge: "WEAVE FABRIC",
+      },
+    ],
+  },
   "twitter-sync": {
     id: "twitter-sync",
     title: "Sync Twitter to Memory",
