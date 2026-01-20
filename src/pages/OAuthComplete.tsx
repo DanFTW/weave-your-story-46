@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isMedian, median } from "@/utils/median";
-import { Loader2, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, RefreshCw, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000;
+const REQUEST_TIMEOUT = 30000; // 30 seconds
 
 /**
  * OAuth completion page - handles the callback from OAuth providers.
@@ -35,6 +39,36 @@ export default function OAuthComplete() {
   const handleGoBack = () => {
     navigate('/integrations');
   };
+
+  // Invoke callback with retry logic for transient errors
+  async function invokeCallbackWithRetry(
+    connectionId: string,
+    userId: string | undefined,
+    toolkitParam: string | null,
+    retries = 0
+  ): Promise<{ data: any; error: any }> {
+    try {
+      const result = await supabase.functions.invoke("composio-callback", {
+        body: {
+          connectionId,
+          userId,
+          toolkit: toolkitParam,
+        },
+      });
+      return result;
+    } catch (err) {
+      // Retry on AbortError (network interruption) up to MAX_RETRIES
+      const isAbortError = err instanceof DOMException && err.name === "AbortError";
+      const isNetworkError = err instanceof TypeError && err.message.includes("fetch");
+      
+      if (retries < MAX_RETRIES && (isAbortError || isNetworkError)) {
+        console.log(`Retry attempt ${retries + 1}/${MAX_RETRIES}...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retries + 1)));
+        return invokeCallbackWithRetry(connectionId, userId, toolkitParam, retries + 1);
+      }
+      throw err;
+    }
+  }
 
   useEffect(() => {
     const completeOAuth = async () => {
@@ -76,15 +110,12 @@ export default function OAuthComplete() {
         
         console.log("OAuthComplete: Session available:", !!session);
 
-        // Call the callback edge function to complete the connection
-        // The edge function will fetch toolkit info from Composio if not provided
-        const { data, error } = await supabase.functions.invoke("composio-callback", {
-          body: {
-            connectionId,
-            userId: session?.user?.id, // May be null in App Browser - edge function handles this
-            toolkit: toolkitFromUrl, // May be null - edge function will fetch from Composio
-          },
-        });
+        // Call the callback edge function with retry logic
+        const { data, error } = await invokeCallbackWithRetry(
+          connectionId,
+          session?.user?.id,
+          toolkitFromUrl
+        );
 
         console.log("OAuthComplete: Callback response:", data, error);
 
@@ -152,8 +183,18 @@ export default function OAuthComplete() {
       } catch (err) {
         console.error("OAuthComplete: Unexpected error:", err);
         setStatus("error");
-        setMessage("An unexpected error occurred");
-        setErrorDetails(err instanceof Error ? err.message : "Please try again.");
+        
+        // Handle specific error types with friendly messages
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setMessage("Connection was interrupted");
+          setErrorDetails("The connection process was interrupted. This can happen on slow networks or if the page was closed. Please try again.");
+        } else if (err instanceof TypeError && err.message.includes("fetch")) {
+          setMessage("Network error");
+          setErrorDetails("Could not reach the server. Please check your internet connection and try again.");
+        } else {
+          setMessage("An unexpected error occurred");
+          setErrorDetails(err instanceof Error ? err.message : "Please try again.");
+        }
       }
     };
 
@@ -184,7 +225,11 @@ export default function OAuthComplete() {
         
         {status === "error" && (
           <>
-            <XCircle className="w-12 h-12 mx-auto text-destructive" />
+            {message === "Network error" ? (
+              <WifiOff className="w-12 h-12 mx-auto text-destructive" />
+            ) : (
+              <XCircle className="w-12 h-12 mx-auto text-destructive" />
+            )}
             <p className="text-lg text-foreground font-medium">{message}</p>
             {errorDetails && (
               <p className="text-sm text-muted-foreground">{errorDetails}</p>

@@ -21,6 +21,11 @@ interface UseComposioReturn {
 const POLLING_INTERVAL = 2000; // 2 seconds
 const MAX_POLLING_DURATION = 120000; // 2 minutes
 
+// Detect mobile browser
+function isMobileBrowser(): boolean {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 export function useComposio(toolkit: string): UseComposioReturn {
   const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -40,6 +45,14 @@ export function useComposio(toolkit: string): UseComposioReturn {
     };
   }, []);
 
+  // Stop polling helper
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
+
   // Poll the database for connection status changes
   const startPolling = useCallback(async () => {
     pollingStartTimeRef.current = Date.now();
@@ -48,10 +61,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
       // Check if we've exceeded max polling duration
       if (Date.now() - pollingStartTimeRef.current > MAX_POLLING_DURATION) {
         console.log("Polling timed out");
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
+        stopPolling();
         setConnecting(false);
         toast.error("Connection timed out. Please try again.");
         return;
@@ -79,10 +89,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
           console.log("Connection detected via polling!", integration);
           
           // Stop polling
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
+          stopPolling();
           
           // Update state
           setConnectedAccount({
@@ -106,7 +113,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
     
     // Also poll immediately
     pollForConnection();
-  }, [toolkit]);
+  }, [toolkit, stopPolling]);
 
   // Initiate OAuth connection
   const connect = useCallback(async () => {
@@ -126,8 +133,9 @@ export function useComposio(toolkit: string): UseComposioReturn {
       // Store return URL for redirect after OAuth completion
       sessionStorage.setItem('oauth_return_url', `${baseUrl}/integration/${toolkit.toLowerCase()}`);
       
+      const isMobile = isMobileBrowser();
       console.log(`Initiating ${toolkit} OAuth...`);
-      console.log(`Running in Median: ${isMedian()}`);
+      console.log(`Running in Median: ${isMedian()}, Mobile: ${isMobile}`);
       console.log(`Using base URL: ${baseUrl}`);
 
       const { data, error } = await supabase.functions.invoke("composio-connect", {
@@ -164,30 +172,30 @@ export function useComposio(toolkit: string): UseComposioReturn {
 
       // Handle OAuth redirect based on platform
       if (isMedian()) {
+        // Median app browser - best experience for native apps
         console.log("Opening OAuth in Median app browser...");
         const opened = median.window.open(data.redirectUrl, 'appbrowser');
         
         if (!opened) {
           console.log("Median app browser not available, using standard redirect");
-          // Stop polling since we're doing a full redirect
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
+          stopPolling();
           window.location.assign(data.redirectUrl);
         }
+      } else if (isMobile) {
+        // Mobile browsers - use direct redirect instead of popup
+        // Popups are unreliable on mobile, especially iOS Safari
+        // This avoids AbortError and popup blocking issues
+        console.log("Mobile detected, using direct redirect for OAuth...");
+        stopPolling();
+        window.location.assign(data.redirectUrl);
       } else {
-        // Standard web - open in new window to keep current page active for polling
-        // This allows polling to continue while OAuth happens in popup
+        // Desktop - try popup, fallback to redirect
+        // Popup allows polling to continue in background
         const popup = window.open(data.redirectUrl, '_blank', 'width=600,height=700');
         
         if (!popup) {
           console.log("Popup blocked, using standard redirect");
-          // Stop polling since we're doing a full redirect
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
+          stopPolling();
           // Use top-level window to escape iframe
           const targetWindow = window.top || window;
           targetWindow.location.assign(data.redirectUrl);
@@ -198,7 +206,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
       toast.error("Failed to connect integration");
       setConnecting(false);
     }
-  }, [toolkit, startPolling]);
+  }, [toolkit, startPolling, stopPolling]);
 
   // Check existing connection status
   const checkStatus = useCallback(async () => {
