@@ -127,6 +127,26 @@ function parseTags(memory: Memory): string[] {
   return tags.slice(0, 3);
 }
 
+// Parse media URL from memory content (format: [media:url])
+function parseMediaUrl(content: string): string | null {
+  const match = content.match(/\[media:(https?:\/\/[^\]]+)\]/);
+  return match ? match[1] : null;
+}
+
+// Parse link URL from memory content (format: [link:url])
+function parseLinkUrl(content: string): string | null {
+  const match = content.match(/\[link:(https?:\/\/[^\]]+)\]/);
+  return match ? match[1] : null;
+}
+
+// Clean content by removing metadata tags for display
+function cleanContentForDisplay(content: string): string {
+  return content
+    .replace(/\[media:[^\]]+\]/g, '')
+    .replace(/\[link:[^\]]+\]/g, '')
+    .trim();
+}
+
 // Component to render formatted email content in card
 function EmailCardContent({ content }: { content: string }) {
   const parsed = parseEmailContent(content);
@@ -177,9 +197,17 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
   const navigate = useNavigate();
   const config = getCategoryConfig(memory.category, memory.tag, memory.content);
   const Icon = config.icon;
-  const description = memory.content;
   const tags = parseTags(memory);
   const isSynced = true;
+
+  // Check if this is an Instagram memory and parse embedded media
+  const isInstagramMemory = 
+    memory.tag?.toLowerCase() === 'instagram' || 
+    memory.content.toLowerCase().startsWith('instagram');
+  const mediaUrl = isInstagramMemory ? parseMediaUrl(memory.content) : null;
+  const displayContent = isInstagramMemory 
+    ? cleanContentForDisplay(memory.content) 
+    : memory.content;
 
   const timestamp = (() => {
     try {
@@ -216,17 +244,32 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
         </div>
       </div>
       
+      {/* Instagram media image */}
+      {mediaUrl && (
+        <div className="overflow-hidden">
+          <img 
+            src={mediaUrl} 
+            alt="Instagram post" 
+            className="w-full h-40 object-cover"
+            loading="lazy"
+            onError={(e) => { 
+              (e.currentTarget as HTMLImageElement).style.display = 'none'; 
+            }}
+          />
+        </div>
+      )}
+
       {/* Content Body */}
       <div className="px-3 py-3">
         {/* Check if this is an email and render formatted content */}
         {(memory.category?.toLowerCase() === 'email' || memory.tag?.toLowerCase() === 'email' || 
-          description.startsWith('Email from') || description.startsWith('Email sent to')) ? (
+          displayContent.startsWith('Email from') || displayContent.startsWith('Email sent to')) ? (
           <div className="mb-2.5">
-            <EmailCardContent content={description} />
+            <EmailCardContent content={displayContent} />
           </div>
         ) : (
           <p className="text-sm text-foreground leading-relaxed mb-2.5 whitespace-pre-wrap">
-            {description}
+            {displayContent}
           </p>
         )}
         
