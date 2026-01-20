@@ -105,8 +105,8 @@ export function TwitterSyncFlow() {
             </div>
             
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-white truncate">Twitter Sync</h1>
-              <p className="text-white/70 text-sm truncate">Syncing tweets...</p>
+              <h1 className="text-xl font-bold text-white truncate">Twitter Dump</h1>
+              <p className="text-white/70 text-sm truncate">Dumping tweets...</p>
             </div>
           </div>
         </div>
@@ -140,7 +140,7 @@ export function TwitterSyncFlow() {
           </button>
           
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-white truncate">Twitter Sync</h1>
+            <h1 className="text-xl font-bold text-white truncate">Twitter Dump</h1>
             <p className="text-white/70 text-sm truncate">{getSubtitle()}</p>
           </div>
         </div>

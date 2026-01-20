@@ -100,8 +100,8 @@ export function InstagramSyncFlow() {
             </div>
             
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-white truncate">Instagram Sync</h1>
-              <p className="text-white/70 text-sm truncate">Syncing posts...</p>
+              <h1 className="text-xl font-bold text-white truncate">Instagram Dump</h1>
+              <p className="text-white/70 text-sm truncate">Dumping posts...</p>
             </div>
           </div>
         </div>
@@ -135,7 +135,7 @@ export function InstagramSyncFlow() {
           </button>
           
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-white truncate">Instagram Sync</h1>
+            <h1 className="text-xl font-bold text-white truncate">Instagram Dump</h1>
             <p className="text-white/70 text-sm truncate">{getSubtitle()}</p>
           </div>
         </div>
