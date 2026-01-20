@@ -39,6 +39,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "twitter": "twitter",
   "x": "twitter",
   "twitter_x": "twitter",
+  "whatsapp": "whatsapp",
+  "whatsapp_business": "whatsapp",
+  "whatsappbusiness": "whatsapp",
 };
 
 serve(async (req) => {
