@@ -52,6 +52,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "twitter",
         status: "unconfigured",
       },
+      {
+        id: "whatsapp",
+        name: "WhatsApp",
+        icon: "whatsapp",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -181,6 +187,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#000000",    // X black
       secondary: "#14171A",  // X dark gray
       tertiary: "#657786",   // X gray
+    },
+  },
+  "whatsapp": {
+    id: "whatsapp",
+    name: "WhatsApp",
+    icon: "whatsapp",
+    status: "unconfigured",
+    description: "WhatsApp allows Weave to access your message history and media. Create memories from conversations, shared photos, and important messages.",
+    capabilities: ["View messages", "Access media", "View contacts", "Read chat history"],
+    gradientColors: {
+      primary: "#25D366",    // WhatsApp green
+      secondary: "#128C7E",  // WhatsApp teal
+      tertiary: "#075E54",   // WhatsApp dark teal
     },
   },
 };
