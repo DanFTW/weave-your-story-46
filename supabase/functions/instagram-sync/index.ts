@@ -340,7 +340,7 @@ async function fetchPostComments(
     console.log(`Fetching comments for post ${mediaId}...`);
 
     const response = await fetch(
-      'https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_LIST_MEDIA_COMMENTS',
+      'https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_IG_MEDIA_COMMENTS',
       {
         method: 'POST',
         headers: {
@@ -349,7 +349,10 @@ async function fetchPostComments(
         },
         body: JSON.stringify({
           connected_account_id: connectionId,
-          arguments: { media_id: mediaId },
+          arguments: { 
+            ig_media_id: mediaId,
+            limit: 50,
+          },
         }),
       }
     );
@@ -383,7 +386,17 @@ async function fetchPostComments(
     }
 
     console.log(`Found ${commentsData.length} comments for post ${mediaId}`);
-    return { comments: commentsData };
+    
+    // Map to standardized format
+    const comments: InstagramComment[] = commentsData.map((c: any) => ({
+      id: c.id,
+      text: c.text,
+      timestamp: c.timestamp,
+      username: c.username,
+      from: c.from ? { id: c.from.id, username: c.from.username } : undefined,
+    }));
+    
+    return { comments };
   } catch (error) {
     console.error('Error fetching comments:', error);
     return { comments: [], error: error instanceof Error ? error.message : 'Unknown error' };
