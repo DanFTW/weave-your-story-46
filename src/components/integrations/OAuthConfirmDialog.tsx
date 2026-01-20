@@ -68,6 +68,9 @@ export function OAuthConfirmDialog({
           <DialogTitle className="text-xl">Connect to {integrationName}</DialogTitle>
           <DialogDescription className="text-base pt-2">
             You'll be redirected to {integrationName} to authorize access to your account.
+            <span className="block mt-2 text-sm text-muted-foreground">
+              Note: You may need to log in via the {integrationName} website, even if you're logged into the mobile app.
+            </span>
           </DialogDescription>
         </DialogHeader>
 
