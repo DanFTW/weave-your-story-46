@@ -44,6 +44,9 @@ import { InstagramSyncFlow } from "@/components/flows/instagram-sync";
 // Twitter Sync components
 import { TwitterSyncFlow } from "@/components/flows/twitter-sync";
 
+// YouTube Sync components
+import { YouTubeSyncFlow } from "@/components/flows/youtube-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -186,6 +189,12 @@ export default function FlowPage() {
   
   if (config.isTwitterSyncFlow) {
     return <TwitterSyncFlow />;
+  }
+
+  // === YOUTUBE SYNC FLOW RENDER ===
+  
+  if (config.isYouTubeSyncFlow) {
+    return <YouTubeSyncFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===
