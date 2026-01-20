@@ -131,9 +131,16 @@ export function useComposio(toolkit: string): UseComposioReturn {
       const baseUrl = window.location.origin;
       
       // Store return URL for redirect after OAuth completion
-      sessionStorage.setItem('oauth_return_url', `${baseUrl}/integration/${toolkit.toLowerCase()}`);
-      
+      // Use localStorage on mobile (survives navigation to external OAuth sites)
+      // Use sessionStorage on desktop (more secure, cleared on tab close)
       const isMobile = isMobileBrowser();
+      const returnUrl = `${baseUrl}/integration/${toolkit.toLowerCase()}`;
+      if (isMobile) {
+        localStorage.setItem('oauth_return_url', returnUrl);
+      } else {
+        sessionStorage.setItem('oauth_return_url', returnUrl);
+      }
+      
       console.log(`Initiating ${toolkit} OAuth...`);
       console.log(`Running in Median: ${isMedian()}, Mobile: ${isMobile}`);
       console.log(`Using base URL: ${baseUrl}`);

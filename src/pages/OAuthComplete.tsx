@@ -27,7 +27,11 @@ export default function OAuthComplete() {
 
   const handleRetry = () => {
     // Get the stored return URL to determine which integration to retry
-    const storedReturnUrl = sessionStorage.getItem('oauth_return_url');
+    // Check both storage locations (mobile uses localStorage)
+    const storedReturnUrl = 
+      sessionStorage.getItem('oauth_return_url') || 
+      localStorage.getItem('oauth_return_url');
+    
     if (storedReturnUrl) {
       window.location.href = storedReturnUrl;
     } else {
@@ -162,8 +166,14 @@ export default function OAuthComplete() {
           } else {
             // Full redirect flow - use stored return URL or construct from toolkit
             setTimeout(() => {
-              const storedReturnUrl = sessionStorage.getItem('oauth_return_url');
+              // Check both storage locations (mobile uses localStorage)
+              const storedReturnUrl = 
+                sessionStorage.getItem('oauth_return_url') || 
+                localStorage.getItem('oauth_return_url');
+              
+              // Clean up both storage locations
               sessionStorage.removeItem('oauth_return_url');
+              localStorage.removeItem('oauth_return_url');
               
               if (storedReturnUrl) {
                 console.log("OAuthComplete: Redirecting to stored URL:", storedReturnUrl);

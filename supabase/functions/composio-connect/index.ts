@@ -93,6 +93,9 @@ serve(async (req) => {
         // Composio will redirect here after OAuth completes
         // We'll add connectionId and toolkit as query params in the callback
         callback_url: callbackUrl,
+        // Force re-authentication to prompt user for account selection
+        // This prevents auto-selecting a previously authorized account
+        force_reauth: true,
       }),
     });
 
