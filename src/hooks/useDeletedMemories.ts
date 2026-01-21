@@ -76,10 +76,21 @@ export function useDeletedMemories() {
     return items.filter(item => !deletedIds.has(item.id));
   }, [deletedIds]);
 
+  const clearAll = useCallback(() => {
+    setDeletedIds(new Set());
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      console.log('[useDeletedMemories] Cleared all deleted memory IDs from cache');
+    } catch (e) {
+      console.error('Error clearing deleted memories from localStorage:', e);
+    }
+  }, []);
+
   return {
     deletedIds,
     addDeletedId,
     isDeleted,
     filterDeleted,
+    clearAll,
   };
 }
