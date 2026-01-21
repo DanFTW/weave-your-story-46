@@ -70,6 +70,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "teams",
         status: "unconfigured",
       },
+      {
+        id: "excel",
+        name: "Microsoft Excel",
+        icon: "excel",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -238,6 +244,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#6264A7",    // Teams purple
       secondary: "#464775",  // Teams dark purple
       tertiary: "#7B83EB",   // Teams light purple
+    },
+  },
+  "excel": {
+    id: "excel",
+    name: "Microsoft Excel",
+    icon: "excel",
+    status: "unconfigured",
+    description: "Microsoft Excel allows Weave to access your spreadsheets and workbooks. Create memories from your data, track changes, and organize your work-related information.",
+    capabilities: ["View workbooks", "Access spreadsheets", "Read data", "Browse files"],
+    gradientColors: {
+      primary: "#217346",    // Excel green
+      secondary: "#185C37",  // Excel dark green
+      tertiary: "#21A366",   // Excel light green
     },
   },
 };

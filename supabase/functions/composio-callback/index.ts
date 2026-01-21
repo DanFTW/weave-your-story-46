@@ -48,6 +48,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "teams": "teams",
   "microsoft_teams": "teams",
   "msteams": "teams",
+  "excel": "excel",
+  "microsoft_excel": "excel",
+  "ms_excel": "excel",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -413,6 +416,33 @@ serve(async (req) => {
         console.log(`composio-callback: Teams profile - name=${accountName}, email=${accountEmail}`);
       } else {
         console.log("composio-callback: No access_token found for Teams connection");
+      }
+    }
+
+    // For Microsoft Excel, fetch user profile via Microsoft Graph API (same as Outlook/Teams)
+    if (toolkit === "excel") {
+      console.log("composio-callback: Fetching Excel profile info via MS Graph...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        // Reuse fetchOutlookProfile - Excel uses the same Microsoft Graph API
+        const profileInfo = await fetchOutlookProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Excel profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for Excel connection");
       }
     }
 

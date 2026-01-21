@@ -19,6 +19,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   whatsapp: "ac_QU-6g30E21RT",
   outlook: "ac_lmdOfsms5fSG",
   teams: "ac_rVyo3ZPHW1OL",
+  excel: "ac_QMjsg-1512FZ",
 };
 
 serve(async (req) => {
