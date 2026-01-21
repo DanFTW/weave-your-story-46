@@ -4,7 +4,7 @@ import { Memory } from "@/types/memory";
  * Consolidates fragmented Instagram memories into unified entries.
  * 
  * Uses the permanent Instagram permalink shortcode as the PRIMARY identifier.
- * Falls back to tight timestamp clustering ONLY for orphan fragments.
+ * Uses NEAREST-SHORTCODE assignment for orphan fragments to prevent cross-post merging.
  */
 
 // Pattern to extract the unique shortcode from Instagram permalinks
@@ -34,6 +34,7 @@ const FRAGMENT_INDICATORS = [
   /scontent.*\.cdninstagram\.com/i,
   /^The post has\s+\d+\s+like/i,
   /has link\s+['"]?https?:\/\/(?:www\.)?instagram\.com/i,
+  /^Instagram post link:/i,
 ];
 
 /**
@@ -41,13 +42,21 @@ const FRAGMENT_INDICATORS = [
  * This is the ONLY reliable identifier across all time.
  */
 function extractShortcode(content: string): string | null {
-  // Standard permalink pattern [link:...] or direct URL
+  // Pattern 1: Standard [link:...] or direct URL
   const match = content.match(SHORTCODE_PATTERN);
   if (match) return match[1];
   
-  // LIAM fragment pattern: "on YYYYMMDD has link 'https://instagram.com/...'"
+  // Pattern 2: LIAM "has link 'https://...'" format
   const liamLinkMatch = content.match(/has link\s+['"]?(https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+))/i);
   if (liamLinkMatch) return liamLinkMatch[2];
+  
+  // Pattern 3: Bare permalink at end of content
+  const barePermalink = content.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)\/?['")\s]*$/i);
+  if (barePermalink) return barePermalink[1];
+  
+  // Pattern 4: "Instagram post link:" followed by URL
+  const postLinkMatch = content.match(/Instagram post link:\s*['"]?(https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+))/i);
+  if (postLinkMatch) return postLinkMatch[2];
   
   return null;
 }
@@ -188,10 +197,17 @@ function extractComponents(fragments: Memory[]): {
 
 /**
  * Merge fragments into a single unified memory
+ * Stores all original fragment IDs for lookup in _fragmentIds
  */
 function mergeFragments(fragments: Memory[]): Memory {
+  // Store all fragment IDs for later lookup
+  const fragmentIds = fragments.map(f => f.id);
+  
   if (fragments.length === 1) {
-    return fragments[0];
+    return {
+      ...fragments[0],
+      _fragmentIds: fragmentIds,
+    };
   }
 
   const { mediaUrl, caption, postDate, likes, comments, permalink, username } = 
@@ -222,37 +238,8 @@ function mergeFragments(fragments: Memory[]): Memory {
     content: content.trim(),
     tag: 'INSTAGRAM',
     category: 'instagram',
+    _fragmentIds: fragmentIds,
   };
-}
-
-/**
- * Cluster orphan fragments by timestamp (tight 30-second window)
- * ONLY used as fallback when shortcode cannot be extracted
- */
-function clusterByTimestamp(fragments: Memory[], windowMs: number): Memory[][] {
-  if (fragments.length === 0) return [];
-
-  const sorted = [...fragments].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
-
-  const clusters: Memory[][] = [];
-  let current: Memory[] = [sorted[0]];
-  let clusterStart = new Date(sorted[0].createdAt).getTime();
-
-  for (let i = 1; i < sorted.length; i++) {
-    const time = new Date(sorted[i].createdAt).getTime();
-    if (time - clusterStart <= windowMs) {
-      current.push(sorted[i]);
-    } else {
-      clusters.push(current);
-      current = [sorted[i]];
-      clusterStart = time;
-    }
-  }
-  if (current.length > 0) clusters.push(current);
-
-  return clusters;
 }
 
 /**
@@ -267,7 +254,7 @@ function isLikelyInstagramByContext(memory: Memory): boolean {
  * Consolidates fragmented Instagram memories into unified entries.
  * 
  * Uses the permanent Instagram shortcode as the PRIMARY identifier.
- * Falls back to tight timestamp clustering ONLY for orphan fragments.
+ * Uses NEAREST-SHORTCODE assignment for orphan fragments (prevents cross-post merging).
  */
 export function consolidateInstagramMemories(memories: Memory[]): Memory[] {
   const fragments: Memory[] = [];
@@ -305,45 +292,54 @@ export function consolidateInstagramMemories(memories: Memory[]): Memory[] {
     }
   }
   
-  // Step 3: Try to associate orphans with existing shortcode groups by timestamp
-  // Orphans within 60s of a shortcode group likely belong to it
-  const associatedOrphans = new Set<Memory>();
+  // Step 3: For each orphan, find the NEAREST shortcode group by timestamp
+  // This prevents orphans from different posts being merged together
+  const assignedOrphans = new Set<Memory>();
   
   for (const orphan of orphans) {
     const orphanTime = new Date(orphan.createdAt).getTime();
+    let nearestShortcode: string | null = null;
+    let nearestDistance = Infinity;
     
+    // Find the closest shortcode-bearing fragment
     for (const [shortcode, group] of shortcodeGroups) {
-      const groupTimes = group.map(m => new Date(m.createdAt).getTime());
-      const minTime = Math.min(...groupTimes);
-      const maxTime = Math.max(...groupTimes);
-      
-      // If orphan is within 60s of any fragment in the group, associate it
-      if (orphanTime >= minTime - 60000 && orphanTime <= maxTime + 60000) {
-        group.push(orphan);
-        shortcodeGroups.set(shortcode, group);
-        associatedOrphans.add(orphan);
-        break;
+      for (const member of group) {
+        const memberTime = new Date(member.createdAt).getTime();
+        const distance = Math.abs(orphanTime - memberTime);
+        
+        // Must be within 10 seconds AND closer than any previous match
+        if (distance < nearestDistance && distance <= 10000) {
+          nearestDistance = distance;
+          nearestShortcode = shortcode;
+        }
       }
+    }
+    
+    if (nearestShortcode) {
+      // Assign orphan to nearest shortcode group
+      const group = shortcodeGroups.get(nearestShortcode)!;
+      group.push(orphan);
+      assignedOrphans.add(orphan);
     }
   }
   
-  // Remaining orphans that couldn't be associated
-  const remainingOrphans = orphans.filter(o => !associatedOrphans.has(o));
+  // Remaining orphans that couldn't be associated (truly isolated)
+  const remainingOrphans = orphans.filter(o => !assignedOrphans.has(o));
 
-  // Step 4: Cluster remaining orphans by tight timestamp (60s)
-  const orphanClusters = clusterByTimestamp(remainingOrphans, 60000);
+  // Step 4: Each remaining orphan becomes its own memory (don't cluster them)
+  // This prevents cross-post merging entirely
+  const orphanMemories: Memory[] = remainingOrphans.map(orphan => ({
+    ...orphan,
+    _fragmentIds: [orphan.id],
+  }));
 
-  // Step 5: Merge each group into unified memories
+  // Step 5: Merge each shortcode group into unified memories
   const consolidated: Memory[] = [];
 
   for (const [, group] of shortcodeGroups) {
     consolidated.push(mergeFragments(group));
   }
 
-  for (const cluster of orphanClusters) {
-    consolidated.push(mergeFragments(cluster));
-  }
-
-  // Return: already-complete + newly-consolidated + non-Instagram
-  return [...complete, ...consolidated, ...others];
+  // Return: already-complete + newly-consolidated + orphan singles + non-Instagram
+  return [...complete, ...consolidated, ...orphanMemories, ...others];
 }
