@@ -3,8 +3,9 @@ import { Memory } from "@/types/memory";
 /**
  * Consolidates fragmented Instagram memories into unified entries.
  * 
- * Uses CAPTION TEXT as the primary identifier for grouping fragments,
- * since shortcodes are often stripped by LIAM and timestamps are unreliable.
+ * Uses TRANSACTION ID PREFIX as the grouping key. LIAM returns tokenized
+ * fragments with IDs like "XD123:0", "XD123:1" - fragments from the same
+ * original memory share the same prefix before the colon.
  */
 
 // Patterns to identify Instagram memory fragments
@@ -43,62 +44,12 @@ const FRAGMENT_INDICATORS = [
 ];
 
 /**
- * Extract caption text from any fragment format
+ * Extract the base transaction ID prefix (before the :index suffix)
+ * e.g., "XD67688756F67311F08790DEE0618144E9:0" -> "XD67688756F67311F08790DEE0618144E9"
  */
-function extractCaption(content: string): string | null {
-  // Pattern 1: LIAM combined format "Instagram post by user on DATE: 'caption'..."
-  const liamMatch = content.match(/Instagram post by user on \d{8}: ['"](.+?)['"]\.?\s*(?:The post|$)/i);
-  if (liamMatch && liamMatch[1].length >= 5) return liamMatch[1];
-  
-  // Pattern 2: "Posted on DATE, a post about X"
-  const postedAboutMatch = content.match(/Posted on \d{8},? a post about (.+?)(?:\.|$)/i);
-  if (postedAboutMatch) return postedAboutMatch[1];
-  
-  // Pattern 3: Post title/content format
-  const postTitleMatch = content.match(/Post (?:title|content):\s*['"](.+?)['"]/i);
-  if (postTitleMatch) return postTitleMatch[1];
-  
-  // Pattern 4: "Post about X"
-  const postAboutMatch = content.match(/Post about\s+(.+?)(?:\.|$)/i);
-  if (postAboutMatch) return postAboutMatch[1];
-  
-  // Pattern 5: Instagram post content format
-  const contentMatch = content.match(/Instagram post content:\s*([\s\S]+?)(?:\n\n|\[|$)/i);
-  if (contentMatch && contentMatch[1].trim().length >= 5) return contentMatch[1].trim();
-  
-  // Pattern 6: Quoted caption in consolidated format
-  const quotedMatch = content.match(/"([^"]{5,})"/);
-  if (quotedMatch) return quotedMatch[1];
-  
-  // Pattern 7: Long quoted string with single quotes
-  const singleQuotedMatch = content.match(/'([^']{10,})'/);
-  if (singleQuotedMatch) return singleQuotedMatch[1];
-  
-  return null;
-}
-
-/**
- * Create a normalized fingerprint for fuzzy caption matching
- */
-function getCaptionFingerprint(caption: string): string {
-  return caption
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 40);
-}
-
-/**
- * Extract significant words from content for matching
- */
-function getContentWords(content: string): Set<string> {
-  const words = content
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length >= 4); // Only meaningful words
-  return new Set(words);
+function getTransactionPrefix(memoryId: string): string {
+  const colonIndex = memoryId.lastIndexOf(':');
+  return colonIndex > 0 ? memoryId.slice(0, colonIndex) : memoryId;
 }
 
 /**
@@ -305,10 +256,13 @@ function mergeFragments(fragments: Memory[]): Memory {
   if (mediaUrl) content += `[media:${mediaUrl}]`;
   if (permalink) content += `\n[link:${permalink}]`;
 
-  // Use earliest fragment as base
-  const base = fragments.reduce((earliest, current) =>
-    new Date(current.createdAt) < new Date(earliest.createdAt) ? current : earliest
-  );
+  // Use earliest fragment as base (sort by index suffix for consistent ordering)
+  const sortedFragments = [...fragments].sort((a, b) => {
+    const aIndex = parseInt(a.id.split(':').pop() || '0');
+    const bIndex = parseInt(b.id.split(':').pop() || '0');
+    return aIndex - bIndex;
+  });
+  const base = sortedFragments[0];
 
   return {
     ...base,
@@ -321,7 +275,7 @@ function mergeFragments(fragments: Memory[]): Memory {
 
 /**
  * Consolidates fragmented Instagram memories into unified entries.
- * Uses CAPTION TEXT as the primary grouping key.
+ * Groups fragments by TRANSACTION ID PREFIX for reliable matching.
  */
 export function consolidateInstagramMemories(memories: Memory[]): Memory[] {
   const fragments: Memory[] = [];
@@ -343,114 +297,22 @@ export function consolidateInstagramMemories(memories: Memory[]): Memory[] {
     return memories;
   }
 
-  // Step 2: Group fragments by caption fingerprint
-  const captionGroups = new Map<string, Memory[]>();
-  const orphans: Memory[] = [];
+  // Step 2: Group fragments by TRANSACTION ID PREFIX (deterministic grouping)
+  const txnGroups = new Map<string, Memory[]>();
 
   for (const fragment of fragments) {
-    const caption = extractCaption(fragment.content);
-    
-    if (caption && caption.length >= 5) {
-      const fingerprint = getCaptionFingerprint(caption);
-      
-      // Check if similar fingerprint exists (fuzzy match)
-      let matchedFingerprint: string | null = null;
-      for (const existingFp of captionGroups.keys()) {
-        // If fingerprints share first 15 chars or have significant overlap
-        if (fingerprint.slice(0, 15) === existingFp.slice(0, 15)) {
-          matchedFingerprint = existingFp;
-          break;
-        }
-      }
-      
-      if (matchedFingerprint) {
-        captionGroups.get(matchedFingerprint)!.push(fragment);
-      } else {
-        captionGroups.set(fingerprint, [fragment]);
-      }
-    } else {
-      orphans.push(fragment);
-    }
+    const prefix = getTransactionPrefix(fragment.id);
+    const group = txnGroups.get(prefix) || [];
+    group.push(fragment);
+    txnGroups.set(prefix, group);
   }
 
-  // Step 3: Assign orphans by word overlap with known caption groups
-  const assignedOrphans = new Set<Memory>();
-  
-  for (const orphan of orphans) {
-    const orphanWords = getContentWords(orphan.content);
-    let bestMatch: string | null = null;
-    let bestScore = 0;
-    
-    for (const [fingerprint, group] of captionGroups) {
-      // Get caption words from all fragments in group
-      const groupWords = new Set<string>();
-      for (const member of group) {
-        const caption = extractCaption(member.content);
-        if (caption) {
-          getContentWords(caption).forEach(w => groupWords.add(w));
-        }
-      }
-      
-      // Count word overlap
-      let matchScore = 0;
-      for (const word of orphanWords) {
-        if (groupWords.has(word)) matchScore++;
-      }
-      
-      // Need at least 2 matching words
-      if (matchScore > bestScore && matchScore >= 2) {
-        bestScore = matchScore;
-        bestMatch = fingerprint;
-      }
-    }
-    
-    if (bestMatch) {
-      captionGroups.get(bestMatch)!.push(orphan);
-      assignedOrphans.add(orphan);
-    }
-  }
-
-  // Step 4: For remaining orphans, try timestamp proximity (within 1 second)
-  const remainingOrphans = orphans.filter(o => !assignedOrphans.has(o));
-  
-  for (const orphan of remainingOrphans) {
-    const orphanTime = new Date(orphan.createdAt).getTime();
-    let nearestGroup: string | null = null;
-    let nearestDistance = Infinity;
-    
-    for (const [fingerprint, group] of captionGroups) {
-      for (const member of group) {
-        const memberTime = new Date(member.createdAt).getTime();
-        const distance = Math.abs(orphanTime - memberTime);
-        
-        // Very tight window: 1 second max
-        if (distance < nearestDistance && distance <= 1000) {
-          nearestDistance = distance;
-          nearestGroup = fingerprint;
-        }
-      }
-    }
-    
-    if (nearestGroup) {
-      captionGroups.get(nearestGroup)!.push(orphan);
-      assignedOrphans.add(orphan);
-    }
-  }
-
-  // Step 5: Merge each caption group into unified memories
+  // Step 3: Merge each transaction group into unified memories
   const consolidated: Memory[] = [];
-
-  for (const [, group] of captionGroups) {
+  for (const [, group] of txnGroups) {
     consolidated.push(mergeFragments(group));
   }
 
-  // Step 6: Handle truly unassociated orphans as standalone memories
-  const finalOrphans = orphans.filter(o => !assignedOrphans.has(o));
-  const orphanMemories: Memory[] = finalOrphans.map(orphan => ({
-    ...orphan,
-    _fragmentIds: [orphan.id],
-  }));
-
-  // Return: already-complete + newly-consolidated + orphan singles + non-Instagram
-  return [...complete, ...consolidated, ...orphanMemories, ...others];
+  // Return: already-complete + newly-consolidated + non-Instagram
+  return [...complete, ...consolidated, ...others];
 }
