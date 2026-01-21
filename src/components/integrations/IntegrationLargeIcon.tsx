@@ -12,6 +12,7 @@ import dropboxIcon from "@/assets/integrations/dropbox.png";
 import googlephotosIcon from "@/assets/integrations/googlephotos.svg";
 import twitterIcon from "@/assets/integrations/twitter.svg";
 import whatsappIcon from "@/assets/integrations/whatsapp.svg";
+import outlookIcon from "@/assets/integrations/outlook.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -31,6 +32,7 @@ const iconImages: Record<string, string> = {
   googlephotos: googlephotosIcon,
   twitter: twitterIcon,
   whatsapp: whatsappIcon,
+  outlook: outlookIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
