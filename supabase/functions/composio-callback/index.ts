@@ -51,6 +51,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "excel": "excel",
   "microsoft_excel": "excel",
   "ms_excel": "excel",
+  "linkedin": "linkedin",
+  "linkedin_v2": "linkedin",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -192,6 +194,60 @@ async function fetchDropboxProfile(accessToken: string): Promise<{
 
 // Note: Microsoft Teams profile fetching uses fetchOutlookProfile
 // since both services share the same Microsoft Graph API identity system
+
+// Fetch LinkedIn user profile using Composio tool execution API
+async function fetchLinkedInProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching LinkedIn profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/LINKEDIN_GET_PROFILE_INFO",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: LinkedIn profile response status=${response.status}`);
+    console.log(`composio-callback: LinkedIn profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch LinkedIn profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - structure may vary, try multiple paths
+    const userData = data.data || data.response_data || data;
+    
+    // LinkedIn returns firstName/lastName or localizedFirstName/localizedLastName
+    const firstName = userData.firstName || userData.localizedFirstName || "";
+    const lastName = userData.lastName || userData.localizedLastName || "";
+    const fullName = `${firstName} ${lastName}`.trim() || userData.name || null;
+    
+    return {
+      email: userData.email || userData.emailAddress || null,
+      name: fullName,
+      avatarUrl: userData.profilePicture || userData.picture || userData.profilePictureUrl || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching LinkedIn profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -444,6 +500,25 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Excel connection");
       }
+    }
+
+    // For LinkedIn, fetch user profile via Composio tool execution API
+    if (toolkit === "linkedin") {
+      console.log("composio-callback: Fetching LinkedIn profile info via Composio API...");
+      
+      const profileInfo = await fetchLinkedInProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: LinkedIn profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)

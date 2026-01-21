@@ -20,6 +20,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   outlook: "ac_lmdOfsms5fSG",
   teams: "ac_rVyo3ZPHW1OL",
   excel: "ac_QMjsg-1512FZ",
+  linkedin: "ac_kzzsdBscCW-a",
 };
 
 serve(async (req) => {

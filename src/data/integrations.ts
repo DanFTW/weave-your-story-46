@@ -76,6 +76,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "excel",
         status: "unconfigured",
       },
+      {
+        id: "linkedin",
+        name: "LinkedIn",
+        icon: "linkedin",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -257,6 +263,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#217346",    // Excel green
       secondary: "#185C37",  // Excel dark green
       tertiary: "#21A366",   // Excel light green
+    },
+  },
+  "linkedin": {
+    id: "linkedin",
+    name: "LinkedIn",
+    icon: "linkedin",
+    status: "unconfigured",
+    description: "LinkedIn allows Weave to access your professional profile, connections, and activity. Create memories from your career milestones, posts, and professional interactions.",
+    capabilities: ["View profile", "Access connections", "Read posts", "View activity"],
+    gradientColors: {
+      primary: "#0A66C2",    // LinkedIn blue
+      secondary: "#004182",  // LinkedIn dark blue
+      tertiary: "#0077B5",   // LinkedIn classic blue
     },
   },
 };
