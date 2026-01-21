@@ -96,6 +96,88 @@ async function fetchInstagramProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Outlook user profile using Composio tool execution API
+async function fetchOutlookProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Outlook profile via Composio API...");
+    
+    // Try OUTLOOK_GET_USER_PROFILE first (Microsoft Graph /me endpoint)
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/OUTLOOK_GET_USER_PROFILE",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Outlook profile response status=${response.status}`);
+    console.log(`composio-callback: Outlook profile response=${responseText.slice(0, 1000)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Outlook profile, trying fallback...");
+      
+      // Fallback: Try OUTLOOK_GET_ME which might be an alternative tool name
+      const fallbackResponse = await fetch(
+        "https://backend.composio.dev/api/v3/tools/execute/OUTLOOK_GET_ME",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": COMPOSIO_API_KEY!,
+          },
+          body: JSON.stringify({
+            connected_account_id: connectionId,
+            arguments: {},
+          }),
+        }
+      );
+      
+      const fallbackText = await fallbackResponse.text();
+      console.log(`composio-callback: Outlook fallback response status=${fallbackResponse.status}`);
+      console.log(`composio-callback: Outlook fallback response=${fallbackText.slice(0, 1000)}`);
+      
+      if (!fallbackResponse.ok) {
+        return { email: null, name: null, avatarUrl: null };
+      }
+      
+      const fallbackData = JSON.parse(fallbackText);
+      const userData = fallbackData.data || fallbackData.response_data || fallbackData;
+      
+      return {
+        email: userData.mail || userData.userPrincipalName || userData.email || null,
+        name: userData.displayName || userData.givenName || null,
+        avatarUrl: null, // Microsoft Graph photo requires separate call
+      };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - Microsoft Graph user object structure
+    const userData = data.data || data.response_data || data;
+    
+    return {
+      email: userData.mail || userData.userPrincipalName || userData.email || null,
+      name: userData.displayName || userData.givenName || null,
+      avatarUrl: null, // Microsoft Graph photo requires separate call
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Outlook profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -241,6 +323,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Instagram profile - name=${accountName}, username=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Outlook, fetch user profile via Composio API
+    if (toolkit === "outlook") {
+      console.log("composio-callback: Fetching Outlook profile info...");
+      const profileInfo = await fetchOutlookProfile(connectionId);
+      
+      // Use profile info from Microsoft Graph
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Outlook profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
