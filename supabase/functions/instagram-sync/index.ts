@@ -744,160 +744,44 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
   }
 }
 
-// Create memory with optional image using LIAM API
+// Create memory by calling the liam-memory edge function (which has tested auth/signing)
 async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<boolean> {
   try {
-    console.log('Creating memory with LIAM API...');
+    console.log('Creating memory via liam-memory function...');
     console.log('Content preview:', content.slice(0, 150));
     console.log('Has image:', !!imageBase64);
     
-    // Import the private key for signing
-    const privateKeyPem = apiKeys.private_key;
-    const privateKey = await importPrivateKey(privateKeyPem);
-    
-    // Choose endpoint based on whether we have an image
-    const endpoint = imageBase64 ? '/memory/create-with-image' : '/memory/create';
-    
-    // Create the request body - MUST include userKey for LIAM API
-    const requestBody: Record<string, string> = {
-      userKey: apiKeys.user_key,
-      content,
-      tag: 'INSTAGRAM',
-    };
-    
-    // Add image if provided (for create-with-image endpoint)
-    if (imageBase64) {
-      requestBody.image = imageBase64;
-    }
-
-    // Sign the request with proper DER format
-    const signature = await signRequest(privateKey, requestBody);
-    
-    // Make request to LIAM API using working proxy
-    const response = await fetch(`${LIAM_API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apiKey': apiKeys.api_key,
-        'signature': signature,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    // Call the liam-memory edge function which handles authentication properly
+    // Use service role key for inter-function calls
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/liam-memory`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'x-supabase-user-id': apiKeys.user_id,
+        },
+        body: JSON.stringify({
+          action: imageBase64 ? 'create-with-image' : 'create',
+          content,
+          tag: 'INSTAGRAM',
+          image: imageBase64 || undefined,
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('LIAM API error:', response.status, errorText);
+      console.error('liam-memory function error:', response.status, errorText);
       return false;
     }
 
     const result = await response.json();
-    console.log('Memory created successfully:', result?.memoryId || result?.processId || 'ID not returned');
-    return true;
+    console.log('Memory created successfully:', result?.processId || 'success');
+    return result.success !== false;
   } catch (error) {
     console.error('Create memory error:', error);
     return false;
   }
-}
-
-// Crypto utilities for LIAM API authentication
-
-// Helper: Remove leading zeros from signature component
-function removeLeadingZeros(bytes: Uint8Array): Uint8Array {
-  let i = 0;
-  while (i < bytes.length - 1 && bytes[i] === 0) i++;
-  return bytes.slice(i);
-}
-
-// Helper: Construct DER length encoding
-function constructLength(len: number): Uint8Array {
-  if (len < 128) return new Uint8Array([len]);
-  if (len < 256) return new Uint8Array([0x81, len]);
-  return new Uint8Array([0x82, (len >> 8) & 0xff, len & 0xff]);
-}
-
-// Convert raw ECDSA signature (r||s) to DER format
-function toDER(rawSig: Uint8Array): Uint8Array {
-  const half = rawSig.length / 2;
-  let r = removeLeadingZeros(rawSig.slice(0, half));
-  let s = removeLeadingZeros(rawSig.slice(half));
-
-  // Add leading zero if high bit is set (to ensure positive integer)
-  if (r[0] & 0x80) r = new Uint8Array([0x00, ...r]);
-  if (s[0] & 0x80) s = new Uint8Array([0x00, ...s]);
-
-  const rLen = constructLength(r.length);
-  const sLen = constructLength(s.length);
-  const totalLen = 2 + rLen.length + r.length + 2 + sLen.length + s.length;
-  const seqLen = constructLength(totalLen - 2 - (constructLength(totalLen - 2).length - 1));
-
-  const der = new Uint8Array(2 + seqLen.length - 1 + totalLen);
-  let offset = 0;
-  der[offset++] = 0x30; // SEQUENCE tag
-  der.set(constructLength(totalLen), offset);
-  offset += constructLength(totalLen).length;
-  der[offset++] = 0x02; // INTEGER tag for r
-  der.set(rLen, offset);
-  offset += rLen.length;
-  der.set(r, offset);
-  offset += r.length;
-  der[offset++] = 0x02; // INTEGER tag for s
-  der.set(sLen, offset);
-  offset += sLen.length;
-  der.set(s, offset);
-
-  return der;
-}
-
-async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
-  // Remove PEM headers and decode
-  const pemContents = pemKey
-    .replace(/-----BEGIN EC PRIVATE KEY-----/, '')
-    .replace(/-----END EC PRIVATE KEY-----/, '')
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\s/g, '');
-  
-  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-  
-  // Try PKCS8 first, then SEC1 format
-  try {
-    return await crypto.subtle.importKey(
-      'pkcs8',
-      binaryDer,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,
-      ['sign']
-    );
-  } catch {
-    // Try as SEC1 format (raw EC)
-    return await crypto.subtle.importKey(
-      'raw',
-      binaryDer,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,
-      ['sign']
-    );
-  }
-}
-
-async function signRequest(privateKey: CryptoKey, body: object): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(JSON.stringify(body));
-  
-  const rawSignature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    privateKey,
-    data
-  );
-  
-  // Convert raw signature to DER format (required by LIAM API)
-  const rawSigArray = new Uint8Array(rawSignature);
-  const derSignature = toDER(rawSigArray);
-  
-  // Convert to base64
-  let binary = '';
-  for (let i = 0; i < derSignature.length; i++) {
-    binary += String.fromCharCode(derSignature[i]);
-  }
-  return btoa(binary);
 }
