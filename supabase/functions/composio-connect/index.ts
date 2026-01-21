@@ -18,6 +18,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   youtube: "ac_LwcJYIIYufYK",
   whatsapp: "ac_QU-6g30E21RT",
   outlook: "ac_lmdOfsms5fSG",
+  teams: "ac_rVyo3ZPHW1OL",
 };
 
 serve(async (req) => {

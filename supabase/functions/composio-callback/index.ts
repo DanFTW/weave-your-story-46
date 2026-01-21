@@ -45,6 +45,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "outlook": "outlook",
   "microsoft_outlook": "outlook",
   "outlookmail": "outlook",
+  "teams": "teams",
+  "microsoft_teams": "teams",
+  "msteams": "teams",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -180,6 +183,54 @@ async function fetchDropboxProfile(accessToken: string): Promise<{
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Dropbox profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
+// Fetch Microsoft Teams user profile via Composio API tool execution
+async function fetchTeamsProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Teams profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/MICROSOFT_TEAMS_GET_MY_PROFILE",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Teams profile response status=${response.status}`);
+    console.log(`composio-callback: Teams profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Teams profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    const userData = data.data || data.response_data || data;
+    
+    // MICROSOFT_TEAMS_GET_MY_PROFILE returns: id, userPrincipalName (UPN), mail, displayName
+    return {
+      email: userData.mail || userData.userPrincipalName || null,
+      name: userData.displayName || null,
+      avatarUrl: null, // Teams profile doesn't include avatar in this tool
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Teams profile:", error);
     return { email: null, name: null, avatarUrl: null };
   }
 }
@@ -381,6 +432,24 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Dropbox connection");
       }
+    }
+
+    // For Microsoft Teams, fetch user profile via Composio API
+    if (toolkit === "teams") {
+      console.log("composio-callback: Fetching Teams profile info...");
+      const profileInfo = await fetchTeamsProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Teams profile - name=${accountName}, email=${accountEmail}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
