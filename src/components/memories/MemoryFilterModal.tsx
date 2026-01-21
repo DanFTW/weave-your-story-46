@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -70,6 +71,9 @@ export function MemoryFilterModal({
       <DialogContent className="sm:max-w-md rounded-3xl p-6 gap-6">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0">
           <DialogTitle className="text-xl font-semibold">Filter activity</DialogTitle>
+          <DialogDescription className="sr-only">
+            Filter memories by thread type and sync status
+          </DialogDescription>
         </DialogHeader>
 
         {/* Filter by thread */}
