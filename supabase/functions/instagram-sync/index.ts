@@ -694,13 +694,19 @@ function formatPostAsMemory(post: InstagramPost): { content: string; imageUrl: s
     }
   }
 
-  // Embed permalink for reference (but NOT media URL - that goes to LIAM image storage)
-  if (post.permalinkUrl) {
-    memory += `\n\n[link:${post.permalinkUrl}]`;
+  // Get media URL for embedding in content AND for LIAM image upload
+  const imageUrl = getFirstMediaUrl(post) || null;
+  
+  // IMPORTANT: Embed media URL in content as fallback for when LIAM API doesn't return images
+  // This allows the frontend MemoryCard to display images via parseMediaUrl()
+  if (imageUrl) {
+    memory += `\n\n[media:${imageUrl}]`;
   }
 
-  // Get media URL separately for image upload
-  const imageUrl = getFirstMediaUrl(post) || null;
+  // Embed permalink for reference
+  if (post.permalinkUrl) {
+    memory += `\n[link:${post.permalinkUrl}]`;
+  }
 
   return { content: memory, imageUrl };
 }

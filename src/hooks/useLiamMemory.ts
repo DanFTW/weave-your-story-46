@@ -80,6 +80,10 @@ interface Memory {
   createdAt: string;
   category?: string;
   sensitivity?: string;
+  /** Base64-encoded image data from LIAM API (for memories created with images) */
+  imageDataBase64?: string | null;
+  /** MIME type of the stored image (e.g., "image/jpeg") */
+  imageMimeType?: string | null;
 }
 
 interface UseLiamMemoryReturn {
