@@ -203,28 +203,40 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client with user's auth token
+    // Create Supabase client with service role key
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Verify user and get their ID from the token
+    // Check for internal service call with x-supabase-user-id header
+    const internalUserId = req.headers.get('x-supabase-user-id');
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
-    if (userError || !user) {
-      console.error('Auth error:', userError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let userId: string;
+    
+    if (internalUserId && token === supabaseServiceKey) {
+      // Internal call from another edge function using service role key
+      console.log('Internal service call for user:', internalUserId);
+      userId = internalUserId;
+    } else {
+      // Normal user call - verify the JWT token
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      
+      if (userError || !user) {
+        console.error('Auth error:', userError);
+        return new Response(
+          JSON.stringify({ error: 'Invalid or expired token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      userId = user.id;
     }
 
-    console.log('Authenticated user:', user.id);
+    console.log('Authenticated user:', userId);
 
     // Fetch user's API keys from the database
     const { data: userKeys, error: keysError } = await supabase
       .from('user_api_keys')
       .select('api_key, private_key, user_key')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (keysError || !userKeys) {
@@ -276,20 +288,21 @@ serve(async (req) => {
     const { data: userProfile } = await supabase
       .from('profiles')
       .select('full_name')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
     
     const userName = userProfile?.full_name || null;
     console.log('User name from profile:', userName || '(not set)');
 
     // Parse request
-    const { action, content, tag, memoryId, permanent } = await req.json();
+    const { action, content, tag, memoryId, permanent, image } = await req.json();
     console.log(`LIAM Memory action: ${action}`);
 
     let response: Response;
 
     switch (action) {
-      case 'create': {
+      case 'create':
+      case 'create-with-image': {
         if (!content) {
           return new Response(
             JSON.stringify({ error: 'Content is required for create action' }),
@@ -317,16 +330,38 @@ serve(async (req) => {
           // Convert tag to uppercase format (e.g., "family" -> "FAMILY")
           createBody.tag = tag.toUpperCase().replace(/\s+/g, '_');
         }
+        
+        // Add image if provided (for create-with-image action)
+        if (image) {
+          createBody.image = image;
+        }
 
-        console.log('Creating memory with content:', personalizedContent);
+        console.log('Creating memory with content:', personalizedContent.slice(0, 100));
+        console.log('Has image:', !!image);
 
+        // Try create-with-image endpoint if image provided, otherwise use standard create
+        const endpoint = image ? '/memory/create-with-image' : '/memory/create';
+        
         response = await makeAuthenticatedRequest(
-          '/memory/create',
+          endpoint,
           'POST',
           createBody,
           apiKey,
           privateKey
         );
+        
+        // If create-with-image returns 404, fall back to standard create without image
+        if (response.status === 404 && image) {
+          console.warn('create-with-image endpoint not available, falling back to text-only');
+          delete createBody.image;
+          response = await makeAuthenticatedRequest(
+            '/memory/create',
+            'POST',
+            createBody,
+            apiKey,
+            privateKey
+          );
+        }
         break;
       }
 
