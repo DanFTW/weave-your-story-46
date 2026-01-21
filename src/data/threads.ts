@@ -3,6 +3,16 @@ import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
   {
+    id: "twitter-live",
+    title: "Twitter Live",
+    description: "Automatically save new tweets, replies, retweets, and likes as they happen",
+    icon: Zap,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "social",
+  },
+  {
     id: "instagram-live",
     title: "Instagram Live",
     description: "Automatically save new posts, comments, and likes as they happen",

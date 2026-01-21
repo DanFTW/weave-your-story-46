@@ -260,6 +260,81 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_automation_config: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_polled_at: string | null
+          likes_tracked: number | null
+          monitor_likes: boolean | null
+          monitor_new_posts: boolean | null
+          monitor_replies: boolean | null
+          monitor_retweets: boolean | null
+          posts_tracked: number | null
+          replies_tracked: number | null
+          retweets_tracked: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          likes_tracked?: number | null
+          monitor_likes?: boolean | null
+          monitor_new_posts?: boolean | null
+          monitor_replies?: boolean | null
+          monitor_retweets?: boolean | null
+          posts_tracked?: number | null
+          replies_tracked?: number | null
+          retweets_tracked?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          likes_tracked?: number | null
+          monitor_likes?: boolean | null
+          monitor_new_posts?: boolean | null
+          monitor_replies?: boolean | null
+          monitor_retweets?: boolean | null
+          posts_tracked?: number | null
+          replies_tracked?: number | null
+          retweets_tracked?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      twitter_processed_engagement: {
+        Row: {
+          engagement_type: string
+          id: string
+          processed_at: string | null
+          twitter_item_id: string
+          user_id: string
+        }
+        Insert: {
+          engagement_type: string
+          id?: string
+          processed_at?: string | null
+          twitter_item_id: string
+          user_id: string
+        }
+        Update: {
+          engagement_type?: string
+          id?: string
+          processed_at?: string | null
+          twitter_item_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       twitter_sync_config: {
         Row: {
           created_at: string
