@@ -287,7 +287,7 @@ async function fetchTwitterContent(connectionId: string, config: AutomationConfi
       }
     }
 
-    console.log('Fetched total items:', tweets.length);
+    console.log('Fetched total items:', tweets.length, '(posts/replies/retweets:', tweets.filter(t => !t.isLike).length, ', likes:', tweets.filter(t => t.isLike).length, ')');
     return tweets;
   } catch (error) {
     console.error('Error fetching Twitter content:', error);
@@ -307,6 +307,7 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
     const bodyString = JSON.stringify(requestBody);
     const signature = await signRequest(apiKeys.private_key, bodyString);
 
+    console.log('Creating memory via LIAM API...');
     const response = await fetch(LIAM_API_URL, {
       method: 'POST',
       headers: {
@@ -317,7 +318,14 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
       body: bodyString,
     });
 
-    return response.ok;
+    if (response.ok) {
+      console.log('Memory created successfully');
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error('LIAM API error:', response.status, errorText);
+      return false;
+    }
   } catch (error) {
     console.error('Create memory error:', error);
     return false;
