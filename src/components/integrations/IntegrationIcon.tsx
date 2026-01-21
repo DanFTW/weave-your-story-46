@@ -13,6 +13,7 @@ import googlephotosIcon from "@/assets/integrations/googlephotos.svg";
 import twitterIcon from "@/assets/integrations/twitter.svg";
 import whatsappIcon from "@/assets/integrations/whatsapp.svg";
 import outlookIcon from "@/assets/integrations/outlook.svg";
+import teamsIcon from "@/assets/integrations/teams.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -33,6 +34,7 @@ const iconImages: Record<string, string> = {
   twitter: twitterIcon,
   whatsapp: whatsappIcon,
   outlook: outlookIcon,
+  teams: teamsIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {

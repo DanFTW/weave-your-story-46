@@ -64,6 +64,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "outlook",
         status: "unconfigured",
       },
+      {
+        id: "teams",
+        name: "Microsoft Teams",
+        icon: "teams",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -219,6 +225,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0078D4",    // Microsoft blue
       secondary: "#106EBE",  // Darker blue
       tertiary: "#005A9E",   // Deep blue
+    },
+  },
+  "teams": {
+    id: "teams",
+    name: "Microsoft Teams",
+    icon: "teams",
+    status: "unconfigured",
+    description: "Microsoft Teams allows Weave to access your chats, channels, and meeting history. Create memories from important conversations and team collaborations.",
+    capabilities: ["View chats", "Access channels", "Read messages", "View meetings"],
+    gradientColors: {
+      primary: "#6264A7",    // Teams purple
+      secondary: "#464775",  // Teams dark purple
+      tertiary: "#7B83EB",   // Teams light purple
     },
   },
 };
