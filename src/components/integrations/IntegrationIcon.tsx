@@ -14,6 +14,7 @@ import twitterIcon from "@/assets/integrations/twitter.svg";
 import whatsappIcon from "@/assets/integrations/whatsapp.svg";
 import outlookIcon from "@/assets/integrations/outlook.svg";
 import teamsIcon from "@/assets/integrations/teams.svg";
+import excelIcon from "@/assets/integrations/excel.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -35,6 +36,7 @@ const iconImages: Record<string, string> = {
   whatsapp: whatsappIcon,
   outlook: outlookIcon,
   teams: teamsIcon,
+  excel: excelIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
