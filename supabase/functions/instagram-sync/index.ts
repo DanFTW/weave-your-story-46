@@ -540,8 +540,17 @@ async function syncInstagramContent(
         console.log(`Post ${post.id} already synced, skipping`);
         skippedDuplicates++;
       } else if (syncPosts && post.caption) {
-        const memoryContent = formatPostAsMemory(post);
-        const success = await createMemory(apiKeys, memoryContent);
+        // Format post and get image URL separately
+        const { content: memoryContent, imageUrl } = formatPostAsMemory(post);
+        
+        // Fetch image as base64 for permanent LIAM storage (if available)
+        let imageBase64: string | null = null;
+        if (imageUrl) {
+          imageBase64 = await fetchImageAsBase64(imageUrl);
+        }
+        
+        // Create memory with image (uses create-with-image endpoint if image available)
+        const success = await createMemory(apiKeys, memoryContent, imageBase64);
 
         if (success) {
           // Record this post as synced to prevent future duplicates
@@ -581,7 +590,9 @@ async function syncInstagramContent(
 
           const postMediaUrl = getFirstMediaUrl(post);
           const memoryContent = formatCommentAsMemory(comment, post.caption, postMediaUrl);
-          const success = await createMemory(apiKeys, memoryContent);
+          
+          // Comments don't get images stored - just text content
+          const success = await createMemory(apiKeys, memoryContent, null);
 
           if (success) {
             // Record this comment as synced using composite key
@@ -648,7 +659,8 @@ async function syncInstagramContent(
   }
 }
 
-function formatPostAsMemory(post: InstagramPost): string {
+// Format a post as memory content and return image URL separately
+function formatPostAsMemory(post: InstagramPost): { content: string; imageUrl: string | null } {
   const date = post.timestamp ? new Date(post.timestamp).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -682,31 +694,69 @@ function formatPostAsMemory(post: InstagramPost): string {
     }
   }
 
-  // Embed the media URL for frontend parsing
-  const mediaUrl = getFirstMediaUrl(post);
-  if (mediaUrl) {
-    memory += `\n\n[media:${mediaUrl}]`;
-  }
-
-  // Embed permalink for reference
+  // Embed permalink for reference (but NOT media URL - that goes to LIAM image storage)
   if (post.permalinkUrl) {
-    memory += `\n[link:${post.permalinkUrl}]`;
+    memory += `\n\n[link:${post.permalinkUrl}]`;
   }
 
-  return memory;
+  // Get media URL separately for image upload
+  const imageUrl = getFirstMediaUrl(post) || null;
+
+  return { content: memory, imageUrl };
 }
 
 // LIAM API Base URL (using working proxy due to DNS issues with official URL)
 const LIAM_API_BASE = 'https://web.askbuddy.ai/devspacexdb/api';
 
-async function createMemory(apiKeys: any, content: string): Promise<boolean> {
+// Fetch an image from URL and convert to base64 for LIAM storage
+async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
+  try {
+    console.log('Fetching image for base64 conversion:', imageUrl.slice(0, 80));
+    
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; MemoryBot/1.0)',
+      },
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to fetch image:', response.status);
+      return null;
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    
+    // Convert to base64
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    const base64 = btoa(binary);
+    
+    console.log(`Image converted to base64: ${base64.length} chars, type: ${contentType}`);
+    return `data:${contentType};base64,${base64}`;
+  } catch (error) {
+    console.error('Error converting image to base64:', error);
+    return null;
+  }
+}
+
+// Create memory with optional image using LIAM API
+async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<boolean> {
   try {
     console.log('Creating memory with LIAM API...');
     console.log('Content preview:', content.slice(0, 150));
+    console.log('Has image:', !!imageBase64);
     
     // Import the private key for signing
     const privateKeyPem = apiKeys.private_key;
     const privateKey = await importPrivateKey(privateKeyPem);
+    
+    // Choose endpoint based on whether we have an image
+    const endpoint = imageBase64 ? '/memory/create-with-image' : '/memory/create';
     
     // Create the request body - MUST include userKey for LIAM API
     const requestBody: Record<string, string> = {
@@ -714,12 +764,17 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
       content,
       tag: 'INSTAGRAM',
     };
+    
+    // Add image if provided (for create-with-image endpoint)
+    if (imageBase64) {
+      requestBody.image = imageBase64;
+    }
 
     // Sign the request with proper DER format
     const signature = await signRequest(privateKey, requestBody);
     
     // Make request to LIAM API using working proxy
-    const response = await fetch(`${LIAM_API_BASE}/memory/create`, {
+    const response = await fetch(`${LIAM_API_BASE}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -736,7 +791,7 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
     }
 
     const result = await response.json();
-    console.log('Memory created successfully:', result?.memoryId || 'ID not returned');
+    console.log('Memory created successfully:', result?.memoryId || result?.processId || 'ID not returned');
     return true;
   } catch (error) {
     console.error('Create memory error:', error);

@@ -127,6 +127,23 @@ function parseTags(memory: Memory): string[] {
   return tags.slice(0, 3);
 }
 
+// Get the display image URL - prioritizes LIAM-stored base64, falls back to URL parsing
+function getDisplayImage(memory: Memory): string | null {
+  // Priority 1: LIAM-stored base64 image (permanent, from create-with-image endpoint)
+  if (memory.imageDataBase64) {
+    // If it's already a data URL, return as-is
+    if (memory.imageDataBase64.startsWith('data:')) {
+      return memory.imageDataBase64;
+    }
+    // Otherwise, construct data URL with mime type
+    const mimeType = memory.imageMimeType || 'image/jpeg';
+    return `data:${mimeType};base64,${memory.imageDataBase64}`;
+  }
+  
+  // Priority 2: Parse [media:URL] from content (legacy/fallback for CDN URLs)
+  return parseMediaUrl(memory.content);
+}
+
 // Parse media URL from memory content
 // Supports both new [media:url] format and legacy plain-text formats
 function parseMediaUrl(content: string): string | null {
@@ -225,12 +242,14 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
   const tags = parseTags(memory);
   const isSynced = true;
 
-  // Check if this is an Instagram memory and parse embedded media
+  // Check if this is an Instagram memory
   const isInstagramMemory = 
     memory.tag?.toLowerCase() === 'instagram' || 
     memory.content.toLowerCase().startsWith('instagram') ||
     memory.content.toLowerCase().includes('instagram post');
-  const mediaUrl = isInstagramMemory ? parseMediaUrl(memory.content) : null;
+  
+  // Get display image - prioritizes LIAM-stored base64 over URL parsing
+  const displayImage = isInstagramMemory ? getDisplayImage(memory) : null;
   const displayContent = isInstagramMemory 
     ? cleanContentForDisplay(memory.content) 
     : memory.content;
@@ -270,11 +289,11 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
         </div>
       </div>
       
-      {/* Instagram media image */}
-      {mediaUrl && (
+      {/* Instagram media image - uses LIAM-stored base64 or fallback CDN URL */}
+      {displayImage && (
         <div className="overflow-hidden">
           <img 
-            src={mediaUrl} 
+            src={displayImage} 
             alt="Instagram post" 
             className="w-full h-40 object-cover"
             loading="lazy"
