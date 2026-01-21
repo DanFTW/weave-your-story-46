@@ -1,15 +1,8 @@
 import { useState } from "react";
-import { Image, MessageCircle, Heart, Clock, Loader2, Zap } from "lucide-react";
+import { Image, MessageCircle, Heart, Loader2, Zap, Info } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
 import { InstagramAutomationConfig, InstagramAutomationUpdatePayload } from "@/types/instagramAutomation";
 
 interface AutomationConfigProps {
@@ -29,18 +22,11 @@ export function AutomationConfig({
     monitorNewPosts: config.monitorNewPosts,
     monitorComments: config.monitorComments,
     monitorLikes: config.monitorLikes,
-    pollIntervalMinutes: config.pollIntervalMinutes,
   });
 
   const handleToggle = async (key: keyof typeof localConfig, value: boolean) => {
     setLocalConfig(prev => ({ ...prev, [key]: value }));
     await onUpdateConfig({ [key]: value });
-  };
-
-  const handleIntervalChange = async (value: string) => {
-    const minutes = parseInt(value);
-    setLocalConfig(prev => ({ ...prev, pollIntervalMinutes: minutes }));
-    await onUpdateConfig({ pollIntervalMinutes: minutes });
   };
 
   const hasAnyMonitoring = localConfig.monitorNewPosts || localConfig.monitorComments || localConfig.monitorLikes;
@@ -116,32 +102,19 @@ export function AutomationConfig({
         </div>
       </Card>
 
-      {/* Poll frequency */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-            <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+      {/* Automatic sync info */}
+      <Card className="p-4 bg-primary/5 border-primary/20">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Info className="w-4 h-4 text-primary" />
           </div>
-          <div className="flex-1">
-            <p className="font-medium text-foreground">Check Frequency</p>
-            <p className="text-sm text-muted-foreground">How often to check for new activity</p>
+          <div>
+            <p className="font-medium text-foreground text-sm">Automatic Sync</p>
+            <p className="text-sm text-muted-foreground">
+              Once activated, we'll automatically check your Instagram every 5 minutes and create memories for new activity. No manual action needed!
+            </p>
           </div>
         </div>
-        
-        <Select
-          value={localConfig.pollIntervalMinutes.toString()}
-          onValueChange={handleIntervalChange}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="15">Every 15 minutes</SelectItem>
-            <SelectItem value="30">Every 30 minutes</SelectItem>
-            <SelectItem value="60">Every hour</SelectItem>
-            <SelectItem value="120">Every 2 hours</SelectItem>
-          </SelectContent>
-        </Select>
       </Card>
 
       {/* Warning if nothing selected */}
@@ -165,7 +138,7 @@ export function AutomationConfig({
         ) : (
           <>
             <Zap className="w-5 h-5 mr-2" />
-            Activate Monitoring
+            Start Monitoring
           </>
         )}
       </Button>
