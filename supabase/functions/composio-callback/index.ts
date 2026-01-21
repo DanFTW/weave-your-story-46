@@ -44,6 +44,55 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "whatsappbusiness": "whatsapp",
 };
 
+// Fetch Instagram user profile using Composio tool execution API
+async function fetchInstagramProfile(connectionId: string): Promise<{
+  username: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Instagram profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_INFO",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Instagram profile response status=${response.status}`);
+    console.log(`composio-callback: Instagram profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Instagram profile");
+      return { username: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - structure may vary, try multiple paths
+    const userData = data.data || data.response_data || data;
+    
+    return {
+      username: userData.username || null,
+      name: userData.name || userData.username || null,
+      avatarUrl: userData.profile_picture_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Instagram profile:", error);
+    return { username: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -173,6 +222,23 @@ serve(async (req) => {
     }
 
     console.log(`composio-callback: Final account info - email=${accountEmail}, name=${accountName}, toolkit=${toolkit}`);
+
+    // For Instagram, fetch user profile via Composio API (Instagram OAuth doesn't include profile data)
+    if (toolkit === "instagram") {
+      console.log("composio-callback: Fetching Instagram profile info...");
+      const profileInfo = await fetchInstagramProfile(connectionId);
+      
+      // Use profile info (Instagram doesn't provide email, use username instead)
+      if (profileInfo.username) {
+        accountName = profileInfo.name || profileInfo.username;
+        accountEmail = `@${profileInfo.username}`;  // Display as @username
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Instagram profile - name=${accountName}, username=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
     const { data: savedData, error: dbError } = await supabase
