@@ -98,6 +98,78 @@ export type Database = {
         }
         Relationships: []
       }
+      instagram_automation_config: {
+        Row: {
+          comments_tracked: number | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_polled_at: string | null
+          likes_tracked: number | null
+          monitor_comments: boolean | null
+          monitor_likes: boolean | null
+          monitor_new_posts: boolean | null
+          poll_interval_minutes: number | null
+          posts_tracked: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          comments_tracked?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          likes_tracked?: number | null
+          monitor_comments?: boolean | null
+          monitor_likes?: boolean | null
+          monitor_new_posts?: boolean | null
+          poll_interval_minutes?: number | null
+          posts_tracked?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          comments_tracked?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          likes_tracked?: number | null
+          monitor_comments?: boolean | null
+          monitor_likes?: boolean | null
+          monitor_new_posts?: boolean | null
+          poll_interval_minutes?: number | null
+          posts_tracked?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      instagram_processed_engagement: {
+        Row: {
+          engagement_type: string
+          id: string
+          instagram_item_id: string
+          processed_at: string | null
+          user_id: string
+        }
+        Insert: {
+          engagement_type: string
+          id?: string
+          instagram_item_id: string
+          processed_at?: string | null
+          user_id: string
+        }
+        Update: {
+          engagement_type?: string
+          id?: string
+          instagram_item_id?: string
+          processed_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       instagram_sync_config: {
         Row: {
           created_at: string

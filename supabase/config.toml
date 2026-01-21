@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.instagram-sync]
 verify_jwt = false
+
+[functions.instagram-automation-poll]
+verify_jwt = false
