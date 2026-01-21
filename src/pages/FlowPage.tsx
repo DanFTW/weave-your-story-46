@@ -47,6 +47,9 @@ import { InstagramAutomationFlow } from "@/components/flows/instagram-automation
 // Twitter Sync components
 import { TwitterSyncFlow } from "@/components/flows/twitter-sync";
 
+// Twitter Automation components
+import { TwitterAutomationFlow } from "@/components/flows/twitter-automation";
+
 // YouTube Sync components
 import { YouTubeSyncFlow } from "@/components/flows/youtube-sync";
 
@@ -198,6 +201,12 @@ export default function FlowPage() {
   
   if (config.isTwitterSyncFlow) {
     return <TwitterSyncFlow />;
+  }
+
+  // === TWITTER AUTOMATION FLOW RENDER ===
+  
+  if (config.isTwitterAutomationFlow) {
+    return <TwitterAutomationFlow />;
   }
 
   // === YOUTUBE SYNC FLOW RENDER ===

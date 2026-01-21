@@ -2,6 +2,19 @@ import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare,
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "twitter-live": {
+    id: "twitter-live",
+    title: "Twitter Live",
+    subtitle: "Real-time Twitter monitoring",
+    description: "Automatically save new tweets, replies, retweets, and likes as memories.",
+    gradient: "blue",
+    icon: Zap,
+    entryName: "activity",
+    entryNamePlural: "activities",
+    memoryTag: "TWITTER",
+    fields: [],
+    isTwitterAutomationFlow: true,
+  },
   "instagram-live": {
     id: "instagram-live",
     title: "Instagram Live",

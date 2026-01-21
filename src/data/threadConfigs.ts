@@ -2,6 +2,38 @@ import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, W
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "twitter-live": {
+    id: "twitter-live",
+    title: "Twitter Live",
+    subtitle: "Real-time social memories",
+    description: "Automatically capture new tweets, replies, retweets, and likes on your Twitter account as memories without manual syncing.",
+    gradient: "blue",
+    icon: Zap,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Twitter",
+        description: "Authorize access to your account",
+        iconUrl: "https://abs.twimg.com/responsive-web/client-web/icon-ios.b1fc7279.png",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Configure Monitoring",
+        description: "Choose tweets, replies, retweets, likes",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Memories created automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "instagram-live": {
     id: "instagram-live",
     title: "Instagram Live",
