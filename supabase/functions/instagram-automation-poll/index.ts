@@ -130,45 +130,159 @@ async function getConnectedAccountId(supabase: any, userId: string): Promise<str
   return data?.composio_connection_id || null;
 }
 
-async function fetchInstagramPosts(connectedAccountId: string, limit = 25): Promise<InstagramPost[]> {
-  const response = await fetch("https://backend.composio.dev/api/v2/actions/INSTAGRAM_GET_USER_MEDIA/execute", {
+// Get Instagram User ID (required for media API calls)
+async function getInstagramUserId(connectionId: string): Promise<string | null> {
+  try {
+    console.log("Fetching Instagram user ID...");
+    
+    const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_INFO", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": COMPOSIO_API_KEY,
+      },
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: {},
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log("Instagram user info response status:", response.status);
+
+    if (!response.ok) {
+      console.error("Composio API error getting user info:", response.status, responseText);
+      return null;
+    }
+
+    const data = JSON.parse(responseText);
+    const responseData = data.data || data;
+    const userId = responseData?.id || 
+                   responseData?.response_data?.id || 
+                   responseData?.user?.id ||
+                   responseData?.ig_user_id;
+    
+    console.log("Found Instagram user ID:", userId);
+    return userId || null;
+  } catch (error) {
+    console.error("Error getting Instagram user ID:", error);
+    return null;
+  }
+}
+
+async function fetchInstagramPosts(connectedAccountId: string, igUserId: string | null, limit = 25): Promise<InstagramPost[]> {
+  console.log(`Fetching Instagram posts, igUserId: ${igUserId}, limit: ${limit}`);
+  
+  const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_MEDIA", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": COMPOSIO_API_KEY,
     },
     body: JSON.stringify({
-      connectedAccountId,
-      input: {},
+      connected_account_id: connectedAccountId,
+      arguments: {
+        ...(igUserId && { ig_user_id: igUserId }),
+        limit,
+      },
     }),
   });
 
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Composio API error fetching posts:", response.status, errorText);
     throw new Error(`Failed to fetch posts: ${response.statusText}`);
   }
 
-  const result = await response.json();
-  const posts = result?.response_data?.data || result?.data?.data || [];
-  return posts.slice(0, limit);
+  const data = await response.json();
+  const responseData = data.data || data;
+  
+  let mediaData = responseData?.response_data?.data ||
+                  responseData?.response_data ||
+                  responseData?.data ||
+                  responseData?.media?.data ||
+                  responseData;
+  
+  if (mediaData && typeof mediaData === "object" && !Array.isArray(mediaData)) {
+    mediaData = mediaData.data || mediaData.media || [];
+  }
+  
+  if (!Array.isArray(mediaData)) {
+    console.log("Media data is not an array");
+    return [];
+  }
+  
+  console.log(`Found ${mediaData.length} Instagram posts`);
+  
+  return mediaData.slice(0, limit).map((item: any) => ({
+    id: item.id,
+    caption: item.caption,
+    media_type: item.media_type || item.mediaType,
+    media_url: item.media_url || item.mediaUrl,
+    thumbnail_url: item.thumbnail_url || item.thumbnailUrl,
+    permalink: item.permalink || item.permalinkUrl,
+    timestamp: item.timestamp,
+    like_count: item.like_count || item.likesCount,
+    comments_count: item.comments_count || item.commentsCount,
+    children: item.children,
+  }));
 }
 
 async function fetchPostComments(connectedAccountId: string, postId: string): Promise<InstagramComment[]> {
-  const response = await fetch("https://backend.composio.dev/api/v2/actions/INSTAGRAM_GET_IG_MEDIA_COMMENTS/execute", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": COMPOSIO_API_KEY,
-    },
-    body: JSON.stringify({
-      connectedAccountId,
-      input: { ig_media_id: postId },
-    }),
-  });
+  try {
+    console.log(`Fetching comments for post ${postId}...`);
+    
+    const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_IG_MEDIA_COMMENTS", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": COMPOSIO_API_KEY,
+      },
+      body: JSON.stringify({
+        connected_account_id: connectedAccountId,
+        arguments: { 
+          ig_media_id: postId,
+          limit: 50,
+        },
+      }),
+    });
 
-  if (!response.ok) return [];
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Error fetching comments:", response.status, errorText);
+      return [];
+    }
 
-  const result = await response.json();
-  return result?.response_data?.data || result?.data?.data || [];
+    const data = await response.json();
+    const responseData = data?.data || data;
+    let commentsData = responseData?.response_data?.data ||
+                       responseData?.response_data?.comments?.data ||
+                       responseData?.data ||
+                       responseData?.comments?.data ||
+                       responseData?.comments ||
+                       responseData;
+
+    if (commentsData && typeof commentsData === "object" && !Array.isArray(commentsData)) {
+      commentsData = commentsData.data || [];
+    }
+
+    if (!Array.isArray(commentsData)) {
+      return [];
+    }
+
+    console.log(`Found ${commentsData.length} comments for post ${postId}`);
+    
+    return commentsData.map((c: any) => ({
+      id: c.id,
+      text: c.text,
+      timestamp: c.timestamp,
+      username: c.username,
+      from: c.from ? { id: c.from.id, username: c.from.username } : undefined,
+    }));
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    return [];
+  }
 }
 
 // === LIAM MEMORY API ===
@@ -229,7 +343,11 @@ async function processUserInstagram(
 
   // Fetch recent posts
   if (config.monitor_new_posts || config.monitor_comments || config.monitor_likes) {
-    const posts = await fetchInstagramPosts(connectedAccountId, 10);
+    // Get Instagram User ID first
+    const igUserId = await getInstagramUserId(connectedAccountId);
+    console.log(`Instagram User ID for user ${userId}: ${igUserId}`);
+    
+    const posts = await fetchInstagramPosts(connectedAccountId, igUserId, 10);
 
     for (const post of posts) {
       // Check if post already processed
