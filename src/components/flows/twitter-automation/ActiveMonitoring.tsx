@@ -1,6 +1,5 @@
-import { useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Wifi, PenLine, MessageSquare, Repeat2, Heart, Clock, Loader2, Pause } from "lucide-react";
+import { RefreshCw, PenLine, MessageSquare, Repeat2, Heart, Clock, Loader2, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,26 +18,6 @@ export function ActiveMonitoring({
   onPause,
   onCheckNow,
 }: ActiveMonitoringProps) {
-  const hasPolledOnMount = useRef(false);
-
-  // Auto-poll on mount and every 30 seconds while viewing
-  useEffect(() => {
-    // Initial poll when component mounts (if not already polling)
-    if (!hasPolledOnMount.current && !isPolling) {
-      hasPolledOnMount.current = true;
-      onCheckNow();
-    }
-
-    // Set up interval for subsequent polls
-    const interval = setInterval(() => {
-      if (!isPolling) {
-        onCheckNow();
-      }
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, [isPolling, onCheckNow]);
-
   const lastCheckedText = stats.lastChecked
     ? formatDistanceToNow(new Date(stats.lastChecked), { addSuffix: true })
     : "Never";
@@ -48,16 +27,16 @@ export function ActiveMonitoring({
       {/* Active Status Badge */}
       <div className="flex justify-center">
         <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 gap-2 px-4 py-2">
-          <Wifi className="w-4 h-4" />
-          Auto-Sync Active
+          <RefreshCw className="w-4 h-4" />
+          Background Sync Active
         </Badge>
       </div>
 
       {/* Status Card */}
       <Card className="p-4 bg-muted/50">
         <p className="text-sm text-muted-foreground text-center">
-          We're automatically checking your Twitter every 5 minutes and 
-          saving new activity as memories.
+          Your Twitter activity is automatically synced every few minutes 
+          and saved as memories in the background.
         </p>
       </Card>
 
@@ -105,10 +84,10 @@ export function ActiveMonitoring({
       <div className="space-y-2">
         <h3 className="font-medium text-sm">How It Works</h3>
         <ul className="text-sm text-muted-foreground space-y-1">
-          <li>• We check your Twitter account every 5 minutes</li>
+          <li>• Your Twitter is synced automatically every few minutes</li>
           <li>• New tweets, replies, retweets & likes become memories</li>
           <li>• Each item is only saved once (no duplicates)</li>
-          <li>• Pause anytime to stop automatic syncing</li>
+          <li>• Pause anytime to stop syncing</li>
         </ul>
       </div>
 
@@ -123,10 +102,13 @@ export function ActiveMonitoring({
           {isPolling ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Checking...
+              Syncing...
             </>
           ) : (
-            "Check Now"
+            <>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Sync Now
+            </>
           )}
         </Button>
 
@@ -136,7 +118,7 @@ export function ActiveMonitoring({
           className="w-full text-muted-foreground"
         >
           <Pause className="w-4 h-4 mr-2" />
-          Pause Monitoring
+          Pause Syncing
         </Button>
       </div>
     </div>

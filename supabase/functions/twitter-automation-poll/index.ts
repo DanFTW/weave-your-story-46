@@ -451,25 +451,57 @@ serve(async (req) => {
     if (action === 'cron-poll') {
       const cronSecret = req.headers.get('x-cron-secret');
       if (cronSecret !== CRON_SECRET) {
+        console.log('Cron poll: Invalid or missing secret');
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
+      console.log('Cron poll: Starting background sync for all active users...');
+
       // Get all active automation configs
-      const { data: activeConfigs } = await supabase
+      const { data: activeConfigs, error: configError } = await supabase
         .from('twitter_automation_config')
         .select('*')
         .eq('is_active', true);
 
-      const results = [];
-      for (const config of activeConfigs || []) {
-        const result = await processUserTwitter(supabase, config.user_id, config);
-        results.push({ userId: config.user_id, ...result });
+      if (configError) {
+        console.error('Cron poll: Error fetching configs:', configError);
+        return new Response(JSON.stringify({ error: 'Failed to fetch configs' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
-      return new Response(JSON.stringify({ success: true, results }), {
+      console.log(`Cron poll: Found ${activeConfigs?.length || 0} active users`);
+
+      const results = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const config of activeConfigs || []) {
+        try {
+          console.log(`Cron poll: Processing user ${config.user_id}...`);
+          const result = await processUserTwitter(supabase, config.user_id, config);
+          results.push({ userId: config.user_id, ...result });
+          if (result.newItems > 0) {
+            console.log(`Cron poll: User ${config.user_id} - ${result.newItems} new items saved`);
+          }
+          successCount++;
+        } catch (err) {
+          console.error(`Cron poll: Error processing user ${config.user_id}:`, err);
+          errorCount++;
+        }
+      }
+
+      console.log(`Cron poll: Complete. Success: ${successCount}, Errors: ${errorCount}`);
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        results,
+        summary: { usersProcessed: successCount, errors: errorCount }
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
