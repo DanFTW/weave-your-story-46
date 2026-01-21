@@ -187,53 +187,8 @@ async function fetchDropboxProfile(accessToken: string): Promise<{
   }
 }
 
-// Fetch Microsoft Teams user profile via Composio API tool execution
-async function fetchTeamsProfile(connectionId: string): Promise<{
-  email: string | null;
-  name: string | null;
-  avatarUrl: string | null;
-}> {
-  try {
-    console.log("composio-callback: Fetching Teams profile via Composio API...");
-    
-    const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/MICROSOFT_TEAMS_GET_MY_PROFILE",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
-      }
-    );
-
-    const responseText = await response.text();
-    console.log(`composio-callback: Teams profile response status=${response.status}`);
-    console.log(`composio-callback: Teams profile response=${responseText.slice(0, 500)}`);
-
-    if (!response.ok) {
-      console.error("composio-callback: Failed to fetch Teams profile");
-      return { email: null, name: null, avatarUrl: null };
-    }
-
-    const data = JSON.parse(responseText);
-    const userData = data.data || data.response_data || data;
-    
-    // MICROSOFT_TEAMS_GET_MY_PROFILE returns: id, userPrincipalName (UPN), mail, displayName
-    return {
-      email: userData.mail || userData.userPrincipalName || null,
-      name: userData.displayName || null,
-      avatarUrl: null, // Teams profile doesn't include avatar in this tool
-    };
-  } catch (error) {
-    console.error("composio-callback: Error fetching Teams profile:", error);
-    return { email: null, name: null, avatarUrl: null };
-  }
-}
+// Note: Microsoft Teams profile fetching uses fetchOutlookProfile
+// since both services share the same Microsoft Graph API identity system
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -434,22 +389,31 @@ serve(async (req) => {
       }
     }
 
-    // For Microsoft Teams, fetch user profile via Composio API
+    // For Microsoft Teams, fetch user profile via Microsoft Graph API (same as Outlook)
     if (toolkit === "teams") {
-      console.log("composio-callback: Fetching Teams profile info...");
-      const profileInfo = await fetchTeamsProfile(connectionId);
+      console.log("composio-callback: Fetching Teams profile info via MS Graph...");
       
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
-      }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
-      }
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
       
-      console.log(`composio-callback: Teams profile - name=${accountName}, email=${accountEmail}`);
+      if (accessToken) {
+        // Reuse fetchOutlookProfile - Teams uses the same Microsoft Graph API
+        const profileInfo = await fetchOutlookProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Teams profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for Teams connection");
+      }
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
