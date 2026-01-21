@@ -231,9 +231,20 @@ function extractComponents(fragments: Memory[]): {
 function mergeFragments(fragments: Memory[]): Memory {
   const fragmentIds = fragments.map(f => f.id);
   
+  // Sort by index suffix for consistent ordering
+  const sortedFragments = [...fragments].sort((a, b) => {
+    const aIndex = parseInt(a.id.split(':').pop() || '0');
+    const bIndex = parseInt(b.id.split(':').pop() || '0');
+    return aIndex - bIndex;
+  });
+  const base = sortedFragments[0];
+  
+  // For single-item groups that are already consolidated, just ensure proper tagging
   if (fragments.length === 1 && isConsolidated(fragments[0].content)) {
     return {
       ...fragments[0],
+      tag: fragments[0].tag || 'INSTAGRAM',
+      category: fragments[0].category || 'instagram',
       _fragmentIds: fragmentIds,
     };
   }
@@ -256,14 +267,6 @@ function mergeFragments(fragments: Memory[]): Memory {
   if (mediaUrl) content += `[media:${mediaUrl}]`;
   if (permalink) content += `\n[link:${permalink}]`;
 
-  // Use earliest fragment as base (sort by index suffix for consistent ordering)
-  const sortedFragments = [...fragments].sort((a, b) => {
-    const aIndex = parseInt(a.id.split(':').pop() || '0');
-    const bIndex = parseInt(b.id.split(':').pop() || '0');
-    return aIndex - bIndex;
-  });
-  const base = sortedFragments[0];
-
   return {
     ...base,
     content: content.trim(),
@@ -278,41 +281,45 @@ function mergeFragments(fragments: Memory[]): Memory {
  * Groups fragments by TRANSACTION ID PREFIX for reliable matching.
  */
 export function consolidateInstagramMemories(memories: Memory[]): Memory[] {
-  const fragments: Memory[] = [];
-  const complete: Memory[] = [];
-  const others: Memory[] = [];
+  const instagramMemories: Memory[] = [];
+  const otherMemories: Memory[] = [];
 
-  // Step 1: Categorize memories
+  // Step 1: Separate Instagram memories from all others
+  // ALL Instagram-related memories go into the same bucket (no split between complete/fragments)
   for (const memory of memories) {
-    if (isConsolidated(memory.content)) {
-      complete.push(memory);
-    } else if (isInstagramFragment(memory.content) || isLikelyInstagramByContext(memory)) {
-      fragments.push(memory);
+    const isInstagram = 
+      isConsolidated(memory.content) ||
+      isInstagramFragment(memory.content) || 
+      isLikelyInstagramByContext(memory);
+    
+    if (isInstagram) {
+      instagramMemories.push(memory);
     } else {
-      others.push(memory);
+      otherMemories.push(memory);
     }
   }
 
-  if (fragments.length === 0) {
+  if (instagramMemories.length === 0) {
     return memories;
   }
 
-  // Step 2: Group fragments by TRANSACTION ID PREFIX (deterministic grouping)
+  // Step 2: Group ALL Instagram memories by transaction prefix
+  // This prevents duplicates - each prefix = one original memory
   const txnGroups = new Map<string, Memory[]>();
 
-  for (const fragment of fragments) {
-    const prefix = getTransactionPrefix(fragment.id);
+  for (const memory of instagramMemories) {
+    const prefix = getTransactionPrefix(memory.id);
     const group = txnGroups.get(prefix) || [];
-    group.push(fragment);
+    group.push(memory);
     txnGroups.set(prefix, group);
   }
 
-  // Step 3: Merge each transaction group into unified memories
+  // Step 3: Merge each group (even single-item groups get processed for consistency)
   const consolidated: Memory[] = [];
   for (const [, group] of txnGroups) {
     consolidated.push(mergeFragments(group));
   }
 
-  // Return: already-complete + newly-consolidated + non-Instagram
-  return [...complete, ...consolidated, ...others];
+  // Return: consolidated Instagram memories + non-Instagram memories
+  return [...consolidated, ...otherMemories];
 }
