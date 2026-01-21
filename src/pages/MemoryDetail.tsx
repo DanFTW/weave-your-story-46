@@ -9,6 +9,7 @@ import { getTagById } from "@/data/tagConfig";
 import { TagSelectionSheet } from "@/components/memories/TagSelectionSheet";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
+import { consolidateInstagramMemories } from "@/utils/consolidateInstagramMemories";
 
 // Parse email content into structured parts
 function parseEmailContent(content: string): {
@@ -126,9 +127,21 @@ export default function MemoryDetail() {
         return;
       }
 
-      const memories = await listMemories();
-      if (memories) {
-        const found = memories.find((m) => m.id === memoryId);
+      const rawMemories = await listMemories();
+      if (rawMemories) {
+        // Apply consolidation to get the same view as the Memories page
+        const consolidatedMemories = consolidateInstagramMemories(rawMemories);
+        
+        // First, try direct ID match
+        let found = consolidatedMemories.find((m) => m.id === memoryId);
+        
+        // If not found, check if memoryId was a fragment that got merged
+        if (!found) {
+          found = consolidatedMemories.find((m) => 
+            m._fragmentIds?.includes(memoryId!)
+          );
+        }
+        
         if (found) {
           setMemory(found);
         } else {
