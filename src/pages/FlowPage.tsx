@@ -41,6 +41,9 @@ import { GooglePhotosSyncFlow } from "@/components/flows/google-photos-sync";
 // Instagram Sync components
 import { InstagramSyncFlow } from "@/components/flows/instagram-sync";
 
+// Instagram Automation components
+import { InstagramAutomationFlow } from "@/components/flows/instagram-automation";
+
 // Twitter Sync components
 import { TwitterSyncFlow } from "@/components/flows/twitter-sync";
 
@@ -183,6 +186,12 @@ export default function FlowPage() {
   
   if (config.isInstagramSyncFlow) {
     return <InstagramSyncFlow />;
+  }
+
+  // === INSTAGRAM AUTOMATION FLOW RENDER ===
+  
+  if (config.isInstagramAutomationFlow) {
+    return <InstagramAutomationFlow />;
   }
 
   // === TWITTER SYNC FLOW RENDER ===

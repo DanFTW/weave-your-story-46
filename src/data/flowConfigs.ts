@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "instagram-live": {
+    id: "instagram-live",
+    title: "Instagram Live",
+    subtitle: "Real-time Instagram monitoring",
+    description: "Automatically save new posts, comments, and likes as memories.",
+    gradient: "pink",
+    icon: Zap,
+    entryName: "activity",
+    entryNamePlural: "activities",
+    memoryTag: "INSTAGRAM",
+    fields: [],
+    isInstagramAutomationFlow: true,
+  },
   "youtube-sync": {
     id: "youtube-sync",
     title: "YouTube Sync",

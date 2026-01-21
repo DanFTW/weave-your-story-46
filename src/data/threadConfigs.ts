@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "instagram-live": {
+    id: "instagram-live",
+    title: "Instagram Live",
+    subtitle: "Real-time social memories",
+    description: "Automatically capture new posts, comments, and likes on your Instagram account as memories without manual syncing.",
+    gradient: "pink",
+    icon: Zap,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Instagram",
+        description: "Authorize access to your account",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Configure Monitoring",
+        description: "Choose posts, comments, and likes",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Memories created automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "youtube-sync": {
     id: "youtube-sync",
     title: "YouTube Dump",

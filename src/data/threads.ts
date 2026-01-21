@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "instagram-live",
+    title: "Instagram Live",
+    description: "Automatically save new posts, comments, and likes as they happen",
+    icon: Zap,
+    gradient: "pink",
+    status: "active",
+    type: "automation",
+    category: "social",
+  },
   {
     id: "youtube-sync",
     title: "YouTube Dump",
