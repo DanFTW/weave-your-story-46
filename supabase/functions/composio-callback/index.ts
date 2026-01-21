@@ -96,81 +96,43 @@ async function fetchInstagramProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Outlook user profile using Composio tool execution API
-async function fetchOutlookProfile(connectionId: string): Promise<{
+// Fetch Outlook user profile via Microsoft Graph API directly
+async function fetchOutlookProfile(accessToken: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Outlook profile via Composio API...");
+    console.log("composio-callback: Fetching Outlook profile via Microsoft Graph API...");
     
-    // Try OUTLOOK_GET_USER_PROFILE first (Microsoft Graph /me endpoint)
+    // Call Microsoft Graph /me endpoint directly with the OAuth access token
     const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/OUTLOOK_GET_USER_PROFILE",
+      "https://graph.microsoft.com/v1.0/me",
       {
-        method: "POST",
+        method: "GET",
         headers: {
+          "Authorization": `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
         },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
       }
     );
 
     const responseText = await response.text();
-    console.log(`composio-callback: Outlook profile response status=${response.status}`);
-    console.log(`composio-callback: Outlook profile response=${responseText.slice(0, 1000)}`);
+    console.log(`composio-callback: Microsoft Graph /me response status=${response.status}`);
+    console.log(`composio-callback: Microsoft Graph /me response=${responseText.slice(0, 500)}`);
 
     if (!response.ok) {
-      console.error("composio-callback: Failed to fetch Outlook profile, trying fallback...");
-      
-      // Fallback: Try OUTLOOK_GET_ME which might be an alternative tool name
-      const fallbackResponse = await fetch(
-        "https://backend.composio.dev/api/v3/tools/execute/OUTLOOK_GET_ME",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": COMPOSIO_API_KEY!,
-          },
-          body: JSON.stringify({
-            connected_account_id: connectionId,
-            arguments: {},
-          }),
-        }
-      );
-      
-      const fallbackText = await fallbackResponse.text();
-      console.log(`composio-callback: Outlook fallback response status=${fallbackResponse.status}`);
-      console.log(`composio-callback: Outlook fallback response=${fallbackText.slice(0, 1000)}`);
-      
-      if (!fallbackResponse.ok) {
-        return { email: null, name: null, avatarUrl: null };
-      }
-      
-      const fallbackData = JSON.parse(fallbackText);
-      const userData = fallbackData.data || fallbackData.response_data || fallbackData;
-      
-      return {
-        email: userData.mail || userData.userPrincipalName || userData.email || null,
-        name: userData.displayName || userData.givenName || null,
-        avatarUrl: null, // Microsoft Graph photo requires separate call
-      };
+      console.error("composio-callback: Failed to fetch Outlook profile from Microsoft Graph");
+      return { email: null, name: null, avatarUrl: null };
     }
 
-    const data = JSON.parse(responseText);
+    const userData = JSON.parse(responseText);
     
-    // Parse response - Microsoft Graph user object structure
-    const userData = data.data || data.response_data || data;
-    
+    // Microsoft Graph /me returns: displayName, mail, userPrincipalName, id, etc.
     return {
-      email: userData.mail || userData.userPrincipalName || userData.email || null,
+      email: userData.mail || userData.userPrincipalName || null,
       name: userData.displayName || userData.givenName || null,
-      avatarUrl: null, // Microsoft Graph photo requires separate call
+      avatarUrl: null, // MS Graph photo requires separate blob handling
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Outlook profile:", error);
@@ -325,23 +287,30 @@ serve(async (req) => {
       console.log(`composio-callback: Instagram profile - name=${accountName}, username=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
-    // For Outlook, fetch user profile via Composio API
+    // For Outlook, fetch user profile via Microsoft Graph API directly
     if (toolkit === "outlook") {
       console.log("composio-callback: Fetching Outlook profile info...");
-      const profileInfo = await fetchOutlookProfile(connectionId);
       
-      // Use profile info from Microsoft Graph
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
-      }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
-      }
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
       
-      console.log(`composio-callback: Outlook profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      if (accessToken) {
+        const profileInfo = await fetchOutlookProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Outlook profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for Outlook connection");
+      }
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
