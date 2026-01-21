@@ -15,6 +15,7 @@ import whatsappIcon from "@/assets/integrations/whatsapp.svg";
 import outlookIcon from "@/assets/integrations/outlook.svg";
 import teamsIcon from "@/assets/integrations/teams.svg";
 import excelIcon from "@/assets/integrations/excel.svg";
+import linkedinIcon from "@/assets/integrations/linkedin.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -37,6 +38,7 @@ const iconImages: Record<string, string> = {
   outlook: outlookIcon,
   teams: teamsIcon,
   excel: excelIcon,
+  linkedin: linkedinIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
