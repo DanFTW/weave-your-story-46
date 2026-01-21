@@ -140,6 +140,50 @@ async function fetchOutlookProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Dropbox user profile via Dropbox API directly
+async function fetchDropboxProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Dropbox profile via Dropbox API...");
+    
+    // Call Dropbox /2/users/get_current_account endpoint
+    const response = await fetch(
+      "https://api.dropboxapi.com/2/users/get_current_account",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: null, // Dropbox requires POST with empty body
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Dropbox API response status=${response.status}`);
+    console.log(`composio-callback: Dropbox API response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Dropbox profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = JSON.parse(responseText);
+    
+    // Dropbox returns: email, name.display_name, profile_photo_url
+    return {
+      email: userData.email || null,
+      name: userData.name?.display_name || userData.name?.given_name || null,
+      avatarUrl: userData.profile_photo_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Dropbox profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -310,6 +354,32 @@ serve(async (req) => {
         console.log(`composio-callback: Outlook profile - name=${accountName}, email=${accountEmail}`);
       } else {
         console.log("composio-callback: No access_token found for Outlook connection");
+      }
+    }
+
+    // For Dropbox, fetch user profile via Dropbox API directly
+    if (toolkit === "dropbox") {
+      console.log("composio-callback: Fetching Dropbox profile info...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchDropboxProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Dropbox profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Dropbox connection");
       }
     }
 
