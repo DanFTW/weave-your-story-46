@@ -58,6 +58,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "whatsapp",
         status: "unconfigured",
       },
+      {
+        id: "outlook",
+        name: "Outlook",
+        icon: "outlook",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -200,6 +206,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#25D366",    // WhatsApp green
       secondary: "#128C7E",  // WhatsApp teal
       tertiary: "#075E54",   // WhatsApp dark teal
+    },
+  },
+  "outlook": {
+    id: "outlook",
+    name: "Outlook",
+    icon: "outlook",
+    status: "unconfigured",
+    description: "Outlook allows Weave to read and manage your emails, calendar events, and contacts. Create memories from important correspondence and stay organized.",
+    capabilities: ["Read email", "Manage calendar", "Access contacts", "Send email"],
+    gradientColors: {
+      primary: "#0078D4",    // Microsoft blue
+      secondary: "#106EBE",  // Darker blue
+      tertiary: "#005A9E",   // Deep blue
     },
   },
 };

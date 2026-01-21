@@ -42,6 +42,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "whatsapp": "whatsapp",
   "whatsapp_business": "whatsapp",
   "whatsappbusiness": "whatsapp",
+  "outlook": "outlook",
+  "microsoft_outlook": "outlook",
+  "outlookmail": "outlook",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
