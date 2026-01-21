@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.instagram-automation-poll]
 verify_jwt = false
+
+[functions.twitter-automation-poll]
+verify_jwt = false

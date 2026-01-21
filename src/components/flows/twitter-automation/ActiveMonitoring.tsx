@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Wifi, PenLine, MessageSquare, Repeat2, Heart, Clock, Loader2, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,26 @@ export function ActiveMonitoring({
   onPause,
   onCheckNow,
 }: ActiveMonitoringProps) {
+  const hasPolledOnMount = useRef(false);
+
+  // Auto-poll on mount and every 30 seconds while viewing
+  useEffect(() => {
+    // Initial poll when component mounts (if not already polling)
+    if (!hasPolledOnMount.current && !isPolling) {
+      hasPolledOnMount.current = true;
+      onCheckNow();
+    }
+
+    // Set up interval for subsequent polls
+    const interval = setInterval(() => {
+      if (!isPolling) {
+        onCheckNow();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [isPolling, onCheckNow]);
+
   const lastCheckedText = stats.lastChecked
     ? formatDistanceToNow(new Date(stats.lastChecked), { addSuffix: true })
     : "Never";
