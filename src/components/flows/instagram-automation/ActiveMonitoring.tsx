@@ -1,4 +1,4 @@
-import { Image, MessageCircle, Heart, Clock, Pause, RefreshCw, Loader2, CheckCircle } from "lucide-react";
+import { Image, MessageCircle, Heart, Clock, Pause, RefreshCw, Loader2, CheckCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { InstagramEngagementStats } from "@/types/instagramAutomation";
@@ -28,10 +28,25 @@ export function ActiveMonitoring({
         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           <span className="text-sm font-medium text-green-700 dark:text-green-400">
-            Monitoring Active
+            Auto-Sync Active
           </span>
         </div>
       </div>
+
+      {/* Auto-sync info card */}
+      <Card className="p-4 bg-primary/5 border-primary/20">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+            <Zap className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="font-medium text-foreground">Automatically Syncing</p>
+            <p className="text-sm text-muted-foreground">
+              Memories are created automatically every 5 minutes when new activity is detected
+            </p>
+          </div>
+        </div>
+      </Card>
 
       {/* Stats cards */}
       <div className="grid grid-cols-3 gap-3">
@@ -67,14 +82,14 @@ export function ActiveMonitoring({
             <Clock className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="flex-1">
-            <p className="font-medium text-foreground">Last Checked</p>
+            <p className="font-medium text-foreground">Last Synced</p>
             <p className="text-sm text-muted-foreground">{lastCheckedText}</p>
           </div>
           <CheckCircle className="w-5 h-5 text-green-500" />
         </div>
       </Card>
 
-      {/* Recent activity placeholder */}
+      {/* How it works */}
       <Card className="p-4">
         <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
           How It Works
@@ -82,7 +97,7 @@ export function ActiveMonitoring({
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <span className="text-primary">•</span>
-            We check your Instagram for new activity at your set interval
+            We automatically check your Instagram every 5 minutes
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary">•</span>
