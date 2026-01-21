@@ -157,11 +157,16 @@ function cleanContentForDisplay(content: string): string {
     // Remove new-format tags
     .replace(/\[media:[^\]]+\]/g, '')
     .replace(/\[link:[^\]]+\]/g, '')
-    // Remove legacy URL lines
+    // Remove legacy fragment patterns
     .replace(/Instagram post link:\s*['"]?https?:\/\/[^\s'"]+['"]?\s*/gi, '')
     .replace(/Instagram post media link:\s*['"]?https?:\/\/[^\s'"]+['"]?\s*/gi, '')
+    .replace(/Instagram post media:\s*https?:\/\/[^\s]+\s*/gi, '')
+    .replace(/Instagram post content:\s*/gi, '')
     // Remove standalone CDN URLs
     .replace(/https:\/\/scontent[^\s]+\s*/g, '')
+    // Remove header lines (already rendered in card UI)
+    .replace(/^Instagram Post(?:\s+by\s+@\w+)?\s*\n?/i, '')
+    .replace(/^Posted on\s+.+?\n\n/i, '')
     // Clean up extra whitespace and newlines
     .replace(/\n{3,}/g, '\n\n')
     .trim();

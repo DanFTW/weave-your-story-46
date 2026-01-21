@@ -3,6 +3,7 @@ import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { Memory, GroupedMemories } from "@/types/memory";
 import { MemoryDateGroup } from "./MemoryDateGroup";
 import { Loader2 } from "lucide-react";
+import { consolidateInstagramMemories } from "@/utils/consolidateInstagramMemories";
 
 interface MemoryListProps {
   memories: Memory[];
@@ -59,11 +60,19 @@ function filterMemories(memories: Memory[], filter: string): Memory[] {
 }
 
 export function MemoryList({ memories, isLoading, activeFilter }: MemoryListProps) {
+  // Step 1: Consolidate Instagram fragments using stable shortcode identifier
+  const consolidatedMemories = useMemo(
+    () => consolidateInstagramMemories(memories),
+    [memories]
+  );
+
+  // Step 2: Apply filter
   const filteredMemories = useMemo(
-    () => filterMemories(memories, activeFilter),
-    [memories, activeFilter]
+    () => filterMemories(consolidatedMemories, activeFilter),
+    [consolidatedMemories, activeFilter]
   );
   
+  // Step 3: Group by date
   const groupedMemories = useMemo(
     () => groupMemoriesByDate(filteredMemories),
     [filteredMemories]
