@@ -364,6 +364,52 @@ async function fetchGoogleDocsProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch existing Google profile from other connected Google services (cross-integration lookup)
+// deno-lint-ignore no-explicit-any
+async function fetchExistingGoogleProfile(
+  supabaseClient: any,
+  userId: string
+): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Attempting cross-integration Google profile lookup...");
+    
+    // Query for any connected Google service with profile data
+    const { data, error } = await supabaseClient
+      .from("user_integrations")
+      .select("integration_id, account_email, account_name, account_avatar_url")
+      .eq("user_id", userId)
+      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube"])
+      .eq("status", "connected")
+      .not("account_email", "is", null)
+      .limit(1)
+      .maybeSingle();
+    
+    if (error) {
+      console.error("composio-callback: Cross-integration lookup error:", error);
+      return { email: null, name: null, avatarUrl: null };
+    }
+    
+    if (data) {
+      console.log(`composio-callback: Found Google profile from ${data.integration_id}`);
+      return {
+        email: data.account_email as string | null,
+        name: data.account_name as string | null,
+        avatarUrl: data.account_avatar_url as string | null,
+      };
+    }
+    
+    console.log("composio-callback: No existing Google profile found");
+    return { email: null, name: null, avatarUrl: null };
+  } catch (error) {
+    console.error("composio-callback: Cross-integration lookup exception:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 // Fetch Discord user profile via Discord API directly
 async function fetchDiscordProfile(accessToken: string): Promise<{
   email: string | null;
@@ -1495,11 +1541,18 @@ serve(async (req) => {
     }
 
     // For Google Tasks, fetch profile from Composio connection data (same pattern as Google Docs)
+    // If that fails due to missing scopes, fall back to cross-integration lookup
     if (toolkit === "googletasks") {
       console.log("composio-callback: Fetching Google Tasks profile via Composio API...");
       
-      // Reuse fetchGoogleDocsProfile - Google Tasks uses the same Google OAuth/userinfo pattern
-      const profileInfo = await fetchGoogleDocsProfile(connectionId);
+      // First try the standard Google userinfo approach
+      let profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      // If that fails (401 due to missing scopes), try cross-integration lookup
+      if (!profileInfo.email && !profileInfo.name) {
+        console.log("composio-callback: Google userinfo failed, trying cross-integration lookup...");
+        profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
+      }
       
       if (profileInfo.email) {
         accountEmail = profileInfo.email;
