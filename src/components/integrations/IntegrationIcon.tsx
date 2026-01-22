@@ -20,6 +20,7 @@ import discordIcon from "@/assets/integrations/discord.svg";
 import googledocsIcon from "@/assets/integrations/googledocs.svg";
 import facebookIcon from "@/assets/integrations/facebook.svg";
 import trelloIcon from "@/assets/integrations/trello.svg";
+import slackIcon from "@/assets/integrations/slack.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -47,6 +48,7 @@ const iconImages: Record<string, string> = {
   googledocs: googledocsIcon,
   facebook: facebookIcon,
   trello: trelloIcon,
+  slack: slackIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {

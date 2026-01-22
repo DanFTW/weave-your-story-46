@@ -106,6 +106,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "trello",
         status: "unconfigured",
       },
+      {
+        id: "slack",
+        name: "Slack",
+        icon: "slack",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -352,6 +358,20 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0052CC",    // Trello blue
       secondary: "#0065FF",  // Trello bright blue
       tertiary: "#2684FF",   // Trello light blue
+    },
+  },
+  "slack": {
+    id: "slack",
+    name: "Slack",
+    icon: "slack",
+    status: "unconfigured",
+    description: "Slack allows Weave to access your workspaces, channels, and messages. Create memories from important conversations and team communications.",
+    capabilities: ["View channels", "Access messages", "Read workspace info", "View profile"],
+    gradientColors: {
+      primary: "#4A154B",    // Slack aubergine
+      secondary: "#36C5F0",  // Slack blue
+      tertiary: "#2EB67D",   // Slack green
+      quaternary: "#ECB22E", // Slack yellow
     },
   },
 };
