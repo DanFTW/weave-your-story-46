@@ -23,6 +23,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   linkedin: "ac_kzzsdBscCW-a",
   discord: "ac_jECZy5E0ycKY",
   googledocs: "ac_L-liU4EHxioi",
+  facebook: "ac_ask1Zqimx5P6",
 };
 
 serve(async (req) => {
