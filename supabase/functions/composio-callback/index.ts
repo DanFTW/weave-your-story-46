@@ -63,6 +63,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebookpages": "facebook",
   "trello": "trello",
   "github": "github",
+  "linear": "linear",
+  "linear_app": "linear",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -562,6 +564,58 @@ async function fetchGitHubProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Linear user profile using Composio tool execution API (GraphQL)
+async function fetchLinearProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Linear profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/LINEAR_RUN_QUERY_OR_MUTATION",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {
+            query_or_mutation: "query { viewer { id name email displayName avatarUrl } }",
+          },
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Linear profile response status=${response.status}`);
+    console.log(`composio-callback: Linear profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Linear profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const responseData = JSON.parse(responseText);
+    
+    // Parse response - the data should be in data.viewer
+    const data = responseData.data || responseData.response_data || responseData;
+    const viewer = data.viewer || data.data?.viewer || data;
+    
+    return {
+      email: viewer.email || null,
+      name: viewer.displayName || viewer.name || null,
+      avatarUrl: viewer.avatarUrl || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Linear profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -932,6 +986,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: GitHub profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Linear, fetch user profile via Composio GraphQL tool execution
+    if (toolkit === "linear") {
+      console.log("composio-callback: Fetching Linear user info via Composio API...");
+      
+      const profileInfo = await fetchLinearProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Linear profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)

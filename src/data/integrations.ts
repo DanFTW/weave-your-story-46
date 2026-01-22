@@ -112,6 +112,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "github",
         status: "unconfigured",
       },
+      {
+        id: "linear",
+        name: "Linear",
+        icon: "linear",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -371,6 +377,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#24292f",    // GitHub dark
       secondary: "#0D1117",  // GitHub darker
       tertiary: "#161B22",   // GitHub slate
+    },
+  },
+  "linear": {
+    id: "linear",
+    name: "Linear",
+    icon: "linear",
+    status: "unconfigured",
+    description: "Linear allows Weave to access your issues, projects, and workflows. Create memories from your tasks, track progress, and organize your work.",
+    capabilities: ["View issues", "Access projects", "Read workflows", "View profile"],
+    gradientColors: {
+      primary: "#5E6AD2",    // Linear indigo
+      secondary: "#4E5BC2",  // Linear darker
+      tertiary: "#7C85D8",   // Linear lighter
     },
   },
 };
