@@ -429,6 +429,8 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#DB4C3F",  // Todoist darker red
       tertiary: "#F87171",   // Todoist lighter red
     },
+    supportsAccountSwitch: false,
+    logoutUrl: "https://todoist.com/users/logout",
   },
 };
 

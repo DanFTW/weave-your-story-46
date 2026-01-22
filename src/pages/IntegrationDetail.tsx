@@ -10,6 +10,7 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { OAuthConfirmDialog } from "@/components/integrations/OAuthConfirmDialog";
+import { AccountChangeDialog } from "@/components/integrations/AccountChangeDialog";
 import { useComposio } from "@/hooks/useComposio";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,6 +19,7 @@ export default function IntegrationDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showAccountChangeDialog, setShowAccountChangeDialog] = useState(false);
   
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
   
@@ -86,8 +88,20 @@ export default function IntegrationDetail() {
   };
 
   const handleChangeAccount = async () => {
+    // Check if this integration supports programmatic account switching
+    if (integration.supportsAccountSwitch === false) {
+      // Show guidance dialog for providers that need manual logout
+      setShowAccountChangeDialog(true);
+    } else {
+      // Original flow for providers that support force_reauth
+      await disconnect();
+      await connect(`/integration/${integrationId}`, true);
+    }
+  };
+
+  const handleAccountChangeConfirm = async () => {
+    setShowAccountChangeDialog(false);
     await disconnect();
-    // Account switch: force re-auth to show login/account selection
     await connect(`/integration/${integrationId}`, true);
   };
 
@@ -113,6 +127,15 @@ export default function IntegrationDetail() {
         integrationIcon={integration.icon}
         onConfirm={handleConfirmConnect}
         returnUrl={returnUrl}
+      />
+      
+      {/* Account Change Guidance Dialog */}
+      <AccountChangeDialog
+        open={showAccountChangeDialog}
+        onOpenChange={setShowAccountChangeDialog}
+        integrationName={integration.name}
+        logoutUrl={integration.logoutUrl}
+        onContinue={handleAccountChangeConfirm}
       />
       {/* Gradient Header Section */}
       <div className="relative h-64 flex-shrink-0">
