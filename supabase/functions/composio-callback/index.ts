@@ -71,6 +71,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "ms_onedrive": "onedrive",
   "todoist": "todoist",
   "doist": "todoist",
+  "zoom": "zoom",
+  "zoom_meeting": "zoom",
+  "zoomus": "zoom",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -678,6 +681,50 @@ async function fetchTodoistProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Zoom user profile via Zoom REST API
+async function fetchZoomProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Zoom profile via REST API...");
+    
+    const response = await fetch("https://api.zoom.us/v2/users/me", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`composio-callback: Zoom API error: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = await response.json();
+    
+    console.log(`composio-callback: Zoom user data keys: ${Object.keys(userData).join(", ")}`);
+    
+    // Zoom returns: email, first_name, last_name, pic_url, display_name
+    const firstName = userData.first_name || "";
+    const lastName = userData.last_name || "";
+    const fullName = userData.display_name || `${firstName} ${lastName}`.trim() || null;
+
+    console.log(`composio-callback: Zoom profile - name=${fullName}, email=${userData.email}, avatar=${userData.pic_url ? 'present' : 'missing'}`);
+    
+    return {
+      email: userData.email || null,
+      name: fullName,
+      avatarUrl: userData.pic_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Zoom profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1119,6 +1166,32 @@ serve(async (req) => {
         console.log(`composio-callback: Todoist profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
       } else {
         console.log("composio-callback: No access_token found for Todoist connection");
+      }
+    }
+
+    // For Zoom, fetch user profile via Zoom REST API
+    if (toolkit === "zoom") {
+      console.log("composio-callback: Fetching Zoom profile info via REST API...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchZoomProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Zoom profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Zoom connection");
       }
     }
 

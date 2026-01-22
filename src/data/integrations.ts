@@ -130,6 +130,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "todoist",
         status: "unconfigured",
       },
+      {
+        id: "zoom",
+        name: "Zoom",
+        icon: "zoom",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -428,6 +434,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#E44332",    // Todoist red
       secondary: "#DB4C3F",  // Todoist darker
       tertiary: "#F87171",   // Todoist lighter
+    },
+  },
+  "zoom": {
+    id: "zoom",
+    name: "Zoom",
+    icon: "zoom",
+    status: "unconfigured",
+    description: "Zoom allows Weave to access your meeting history, recordings, and account information. Create memories from important meetings, track your communication patterns, and organize your video conferencing journey.",
+    capabilities: ["View meetings", "Access recordings", "Read profile", "View participants"],
+    gradientColors: {
+      primary: "#2D8CFF",    // Zoom blue
+      secondary: "#0B5CFF",  // Zoom darker blue
+      tertiary: "#71B8FF",   // Zoom lighter blue
     },
   },
 };
