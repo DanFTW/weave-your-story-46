@@ -61,10 +61,6 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebook": "facebook",
   "facebook_pages": "facebook",
   "facebookpages": "facebook",
-  "dynamics365": "dynamics365",
-  "dynamics_365": "dynamics365",
-  "microsoft_dynamics": "dynamics365",
-  "msdynamics": "dynamics365",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -454,86 +450,6 @@ async function fetchFacebookProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Dynamics 365 user profile via Composio API + Microsoft Graph
-async function fetchDynamics365Profile(connectionId: string): Promise<{
-  email: string | null;
-  name: string | null;
-  avatarUrl: string | null;
-}> {
-  try {
-    console.log("composio-callback: Fetching Dynamics 365 profile via Composio API...");
-    
-    // Step 1: Get connection data from Composio (includes access_token)
-    const response = await fetch(
-      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
-      {
-        method: "GET",
-        headers: {
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.error(`composio-callback: Failed to fetch Dynamics 365 connection: ${response.status}`);
-      return { email: null, name: null, avatarUrl: null };
-    }
-
-    const connectionData = await response.json();
-    const data = connectionData.data || connectionData.connection_params || {};
-    
-    console.log(`composio-callback: Dynamics 365 connection data keys: ${Object.keys(data).join(", ")}`);
-    
-    // Step 2: Use access_token to call Microsoft Graph API for user profile
-    const accessToken = data.access_token;
-    if (accessToken) {
-      console.log("composio-callback: Using access_token to fetch Microsoft Graph profile...");
-      
-      const graphResponse = await fetch(
-        "https://graph.microsoft.com/v1.0/me",
-        {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      
-      if (graphResponse.ok) {
-        const userData = await graphResponse.json();
-        console.log(`composio-callback: MS Graph response: ${JSON.stringify(userData).slice(0, 300)}`);
-        
-        return {
-          email: userData.mail || userData.userPrincipalName || null,
-          name: userData.displayName || userData.givenName || null,
-          avatarUrl: null, // MS Graph photo requires separate handling
-        };
-      } else {
-        console.error(`composio-callback: MS Graph request failed: ${graphResponse.status}`);
-      }
-    }
-    
-    // Fallback: Try id_token extraction (if available)
-    if (data.id_token) {
-      const jwtPayload = decodeJwtPayload(data.id_token);
-      if (jwtPayload) {
-        console.log("composio-callback: Extracted Dynamics 365 profile from id_token");
-        return {
-          email: jwtPayload.email as string || jwtPayload.upn as string || null,
-          name: jwtPayload.name as string || null,
-          avatarUrl: null,
-        };
-      }
-    }
-    
-    return { email: null, name: null, avatarUrl: null };
-  } catch (error) {
-    console.error("composio-callback: Error fetching Dynamics 365 profile:", error);
-    return { email: null, name: null, avatarUrl: null };
-  }
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -866,25 +782,6 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Facebook profile - name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
-    }
-
-    // For Dynamics 365, fetch profile via Composio API + Microsoft Graph
-    if (toolkit === "dynamics365") {
-      console.log("composio-callback: Fetching Dynamics 365 profile via Composio API...");
-      
-      const profileInfo = await fetchDynamics365Profile(connectionId);
-      
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
-      }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
-      }
-      
-      console.log(`composio-callback: Dynamics 365 profile - name=${accountName}, email=${accountEmail}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)

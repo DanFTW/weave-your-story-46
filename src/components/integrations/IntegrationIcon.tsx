@@ -19,7 +19,6 @@ import linkedinIcon from "@/assets/integrations/linkedin.svg";
 import discordIcon from "@/assets/integrations/discord.svg";
 import googledocsIcon from "@/assets/integrations/googledocs.svg";
 import facebookIcon from "@/assets/integrations/facebook.svg";
-import dynamics365Icon from "@/assets/integrations/dynamics365.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -46,7 +45,6 @@ const iconImages: Record<string, string> = {
   discord: discordIcon,
   googledocs: googledocsIcon,
   facebook: facebookIcon,
-  dynamics365: dynamics365Icon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
