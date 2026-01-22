@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface IntegrationConnectedAccountProps {
@@ -15,6 +16,10 @@ export function IntegrationConnectedAccount({
   onChangeAccount,
   className,
 }: IntegrationConnectedAccountProps) {
+  const [imageError, setImageError] = useState(false);
+  
+  const showFallback = !avatarUrl || imageError;
+
   return (
     <section className={cn("", className)}>
       {/* Header with Change button */}
@@ -32,11 +37,12 @@ export function IntegrationConnectedAccount({
       <div className="flex items-center gap-4 p-4 bg-background rounded-2xl border border-border">
         {/* Avatar */}
         <div className="w-12 h-12 rounded-full overflow-hidden bg-muted flex-shrink-0">
-          {avatarUrl ? (
+          {!showFallback ? (
             <img
               src={avatarUrl}
               alt={name}
               className="w-full h-full object-cover"
+              onError={() => setImageError(true)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-primary/10">
