@@ -10,6 +10,7 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { OAuthConfirmDialog } from "@/components/integrations/OAuthConfirmDialog";
+import { AccountSwitchDialog } from "@/components/integrations/AccountSwitchDialog";
 import { useComposio } from "@/hooks/useComposio";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,6 +19,7 @@ export default function IntegrationDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showAccountSwitchDialog, setShowAccountSwitchDialog] = useState(false);
   
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
   
@@ -86,8 +88,20 @@ export default function IntegrationDetail() {
   };
 
   const handleChangeAccount = async () => {
+    // Check if this provider supports forced account switching
+    if (integration?.supportsAccountSwitch === false) {
+      // Show guidance dialog for manual logout
+      setShowAccountSwitchDialog(true);
+    } else {
+      // Original flow for providers that support force_reauth
+      await disconnect();
+      await connect(`/integration/${integrationId}`, true);
+    }
+  };
+
+  const handleAccountSwitchConfirm = async () => {
+    setShowAccountSwitchDialog(false);
     await disconnect();
-    // Account switch: force re-auth to show login/account selection
     await connect(`/integration/${integrationId}`, true);
   };
 
@@ -114,6 +128,17 @@ export default function IntegrationDetail() {
         onConfirm={handleConfirmConnect}
         returnUrl={returnUrl}
       />
+
+      {/* Account Switch Guidance Dialog */}
+      {integration.logoutUrl && (
+        <AccountSwitchDialog
+          open={showAccountSwitchDialog}
+          onOpenChange={setShowAccountSwitchDialog}
+          integrationName={integration.name}
+          logoutUrl={integration.logoutUrl}
+          onContinue={handleAccountSwitchConfirm}
+        />
+      )}
       {/* Gradient Header Section */}
       <div className="relative h-64 flex-shrink-0">
         <IntegrationGradientBackground colors={integration.gradientColors} />

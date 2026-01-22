@@ -22,4 +22,6 @@ export interface IntegrationDetail extends Integration {
     tertiary?: string;
     quaternary?: string;
   };
+  supportsAccountSwitch?: boolean;  // Default true if undefined
+  logoutUrl?: string;               // URL to provider's logout page
 }
