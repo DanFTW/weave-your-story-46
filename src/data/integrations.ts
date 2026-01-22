@@ -148,6 +148,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "canva",
         status: "unconfigured",
       },
+      {
+        id: "eventbrite",
+        name: "Eventbrite",
+        icon: "eventbrite",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -485,6 +491,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#00C4CC",    // Canva teal
       secondary: "#7D2AE8",  // Canva purple
       tertiary: "#00D5BD",   // Canva lighter teal
+    },
+  },
+  "eventbrite": {
+    id: "eventbrite",
+    name: "Eventbrite",
+    icon: "eventbrite",
+    status: "unconfigured",
+    description: "Eventbrite allows Weave to access your events, tickets, and attendance history. Create memories from your event experiences, track your gatherings, and organize your event journey.",
+    capabilities: ["View events", "Access tickets", "Read profile", "View orders"],
+    gradientColors: {
+      primary: "#FF5E30",    // Eventbrite orange
+      secondary: "#CEFF58",  // Eventbrite lime
+      tertiary: "#221D19",   // Eventbrite dark
     },
   },
 };

@@ -27,6 +27,7 @@ import todoistIcon from "@/assets/integrations/todoist.svg";
 import zoomIcon from "@/assets/integrations/zoom.svg";
 import docusignIcon from "@/assets/integrations/docusign.svg";
 import canvaIcon from "@/assets/integrations/canva.svg";
+import eventbriteIcon from "@/assets/integrations/eventbrite.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -61,6 +62,7 @@ const iconImages: Record<string, string> = {
   zoom: zoomIcon,
   docusign: docusignIcon,
   canva: canvaIcon,
+  eventbrite: eventbriteIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
