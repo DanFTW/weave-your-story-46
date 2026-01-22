@@ -26,19 +26,6 @@ function isMobileBrowser(): boolean {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
-// Detect if running inside an iframe (e.g., Lovable preview)
-function isInIframe(): boolean {
-  try {
-    return window.self !== window.top;
-  } catch (e) {
-    // Cross-origin restriction means we're in an iframe
-    return true;
-  }
-}
-
-// OAuth providers that block iframe embedding due to strict security headers
-const STRICT_OAUTH_PROVIDERS = ["slack"];
-
 export function useComposio(toolkit: string): UseComposioReturn {
   const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -138,16 +125,6 @@ export function useComposio(toolkit: string): UseComposioReturn {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error("Please sign in to connect integrations");
-        setConnecting(false);
-        return;
-      }
-
-      // Check if we're in an iframe and trying to connect a strict OAuth provider
-      if (isInIframe() && STRICT_OAUTH_PROVIDERS.includes(toolkit.toLowerCase())) {
-        toast.info(
-          `For security reasons, ${toolkit} OAuth must be opened in a new tab. Please use the published app URL.`,
-          { duration: 6000 }
-        );
         setConnecting(false);
         return;
       }
