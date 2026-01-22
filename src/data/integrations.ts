@@ -106,6 +106,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "trello",
         status: "unconfigured",
       },
+      {
+        id: "github",
+        name: "GitHub",
+        icon: "github",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -352,6 +358,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0052CC",    // Trello blue
       secondary: "#0065FF",  // Trello bright blue
       tertiary: "#2684FF",   // Trello light blue
+    },
+  },
+  "github": {
+    id: "github",
+    name: "GitHub",
+    icon: "github",
+    status: "unconfigured",
+    description: "GitHub allows Weave to access your repositories, issues, and activity. Create memories from your commits, pull requests, and collaborative work.",
+    capabilities: ["View repositories", "Access issues", "Read activity", "View profile"],
+    gradientColors: {
+      primary: "#24292f",    // GitHub dark
+      secondary: "#0D1117",  // GitHub darker
+      tertiary: "#161B22",   // GitHub slate
     },
   },
 };

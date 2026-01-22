@@ -20,6 +20,7 @@ import discordIcon from "@/assets/integrations/discord.svg";
 import googledocsIcon from "@/assets/integrations/googledocs.svg";
 import facebookIcon from "@/assets/integrations/facebook.svg";
 import trelloIcon from "@/assets/integrations/trello.svg";
+import githubIcon from "@/assets/integrations/github.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -47,14 +48,15 @@ const iconImages: Record<string, string> = {
   googledocs: googledocsIcon,
   facebook: facebookIcon,
   trello: trelloIcon,
+  github: githubIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
   const iconSrc = iconImages[icon];
 
   if (iconSrc) {
-    // Twitter/X icon needs to be inverted for visibility on dark backgrounds
-    const isTwitter = icon === 'twitter';
+    // Icons that need to be inverted for visibility on dark backgrounds
+    const needsInvert = icon === 'twitter' || icon === 'github';
     
     return (
       <div className={cn("w-20 h-20 flex-shrink-0", className)}>
@@ -63,7 +65,7 @@ export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconPr
           alt={`${icon} icon`}
           className={cn(
             "w-full h-full object-contain drop-shadow-xl",
-            isTwitter && "dark:invert"
+            needsInvert && "dark:invert"
           )}
         />
       </div>
