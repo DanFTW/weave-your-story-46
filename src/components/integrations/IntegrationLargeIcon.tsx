@@ -24,6 +24,7 @@ import githubIcon from "@/assets/integrations/github.svg";
 import linearIcon from "@/assets/integrations/linear.svg";
 import onedriveIcon from "@/assets/integrations/onedrive.svg";
 import todoistIcon from "@/assets/integrations/todoist.svg";
+import zoomIcon from "@/assets/integrations/zoom.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -55,6 +56,7 @@ const iconImages: Record<string, string> = {
   linear: linearIcon,
   onedrive: onedriveIcon,
   todoist: todoistIcon,
+  zoom: zoomIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
