@@ -410,6 +410,54 @@ async function fetchExistingGoogleProfile(
   }
 }
 
+// Fetch Monday.com user profile via Composio tool execution API
+async function fetchMondayProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Monday.com profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/MONDAY_GET_ME",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Monday profile response status=${response.status}`);
+    console.log(`composio-callback: Monday profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Monday profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    const me = data.me || data.data?.me || data;
+    
+    return {
+      email: me?.email || null,
+      name: me?.name || null,
+      avatarUrl: me?.photo_original || me?.photo_thumb || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Monday profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 // Fetch WhatsApp Business profile via Composio tool execution API
 async function fetchWhatsAppProfile(connectionId: string): Promise<{
   name: string | null;
@@ -1636,6 +1684,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: WhatsApp profile - name=${accountName}, phone=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Monday.com, fetch profile via Composio MONDAY_GET_ME tool
+    if (toolkit === "monday") {
+      console.log("composio-callback: Fetching Monday.com user info...");
+      
+      const profileInfo = await fetchMondayProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Monday profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
