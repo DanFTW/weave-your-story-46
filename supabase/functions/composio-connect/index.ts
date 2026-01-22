@@ -8,8 +8,49 @@ const corsHeaders = {
 
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
+// Fetch the default Composio-managed auth config for a toolkit
+async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/auth-configs?toolkit=${toolkit.toUpperCase()}&is_composio_managed=true`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Failed to fetch auth configs for ${toolkit}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    // Find the default/enabled Composio-managed auth config
+    const authConfigs = data.items || [];
+    const defaultConfig = authConfigs.find(
+      (config: { is_composio_managed?: boolean; status?: string }) => 
+        config.is_composio_managed && config.status === "ENABLED"
+    );
+
+    if (defaultConfig) {
+      console.log(`Found default auth config for ${toolkit}: ${defaultConfig.id}`);
+      return defaultConfig.id;
+    }
+
+    console.log(`No default auth config found for ${toolkit}`);
+    return null;
+  } catch (error) {
+    console.error(`Error fetching auth config for ${toolkit}:`, error);
+    return null;
+  }
+}
+
 // Auth config IDs from Composio dashboard (custom configs)
-// If a toolkit is not listed here, we'll use Composio's default managed auth
+// If a toolkit is not listed here, we'll dynamically fetch Composio's default managed auth
 const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
   instagram: "ac_N2MwqGEh7F7y",
@@ -86,32 +127,39 @@ serve(async (req) => {
       );
     }
 
-    // Check if we have a custom auth config, otherwise use toolkit-based auth
-    const authConfigId = AUTH_CONFIGS[toolkitLower];
+    // Check if we have a custom auth config, otherwise fetch default from Composio
+    let authConfigId: string | undefined = AUTH_CONFIGS[toolkitLower];
+    
+    // If no custom auth config, fetch the default Composio-managed one
+    if (!authConfigId) {
+      console.log(`No custom auth config for ${toolkitLower}, fetching Composio default...`);
+      const defaultConfigId = await getDefaultAuthConfigId(toolkitLower);
+      
+      if (!defaultConfigId) {
+        return new Response(
+          JSON.stringify({ error: `No auth config available for ${toolkit}. Please configure it in Composio dashboard.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      authConfigId = defaultConfigId;
+    }
     
     // Build the callback URL that Composio will redirect to after OAuth
     const callbackUrl = `${baseUrl}/oauth-complete?toolkit=${toolkitLower}`;
     
     console.log(`=== COMPOSIO OAUTH DEBUG ===`);
-    console.log(`Auth Config ID: ${authConfigId || "USING DEFAULT COMPOSIO MANAGED AUTH"}`);
+    console.log(`Auth Config ID: ${authConfigId}`);
     console.log(`Toolkit: ${toolkitLower.toUpperCase()}`);
     console.log(`Callback URL (our app): ${callbackUrl}`);
     console.log(`============================`);
 
-    // Build request body - use auth_config_id if available, otherwise use toolkit
+    // Build request body - always use auth_config_id (required by Composio v3 API)
     const requestBody: Record<string, unknown> = {
+      auth_config_id: authConfigId,
       user_id: user.id,
       callback_url: callbackUrl,
       ...(forceReauth && { force_reauth: true }),
     };
-
-    if (authConfigId) {
-      // Use specific auth config for services with custom configs
-      requestBody.auth_config_id = authConfigId;
-    } else {
-      // Use toolkit name for Composio-managed default auth
-      requestBody.toolkit = toolkitLower.toUpperCase();
-    }
 
     console.log(`Composio request body:`, JSON.stringify(requestBody));
 
