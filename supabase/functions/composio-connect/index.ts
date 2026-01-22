@@ -66,7 +66,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   discord: "ac_jECZy5E0ycKY",
   googledocs: "ac_L-liU4EHxioi",
   facebook: "ac_ask1Zqimx5P6",
-  // trello removed - use Composio default managed auth instead
+  trello: "ac_1s6sLEKtkxuE",
 };
 
 // All valid toolkits (includes those using Composio default auth)
