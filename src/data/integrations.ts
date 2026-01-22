@@ -88,6 +88,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "discord",
         status: "unconfigured",
       },
+      {
+        id: "googledocs",
+        name: "Google Docs",
+        icon: "googledocs",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -295,6 +301,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#5865F2",    // Discord blurple
       secondary: "#4752C4",  // Discord dark blurple
       tertiary: "#7289DA",   // Discord legacy blurple
+    },
+  },
+  "googledocs": {
+    id: "googledocs",
+    name: "Google Docs",
+    icon: "googledocs",
+    status: "unconfigured",
+    description: "Google Docs allows Weave to access your documents and files. Create memories from your writing, track document changes, and organize your work.",
+    capabilities: ["View documents", "Access files", "Read content", "Browse folders"],
+    gradientColors: {
+      primary: "#4285F4",    // Google blue
+      secondary: "#3367D6",  // Google dark blue
+      tertiary: "#669DF6",   // Google light blue
     },
   },
 };
