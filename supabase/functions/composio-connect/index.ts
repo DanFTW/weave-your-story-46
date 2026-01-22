@@ -67,7 +67,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   googledocs: "ac_L-liU4EHxioi",
   facebook: "ac_ask1Zqimx5P6",
   trello: "ac_1s6sLEKtkxuE",
-  slack: "ac_H9kYZsVaw_gS",
+  slack: "ac_98FPwks7qQVJ",
 };
 
 // All valid toolkits (includes those using Composio default auth)
