@@ -23,6 +23,7 @@ import trelloIcon from "@/assets/integrations/trello.svg";
 import githubIcon from "@/assets/integrations/github.svg";
 import linearIcon from "@/assets/integrations/linear.svg";
 import onedriveIcon from "@/assets/integrations/onedrive.svg";
+import todoistIcon from "@/assets/integrations/todoist.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -53,6 +54,7 @@ const iconImages: Record<string, string> = {
   github: githubIcon,
   linear: linearIcon,
   onedrive: onedriveIcon,
+  todoist: todoistIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
