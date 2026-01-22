@@ -568,55 +568,8 @@ async function fetchGitHubProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch OneDrive user profile using Composio tool execution API
-async function fetchOneDriveProfile(connectionId: string): Promise<{
-  email: string | null;
-  name: string | null;
-  avatarUrl: string | null;
-}> {
-  try {
-    console.log("composio-callback: Fetching OneDrive profile via Composio API...");
-    
-    const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/ONE_DRIVE_GET_USER_PROFILE",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
-      }
-    );
-
-    const responseText = await response.text();
-    console.log(`composio-callback: OneDrive profile response status=${response.status}`);
-    console.log(`composio-callback: OneDrive profile response=${responseText.slice(0, 500)}`);
-
-    if (!response.ok) {
-      console.error("composio-callback: Failed to fetch OneDrive profile");
-      return { email: null, name: null, avatarUrl: null };
-    }
-
-    const data = JSON.parse(responseText);
-    
-    // Parse response - structure may vary, try multiple paths
-    const userData = data.data || data.response_data || data;
-    
-    // OneDrive/MS Graph returns: displayName, mail, userPrincipalName
-    return {
-      email: userData.mail || userData.userPrincipalName || userData.email || null,
-      name: userData.displayName || userData.name || null,
-      avatarUrl: null, // MS Graph photo requires separate blob handling
-    };
-  } catch (error) {
-    console.error("composio-callback: Error fetching OneDrive profile:", error);
-    return { email: null, name: null, avatarUrl: null };
-  }
-}
+// OneDrive uses the same Microsoft Graph API as Outlook/Teams/Excel
+// No dedicated function needed - reuse fetchOutlookProfile with access_token
 
 // Fetch Linear user profile using Composio tool execution API (GraphQL)
 async function fetchLinearProfile(connectionId: string): Promise<{
@@ -1062,23 +1015,31 @@ serve(async (req) => {
       console.log(`composio-callback: Linear profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
-    // For OneDrive, fetch user profile via Composio tool execution API
+    // For OneDrive, fetch user profile via Microsoft Graph API (same as Outlook/Teams/Excel)
     if (toolkit === "onedrive") {
-      console.log("composio-callback: Fetching OneDrive user info via Composio API...");
+      console.log("composio-callback: Fetching OneDrive profile info via MS Graph...");
       
-      const profileInfo = await fetchOneDriveProfile(connectionId);
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
       
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
+      if (accessToken) {
+        // Reuse fetchOutlookProfile - OneDrive uses the same Microsoft Graph API
+        const profileInfo = await fetchOutlookProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: OneDrive profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for OneDrive connection");
       }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
-      }
-      
-      console.log(`composio-callback: OneDrive profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
