@@ -76,6 +76,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "zoomus": "zoom",
   "docusign": "docusign",
   "docusign_esignature": "docusign",
+  "canva": "canva",
+  "canva_connect": "canva",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -780,6 +782,48 @@ async function fetchDocuSignProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Canva user profile via Canva Connect API
+async function fetchCanvaProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Canva profile via Connect API...");
+    
+    const response = await fetch("https://api.canva.com/rest/v1/users/me/profile", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`composio-callback: Canva API error: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = await response.json();
+    
+    console.log(`composio-callback: Canva user data: ${JSON.stringify(userData)}`);
+    
+    // Canva returns: { profile: { display_name: "..." } }
+    // Note: Canva API does NOT provide email or avatar
+    const displayName = userData.profile?.display_name || null;
+
+    console.log(`composio-callback: Canva profile - name=${displayName}`);
+    
+    return {
+      email: null,  // Canva API doesn't provide email
+      name: displayName,
+      avatarUrl: null,  // Canva API doesn't provide avatar
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Canva profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1271,6 +1315,28 @@ serve(async (req) => {
         console.log(`composio-callback: DocuSign profile - name=${accountName}, email=${accountEmail}`);
       } else {
         console.log("composio-callback: No access_token found for DocuSign connection");
+      }
+    }
+
+    // For Canva, fetch user profile via Canva Connect API
+    if (toolkit === "canva") {
+      console.log("composio-callback: Fetching Canva profile info via Connect API...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchCanvaProfile(accessToken);
+        
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+          accountEmail = "Canva Account"; // Display identifier since no email available
+        }
+        // No avatar for Canva - UI will show fallback
+        
+        console.log(`composio-callback: Canva profile - name=${accountName}`);
+      } else {
+        console.log("composio-callback: No access_token found for Canva connection");
       }
     }
 
