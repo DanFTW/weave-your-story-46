@@ -61,6 +61,7 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebook": "facebook",
   "facebook_pages": "facebook",
   "facebookpages": "facebook",
+  "trello": "trello",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -450,6 +451,66 @@ async function fetchFacebookProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Trello member profile using Composio tool execution API
+async function fetchTrelloProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Trello profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_MEMBERS_BY_ID_MEMBER",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {
+            idMember: "me", // Special identifier for authenticated user
+          },
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Trello profile response status=${response.status}`);
+    console.log(`composio-callback: Trello profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Trello profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - structure may vary, try multiple paths
+    const userData = data.data || data.response_data || data;
+    
+    // Build avatar URL from avatarHash
+    // Trello stores avatars in S3 with format: https://trello-members.s3.amazonaws.com/{avatarHash}/170.png
+    let avatarUrl: string | null = null;
+    if (userData.avatarHash) {
+      avatarUrl = `https://trello-members.s3.amazonaws.com/${userData.avatarHash}/170.png`;
+    } else if (userData.avatarUrl) {
+      avatarUrl = userData.avatarUrl;
+    }
+
+    return {
+      email: userData.email || null,
+      name: userData.fullName || userData.username || null,
+      avatarUrl,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Trello profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -782,6 +843,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Facebook profile - name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Trello, fetch member profile via Composio tool execution API
+    if (toolkit === "trello") {
+      console.log("composio-callback: Fetching Trello member info via Composio API...");
+      
+      const profileInfo = await fetchTrelloProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Trello profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)

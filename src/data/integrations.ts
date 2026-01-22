@@ -100,6 +100,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "facebook",
         status: "unconfigured",
       },
+      {
+        id: "trello",
+        name: "Trello",
+        icon: "trello",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -333,6 +339,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#1877F2",    // Facebook blue
       secondary: "#166FE5",  // Facebook dark blue
       tertiary: "#4599FF",   // Facebook light blue
+    },
+  },
+  "trello": {
+    id: "trello",
+    name: "Trello",
+    icon: "trello",
+    status: "unconfigured",
+    description: "Trello allows Weave to access your boards, lists, and cards. Create memories from your projects, track progress, and organize your workflow.",
+    capabilities: ["View boards", "Access cards", "Read lists", "View activity"],
+    gradientColors: {
+      primary: "#0052CC",    // Trello blue
+      secondary: "#0065FF",  // Trello bright blue
+      tertiary: "#2684FF",   // Trello light blue
     },
   },
 };
