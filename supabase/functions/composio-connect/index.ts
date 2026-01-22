@@ -22,6 +22,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   excel: "ac_QMjsg-1512FZ",
   linkedin: "ac_kzzsdBscCW-a",
   discord: "ac_jECZy5E0ycKY",
+  googledocs: "ac_L-liU4EHxioi",
 };
 
 serve(async (req) => {

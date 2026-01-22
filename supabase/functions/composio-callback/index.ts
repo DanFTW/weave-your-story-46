@@ -55,6 +55,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "linkedin_v2": "linkedin",
   "discord": "discord",
   "discord_bot": "discord",
+  "googledocs": "googledocs",
+  "google_docs": "googledocs",
+  "docs": "googledocs",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -247,6 +250,61 @@ async function fetchLinkedInProfile(connectionId: string): Promise<{
     };
   } catch (error) {
     console.error("composio-callback: Error fetching LinkedIn profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
+// Fetch Google Docs user profile from Composio connection metadata
+async function fetchGoogleDocsProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Google Docs profile from Composio connection...");
+    
+    // Fetch connection details from Composio - this includes user metadata
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: Failed to fetch Google Docs connection: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const connectionData = await response.json();
+    const data = connectionData.data || connectionData.connection_params || connectionData;
+    
+    console.log(`composio-callback: Google Docs connection data keys: ${Object.keys(data).join(", ")}`);
+    
+    // Try to decode id_token from Composio response (Google includes user info in JWT)
+    if (data.id_token) {
+      const jwtPayload = decodeJwtPayload(data.id_token);
+      if (jwtPayload) {
+        console.log(`composio-callback: Extracted Google Docs profile from id_token`);
+        return {
+          email: jwtPayload.email as string || null,
+          name: jwtPayload.name as string || null,
+          avatarUrl: jwtPayload.picture as string || null,
+        };
+      }
+    }
+    
+    // Fallback to direct fields in Composio response
+    return {
+      email: data.user_email || data.email || null,
+      name: data.name || data.display_name || null,
+      avatarUrl: data.picture || data.avatar_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Google Docs profile:", error);
     return { email: null, name: null, avatarUrl: null };
   }
 }
@@ -597,6 +655,25 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Discord connection");
       }
+    }
+
+    // For Google Docs, fetch profile from Composio connection data (uses id_token)
+    if (toolkit === "googledocs") {
+      console.log("composio-callback: Fetching Google Docs profile via Composio API...");
+      
+      const profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Google Docs profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
