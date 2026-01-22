@@ -5,7 +5,7 @@ interface IntegrationConnectedAccountProps {
   avatarUrl?: string;
   name: string;
   email: string;
-  onSignOut?: () => void;
+  onChangeAccount?: () => void;
   className?: string;
 }
 
@@ -13,7 +13,7 @@ export function IntegrationConnectedAccount({
   avatarUrl,
   name,
   email,
-  onSignOut,
+  onChangeAccount,
   className,
 }: IntegrationConnectedAccountProps) {
   const [imageError, setImageError] = useState(false);
@@ -26,10 +26,10 @@ export function IntegrationConnectedAccount({
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold text-foreground">Account</h2>
         <button
-          onClick={onSignOut}
+          onClick={onChangeAccount}
           className="text-sm font-medium text-[#F97316] hover:text-[#EA580C] transition-colors"
         >
-          Sign out
+          Change
         </button>
       </div>
 

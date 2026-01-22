@@ -85,6 +85,11 @@ export default function IntegrationDetail() {
     }
   };
 
+  const handleChangeAccount = async () => {
+    await disconnect();
+    // Account switch: force re-auth to show login/account selection
+    await connect(`/integration/${integrationId}`, true);
+  };
 
   const handleDone = () => {
     navigate("/integrations");
@@ -177,7 +182,7 @@ export default function IntegrationDetail() {
                     avatarUrl={connectedAccount.avatarUrl}
                     name={connectedAccount.name || "Connected Account"}
                     email={connectedAccount.email || "Email not available"}
-                    onSignOut={disconnect}
+                    onChangeAccount={handleChangeAccount}
                   />
                 </div>
 
