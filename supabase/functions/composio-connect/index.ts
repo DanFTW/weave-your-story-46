@@ -76,13 +76,14 @@ const AUTH_CONFIGS: Record<string, string> = {
   canva: "ac_zEU1TJt4cJ7K",
   eventbrite: "ac_qIPkRJIL1DT1",
   strava: "ac_TlcNZAxXvuCP",
+  googletasks: "ac_KaK1VD0skDww",
 };
 
 // All valid toolkits (includes those using Composio default auth)
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "strava"
+  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "strava", "googletasks"
 ];
 
 serve(async (req) => {
