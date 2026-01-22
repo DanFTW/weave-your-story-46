@@ -19,6 +19,9 @@ export function IntegrationConnectedAccount({
   const [imageError, setImageError] = useState(false);
   
   const showFallback = !avatarUrl || imageError;
+  
+  // Detect if email is a placeholder (not a real email address)
+  const isPlaceholderEmail = !email || !email.includes("@");
 
   return (
     <section className={cn("", className)}>
@@ -53,14 +56,15 @@ export function IntegrationConnectedAccount({
           )}
         </div>
 
-        {/* Name and Email */}
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-semibold text-foreground truncate">
             {name}
           </h3>
-          <p className="text-sm text-muted-foreground truncate">
-            {email}
-          </p>
+          {!isPlaceholderEmail && (
+            <p className="text-sm text-muted-foreground truncate">
+              {email}
+            </p>
+          )}
         </div>
       </div>
     </section>
