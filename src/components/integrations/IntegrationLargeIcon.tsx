@@ -22,6 +22,7 @@ import facebookIcon from "@/assets/integrations/facebook.svg";
 import trelloIcon from "@/assets/integrations/trello.svg";
 import githubIcon from "@/assets/integrations/github.svg";
 import linearIcon from "@/assets/integrations/linear.svg";
+import onedriveIcon from "@/assets/integrations/onedrive.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -51,6 +52,7 @@ const iconImages: Record<string, string> = {
   trello: trelloIcon,
   github: githubIcon,
   linear: linearIcon,
+  onedrive: onedriveIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {

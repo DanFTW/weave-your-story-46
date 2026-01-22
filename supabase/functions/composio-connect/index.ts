@@ -69,13 +69,14 @@ const AUTH_CONFIGS: Record<string, string> = {
   trello: "ac_1s6sLEKtkxuE",
   github: "ac_kDM61t-M_opS",
   linear: "ac_epJLkL96tTtx",
+  onedrive: "ac_SArQwT66owIm",
 };
 
 // All valid toolkits (includes those using Composio default auth)
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear"
+  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive"
 ];
 
 serve(async (req) => {
