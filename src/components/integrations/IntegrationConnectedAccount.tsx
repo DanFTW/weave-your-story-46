@@ -19,9 +19,6 @@ export function IntegrationConnectedAccount({
   const [imageError, setImageError] = useState(false);
   
   const showFallback = !avatarUrl || imageError;
-  
-  // Detect if email is a valid email address (not a placeholder like "Canva Account")
-  const isValidEmail = email && email.includes("@");
 
   return (
     <section className={cn("", className)}>
@@ -61,11 +58,9 @@ export function IntegrationConnectedAccount({
           <h3 className="text-base font-semibold text-foreground truncate">
             {name}
           </h3>
-          {isValidEmail && (
-            <p className="text-sm text-muted-foreground truncate">
-              {email}
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground truncate">
+            {email}
+          </p>
         </div>
       </div>
     </section>
