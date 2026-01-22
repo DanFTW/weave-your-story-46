@@ -25,7 +25,6 @@ const AUTH_CONFIGS: Record<string, string> = {
   googledocs: "ac_L-liU4EHxioi",
   facebook: "ac_ask1Zqimx5P6",
   calendly: "ac_X0hZVYHYK8uG",
-  notion: "ac_taxXg-lFYPzY",
 };
 
 serve(async (req) => {

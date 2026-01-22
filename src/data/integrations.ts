@@ -106,12 +106,6 @@ export const integrationSections: IntegrationSection[] = [
         icon: "calendly",
         status: "unconfigured",
       },
-      {
-        id: "notion",
-        name: "Notion",
-        icon: "notion",
-        status: "unconfigured",
-      },
     ],
   },
   {
@@ -358,19 +352,6 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#006BFF",    // Calendly blue
       secondary: "#0052CC",  // Calendly dark blue
       tertiary: "#4D9AFF",   // Calendly light blue
-    },
-  },
-  "notion": {
-    id: "notion",
-    name: "Notion",
-    icon: "notion",
-    status: "unconfigured",
-    description: "Notion allows Weave to access your workspaces, pages, databases, and notes. Create memories from your documentation, track your projects, and sync your knowledge base.",
-    capabilities: ["View pages", "Access databases", "Read workspaces", "View comments"],
-    gradientColors: {
-      primary: "#000000",    // Notion black
-      secondary: "#FFFFFF",  // White
-      tertiary: "#787774",   // Notion gray
     },
   },
 };
