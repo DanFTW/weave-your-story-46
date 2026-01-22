@@ -21,6 +21,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   teams: "ac_rVyo3ZPHW1OL",
   excel: "ac_QMjsg-1512FZ",
   linkedin: "ac_kzzsdBscCW-a",
+  discord: "ac_jECZy5E0ycKY",
 };
 
 serve(async (req) => {

@@ -53,6 +53,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "ms_excel": "excel",
   "linkedin": "linkedin",
   "linkedin_v2": "linkedin",
+  "discord": "discord",
+  "discord_bot": "discord",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -245,6 +247,62 @@ async function fetchLinkedInProfile(connectionId: string): Promise<{
     };
   } catch (error) {
     console.error("composio-callback: Error fetching LinkedIn profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
+// Fetch Discord user profile using Composio tool execution API
+async function fetchDiscordProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Discord profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/DISCORD_GET_CURRENT_USER",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Discord profile response status=${response.status}`);
+    console.log(`composio-callback: Discord profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Discord profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - structure may vary, try multiple paths
+    const userData = data.data || data.response_data || data;
+    
+    // Discord returns: id, username, discriminator, avatar, email, global_name
+    const avatarHash = userData.avatar;
+    const userId = userData.id;
+    const avatarUrl = avatarHash 
+      ? `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=256`
+      : null;
+    
+    return {
+      email: userData.email || null,
+      name: userData.global_name || userData.username || null,
+      avatarUrl,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Discord profile:", error);
     return { email: null, name: null, avatarUrl: null };
   }
 }
@@ -519,6 +577,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: LinkedIn profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Discord, fetch user profile via Composio tool execution API
+    if (toolkit === "discord") {
+      console.log("composio-callback: Fetching Discord profile info via Composio API...");
+      
+      const profileInfo = await fetchDiscordProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Discord profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
