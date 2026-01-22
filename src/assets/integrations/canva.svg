@@ -1,9 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="102" fill="#00C4CC"/>
-  <g fill="#FFF">
-    <circle cx="256" cy="176" r="48"/>
-    <circle cx="336" cy="256" r="40"/>
-    <circle cx="256" cy="336" r="32"/>
-    <circle cx="176" cy="256" r="36"/>
-  </g>
+  <defs>
+    <linearGradient id="canvaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#23C4CB"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#D946EF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="102" fill="url(#canvaGradient)"/>
+  <path fill="#FFF" d="M350.5 256c0-52.2-42.3-94.5-94.5-94.5-35 0-65.5 19-81.8 47.3-5.2 8.9-2.1 20.3 6.8 25.5 8.9 5.2 20.3 2.1 25.5-6.8 10.4-17.9 29.6-30 49.5-30 32.3 0 58.5 26.2 58.5 58.5s-26.2 58.5-58.5 58.5c-19.9 0-39.1-12.1-49.5-30-5.2-8.9-16.6-11.9-25.5-6.8-8.9 5.2-11.9 16.6-6.8 25.5 16.3 28.3 46.8 47.3 81.8 47.3 52.2 0 94.5-42.3 94.5-94.5z"/>
 </svg>
