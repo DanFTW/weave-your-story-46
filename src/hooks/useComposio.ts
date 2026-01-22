@@ -26,6 +26,16 @@ function isMobileBrowser(): boolean {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
+// Detect if running inside an iframe (e.g., Lovable preview)
+function isInIframe(): boolean {
+  try {
+    return window !== window.top;
+  } catch (e) {
+    // Cross-origin iframe - assume we're in an iframe
+    return true;
+  }
+}
+
 export function useComposio(toolkit: string): UseComposioReturn {
   const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -202,16 +212,40 @@ export function useComposio(toolkit: string): UseComposioReturn {
         stopPolling();
         window.location.assign(data.redirectUrl);
       } else {
-        // Desktop - try popup, fallback to redirect
-        // Popup allows polling to continue in background
-        const popup = window.open(data.redirectUrl, '_blank', 'width=600,height=700');
+        // Desktop - handle iframe context for OAuth
+        // Some OAuth providers (Calendly, etc.) block loading in iframes
+        const inIframe = isInIframe();
         
-        if (!popup) {
-          console.log("Popup blocked, using standard redirect");
+        if (inIframe) {
+          // Inside iframe (Lovable preview) - must break out to top-level window
+          // Popups from iframes may inherit restrictions that block OAuth providers
+          console.log("Detected iframe context, using top-level window for OAuth...");
           stopPolling();
-          // Use top-level window to escape iframe
-          const targetWindow = window.top || window;
-          targetWindow.location.assign(data.redirectUrl);
+          
+          try {
+            // Try opening popup from top-level window
+            const topPopup = window.top?.open(data.redirectUrl, '_blank', 'width=600,height=700');
+            if (!topPopup) {
+              // Fallback: redirect top-level window entirely
+              window.top?.location.assign(data.redirectUrl);
+            } else {
+              // Popup opened successfully, resume polling
+              startPolling();
+            }
+          } catch (e) {
+            // Cross-origin restriction - redirect top window
+            console.log("Cross-origin iframe, redirecting top window...");
+            window.top?.location.assign(data.redirectUrl);
+          }
+        } else {
+          // Not in iframe - standard popup behavior
+          const popup = window.open(data.redirectUrl, '_blank', 'width=600,height=700');
+          
+          if (!popup) {
+            console.log("Popup blocked, using standard redirect");
+            stopPolling();
+            window.location.assign(data.redirectUrl);
+          }
         }
       }
     } catch (error) {
