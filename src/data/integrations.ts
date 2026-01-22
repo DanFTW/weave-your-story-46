@@ -106,6 +106,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "calendly",
         status: "unconfigured",
       },
+      {
+        id: "trello",
+        name: "Trello",
+        icon: "trello",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -352,6 +358,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#006BFF",    // Calendly blue
       secondary: "#0052CC",  // Calendly dark blue
       tertiary: "#4D9AFF",   // Calendly light blue
+    },
+  },
+  "trello": {
+    id: "trello",
+    name: "Trello",
+    icon: "trello",
+    status: "unconfigured",
+    description: "Trello allows Weave to access your boards, cards, and lists. Create memories from your projects, track your tasks, and organize your work with visual workflows.",
+    capabilities: ["View boards", "Access cards", "Read lists", "View activity"],
+    gradientColors: {
+      primary: "#0052CC",    // Atlassian blue
+      secondary: "#0065FF",  // Trello bright blue
+      tertiary: "#172B4D",   // Trello dark navy
     },
   },
 };
