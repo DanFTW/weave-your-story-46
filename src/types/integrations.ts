@@ -22,4 +22,8 @@ export interface IntegrationDetail extends Integration {
     tertiary?: string;
     quaternary?: string;
   };
+  /** Whether the provider supports programmatic account switching via forceReauth. Default: true */
+  supportsAccountSwitch?: boolean;
+  /** URL to provider's logout page for manual account switching */
+  logoutUrl?: string;
 }
