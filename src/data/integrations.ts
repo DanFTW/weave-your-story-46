@@ -100,6 +100,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "facebook",
         status: "unconfigured",
       },
+      {
+        id: "dynamics365",
+        name: "Dynamics 365",
+        icon: "dynamics365",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -333,6 +339,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#1877F2",    // Facebook blue
       secondary: "#166FE5",  // Facebook dark blue
       tertiary: "#4599FF",   // Facebook light blue
+    },
+  },
+  "dynamics365": {
+    id: "dynamics365",
+    name: "Dynamics 365",
+    icon: "dynamics365",
+    status: "unconfigured",
+    description: "Dynamics 365 allows Weave to access your CRM data, contacts, and business records. Create memories from customer interactions, track opportunities, and manage your business relationships.",
+    capabilities: ["View contacts", "Access accounts", "Read opportunities", "View activities"],
+    gradientColors: {
+      primary: "#002050",    // Dynamics dark blue
+      secondary: "#742774",  // Dynamics purple
+      tertiary: "#0078D4",   // Microsoft blue accent
     },
   },
 };
