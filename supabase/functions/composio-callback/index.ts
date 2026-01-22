@@ -78,6 +78,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "docusign_esignature": "docusign",
   "canva": "canva",
   "canva_connect": "canva",
+  "eventbrite": "eventbrite",
+  "eventbrite_v3": "eventbrite",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -824,6 +826,57 @@ async function fetchCanvaProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Eventbrite user profile via Eventbrite API
+async function fetchEventbriteProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Eventbrite profile via API...");
+    
+    const response = await fetch("https://www.eventbriteapi.com/v3/users/me/", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`composio-callback: Eventbrite API error: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = await response.json();
+    
+    console.log(`composio-callback: Eventbrite user data keys: ${Object.keys(userData).join(", ")}`);
+    
+    // Eventbrite returns:
+    // - emails: array with { email, verified, primary }
+    // - name, first_name, last_name
+    // - image_id (often null)
+    
+    // Find primary email
+    const primaryEmail = userData.emails?.find((e: { primary: boolean }) => e.primary);
+    const email = primaryEmail?.email || userData.emails?.[0]?.email || null;
+    
+    // Get full name
+    const fullName = userData.name || 
+      `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || null;
+
+    console.log(`composio-callback: Eventbrite profile - name=${fullName}, email=${email}`);
+    
+    return {
+      email,
+      name: fullName,
+      avatarUrl: null,  // Eventbrite image_id requires additional processing, often null
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Eventbrite profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1337,6 +1390,30 @@ serve(async (req) => {
         console.log(`composio-callback: Canva profile - name=${accountName}`);
       } else {
         console.log("composio-callback: No access_token found for Canva connection");
+      }
+    }
+
+    // For Eventbrite, fetch user profile via Eventbrite API
+    if (toolkit === "eventbrite") {
+      console.log("composio-callback: Fetching Eventbrite profile info via API...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchEventbriteProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        // No avatar for Eventbrite - UI will show fallback
+        
+        console.log(`composio-callback: Eventbrite profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for Eventbrite connection");
       }
     }
 
