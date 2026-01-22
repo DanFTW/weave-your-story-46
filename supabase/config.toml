@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.twitter-automation-poll]
 verify_jwt = false
+
+[functions.composio-disconnect]
+verify_jwt = false

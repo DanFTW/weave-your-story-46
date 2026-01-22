@@ -251,17 +251,26 @@ export function useComposio(toolkit: string): UseComposioReturn {
     }
   }, [toolkit]);
 
-  // Disconnect integration
+  // Disconnect integration - revoke Composio connection + delete DB record
   const disconnect = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      await supabase
-        .from("user_integrations")
-        .delete()
-        .eq("user_id", session.user.id)
-        .eq("integration_id", toolkit.toLowerCase());
+      // Call edge function to revoke Composio connection and delete DB record
+      const { error } = await supabase.functions.invoke("composio-disconnect", {
+        body: { toolkit },
+      });
+
+      if (error) {
+        console.error("Disconnect edge function error:", error);
+        // Fallback: just delete from our database
+        await supabase
+          .from("user_integrations")
+          .delete()
+          .eq("user_id", session.user.id)
+          .eq("integration_id", toolkit.toLowerCase());
+      }
 
       setConnectedAccount(null);
       setIsConnected(false);
