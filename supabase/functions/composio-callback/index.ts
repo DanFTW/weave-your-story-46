@@ -62,6 +62,7 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebook_pages": "facebook",
   "facebookpages": "facebook",
   "trello": "trello",
+  "github": "github",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -511,6 +512,56 @@ async function fetchTrelloProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch GitHub user profile using Composio tool execution API
+async function fetchGitHubProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching GitHub profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/GITHUB_GET_THE_AUTHENTICATED_USER",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: GitHub profile response status=${response.status}`);
+    console.log(`composio-callback: GitHub profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch GitHub profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - structure may vary, try multiple paths
+    const userData = data.data || data.response_data || data;
+    
+    // GitHub returns: login, name, email, avatar_url
+    return {
+      email: userData.email || (userData.login ? `@${userData.login}` : null),
+      name: userData.name || userData.login || null,
+      avatarUrl: userData.avatar_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching GitHub profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -862,6 +913,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Trello profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For GitHub, fetch user profile via Composio tool execution API
+    if (toolkit === "github") {
+      console.log("composio-callback: Fetching GitHub user info via Composio API...");
+      
+      const profileInfo = await fetchGitHubProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: GitHub profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
