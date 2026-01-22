@@ -251,43 +251,37 @@ async function fetchLinkedInProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Discord user profile using Composio tool execution API
-async function fetchDiscordProfile(connectionId: string): Promise<{
+// Fetch Discord user profile via Discord API directly
+async function fetchDiscordProfile(accessToken: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Discord profile via Composio API...");
+    console.log("composio-callback: Fetching Discord profile via Discord API...");
     
+    // Call Discord API /users/@me endpoint directly with the OAuth access token
     const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/DISCORD_GET_CURRENT_USER",
+      "https://discord.com/api/v10/users/@me",
       {
-        method: "POST",
+        method: "GET",
         headers: {
+          "Authorization": `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
         },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
       }
     );
 
     const responseText = await response.text();
-    console.log(`composio-callback: Discord profile response status=${response.status}`);
-    console.log(`composio-callback: Discord profile response=${responseText.slice(0, 500)}`);
+    console.log(`composio-callback: Discord API /users/@me response status=${response.status}`);
+    console.log(`composio-callback: Discord API response=${responseText.slice(0, 500)}`);
 
     if (!response.ok) {
-      console.error("composio-callback: Failed to fetch Discord profile");
+      console.error("composio-callback: Failed to fetch Discord profile from Discord API");
       return { email: null, name: null, avatarUrl: null };
     }
 
-    const data = JSON.parse(responseText);
-    
-    // Parse response - structure may vary, try multiple paths
-    const userData = data.data || data.response_data || data;
+    const userData = JSON.parse(responseText);
     
     // Discord returns: id, username, discriminator, avatar, email, global_name
     const avatarHash = userData.avatar;
@@ -579,23 +573,30 @@ serve(async (req) => {
       console.log(`composio-callback: LinkedIn profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
-    // For Discord, fetch user profile via Composio tool execution API
+    // For Discord, fetch user profile via Discord API directly
     if (toolkit === "discord") {
-      console.log("composio-callback: Fetching Discord profile info via Composio API...");
+      console.log("composio-callback: Fetching Discord profile info via Discord API...");
       
-      const profileInfo = await fetchDiscordProfile(connectionId);
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
       
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
+      if (accessToken) {
+        const profileInfo = await fetchDiscordProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Discord profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Discord connection");
       }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
-      }
-      
-      console.log(`composio-callback: Discord profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
