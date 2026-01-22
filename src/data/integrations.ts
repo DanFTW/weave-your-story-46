@@ -100,6 +100,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "facebook",
         status: "unconfigured",
       },
+      {
+        id: "calendly",
+        name: "Calendly",
+        icon: "calendly",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -333,6 +339,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#1877F2",    // Facebook blue
       secondary: "#166FE5",  // Facebook dark blue
       tertiary: "#4599FF",   // Facebook light blue
+    },
+  },
+  "calendly": {
+    id: "calendly",
+    name: "Calendly",
+    icon: "calendly",
+    status: "unconfigured",
+    description: "Calendly allows Weave to access your scheduling data, events, and availability. Create memories from meetings, track your calendar activity, and manage your scheduling preferences.",
+    capabilities: ["View events", "Access availability", "Read invitees", "View event types"],
+    gradientColors: {
+      primary: "#006BFF",    // Calendly blue
+      secondary: "#0052CC",  // Calendly dark blue
+      tertiary: "#4D9AFF",   // Calendly light blue
     },
   },
 };

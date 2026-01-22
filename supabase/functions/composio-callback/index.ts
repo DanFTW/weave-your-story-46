@@ -61,6 +61,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebook": "facebook",
   "facebook_pages": "facebook",
   "facebookpages": "facebook",
+  "calendly": "calendly",
+  "calendly_v2": "calendly",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -450,6 +452,74 @@ async function fetchFacebookProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Calendly user profile via Composio API + Calendly API
+async function fetchCalendlyProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Calendly profile via Composio API...");
+    
+    // Step 1: Get connection data from Composio (includes access_token)
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: Failed to fetch Calendly connection: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const connectionData = await response.json();
+    const data = connectionData.data || connectionData.connection_params || {};
+    
+    console.log(`composio-callback: Calendly connection data keys: ${Object.keys(data).join(", ")}`);
+    
+    // Step 2: Use access_token to call Calendly API for user profile
+    const accessToken = data.access_token;
+    if (accessToken) {
+      console.log("composio-callback: Using access_token to fetch Calendly profile...");
+      
+      const calendlyResponse = await fetch(
+        "https://api.calendly.com/users/me",
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (calendlyResponse.ok) {
+        const userData = await calendlyResponse.json();
+        const resource = userData.resource || userData;
+        console.log(`composio-callback: Calendly API response: ${JSON.stringify(resource).slice(0, 300)}`);
+        
+        return {
+          email: resource.email || null,
+          name: resource.name || null,
+          avatarUrl: resource.avatar_url || null,
+        };
+      } else {
+        console.error(`composio-callback: Calendly API request failed: ${calendlyResponse.status}`);
+      }
+    }
+    
+    return { email: null, name: null, avatarUrl: null };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Calendly profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -782,6 +852,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Facebook profile - name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Calendly, fetch profile via Composio API + Calendly API
+    if (toolkit === "calendly") {
+      console.log("composio-callback: Fetching Calendly profile via Composio API...");
+      
+      const profileInfo = await fetchCalendlyProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Calendly profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
