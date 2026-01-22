@@ -284,7 +284,35 @@ async function fetchGoogleDocsProfile(connectionId: string): Promise<{
     
     console.log(`composio-callback: Google Docs connection data keys: ${Object.keys(data).join(", ")}`);
     
-    // Try to decode id_token from Composio response (Google includes user info in JWT)
+    // Use access_token to call Google userinfo endpoint for full profile
+    const accessToken = data.access_token;
+    if (accessToken) {
+      console.log("composio-callback: Using access_token to fetch Google userinfo...");
+      const userinfoResponse = await fetch(
+        "https://www.googleapis.com/oauth2/v3/userinfo",
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+          },
+        }
+      );
+      
+      if (userinfoResponse.ok) {
+        const userinfo = await userinfoResponse.json();
+        console.log(`composio-callback: Google userinfo response: ${JSON.stringify(userinfo).slice(0, 300)}`);
+        
+        return {
+          email: userinfo.email || null,
+          name: userinfo.name || null,
+          avatarUrl: userinfo.picture || null,
+        };
+      } else {
+        console.error(`composio-callback: Google userinfo failed: ${userinfoResponse.status}`);
+      }
+    }
+    
+    // Fallback: try id_token extraction
     if (data.id_token) {
       const jwtPayload = decodeJwtPayload(data.id_token);
       if (jwtPayload) {
