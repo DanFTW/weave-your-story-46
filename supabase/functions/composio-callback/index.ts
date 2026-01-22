@@ -626,57 +626,52 @@ async function fetchLinearProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Todoist user profile from Composio connection metadata
-async function fetchTodoistProfile(connectionId: string): Promise<{
+// Fetch Todoist user profile via Todoist Sync API
+// Composio doesn't store user metadata for Todoist, so we call the API directly
+async function fetchTodoistProfile(accessToken: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Todoist profile from Composio connection metadata...");
+    console.log("composio-callback: Fetching Todoist profile via Sync API...");
     
-    // Fetch connection details from Composio - this includes user metadata
-    const response = await fetch(
-      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
-      {
-        method: "GET",
-        headers: {
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-      }
-    );
+    const response = await fetch("https://api.todoist.com/sync/v9/sync", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        sync_token: "*",
+        resource_types: JSON.stringify(["user"]),
+      }),
+    });
 
     if (!response.ok) {
-      console.error(`composio-callback: Failed to fetch Todoist connection: ${response.status}`);
+      console.error(`composio-callback: Todoist Sync API error: ${response.status}`);
       return { email: null, name: null, avatarUrl: null };
     }
 
-    const connectionData = await response.json();
-    console.log(`composio-callback: Todoist connection data keys: ${Object.keys(connectionData).join(", ")}`);
+    const syncData = await response.json();
+    const user = syncData.user || {};
     
-    // Extract user metadata from Composio's OAuth capture
-    const userData = connectionData.user || connectionData.member || {};
-    const data = connectionData.data || connectionData.connection_params || {};
+    console.log(`composio-callback: Todoist user data keys: ${Object.keys(user).join(", ")}`);
     
-    console.log(`composio-callback: Todoist data keys: ${Object.keys(data).join(", ")}`);
-    console.log(`composio-callback: Todoist userData keys: ${Object.keys(userData).join(", ")}`);
-    
-    // Try multiple paths to find user info
-    let email = userData.email || data.user_email || connectionData.user_email || null;
-    let name = userData.full_name || userData.name || data.name || connectionData.name || null;
+    // Build avatar URL from image_id
+    // Pattern: https://dcff1xvirvpfp.cloudfront.net/{image_id}_medium.jpg
     let avatarUrl: string | null = null;
-    
-    // Todoist avatar URL pattern: https://dcff1xvirvpfp.cloudfront.net/{image_id}_medium.jpg
-    const imageId = userData.image_id || data.image_id || connectionData.image_id;
-    if (imageId) {
-      avatarUrl = `https://dcff1xvirvpfp.cloudfront.net/${imageId}_medium.jpg`;
-    } else if (userData.avatar_url || userData.picture) {
-      avatarUrl = userData.avatar_url || userData.picture;
+    if (user.image_id) {
+      avatarUrl = `https://dcff1xvirvpfp.cloudfront.net/${user.image_id}_medium.jpg`;
     }
+
+    console.log(`composio-callback: Todoist profile - name=${user.full_name}, email=${user.email}, avatar=${avatarUrl ? 'present' : 'missing'}`);
     
-    console.log(`composio-callback: Todoist profile from Composio - name=${name}, email=${email}, avatar=${avatarUrl ? 'present' : 'missing'}`);
-    
-    return { email, name, avatarUrl };
+    return {
+      email: user.email || null,
+      name: user.full_name || null,
+      avatarUrl,
+    };
   } catch (error) {
     console.error("composio-callback: Error fetching Todoist profile:", error);
     return { email: null, name: null, avatarUrl: null };
@@ -1101,23 +1096,30 @@ serve(async (req) => {
       }
     }
 
-    // For Todoist, fetch user profile from Composio connection metadata
+    // For Todoist, fetch user profile via Todoist Sync API
     if (toolkit === "todoist") {
-      console.log("composio-callback: Fetching Todoist profile info from Composio...");
+      console.log("composio-callback: Fetching Todoist profile info via Sync API...");
       
-      const profileInfo = await fetchTodoistProfile(connectionId);
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
       
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
+      if (accessToken) {
+        const profileInfo = await fetchTodoistProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Todoist profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Todoist connection");
       }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
-      }
-      
-      console.log(`composio-callback: Todoist profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
