@@ -86,18 +86,18 @@ export default function IntegrationDetail() {
   };
 
   const handleChangeAccount = async () => {
+    // Show toast about the switching process
+    toast({
+      title: "Switching accounts",
+      description: "Disconnecting current account and starting fresh login...",
+    });
+    
     await disconnect();
     
-    // Show guidance for OAuth providers that don't support account switching well
-    if (integrationId?.toLowerCase() === 'todoist') {
-      toast({
-        title: "Switching accounts",
-        description: "If you're not prompted to choose an account, sign out of Todoist.com first, then try again.",
-        duration: 6000,
-      });
-    }
+    // Small delay to ensure Composio revocation completes
+    await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Account switch: force re-auth to show login/account selection
+    // Start fresh connection with force reauth
     await connect(`/integration/${integrationId}`, true);
   };
 
