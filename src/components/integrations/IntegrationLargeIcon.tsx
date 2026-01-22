@@ -30,6 +30,7 @@ import canvaIcon from "@/assets/integrations/canva.svg";
 import eventbriteIcon from "@/assets/integrations/eventbrite.svg";
 import stravaIcon from "@/assets/integrations/strava.svg";
 import googletasksIcon from "@/assets/integrations/googletasks.svg";
+import mondayIcon from "@/assets/integrations/monday.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -67,6 +68,7 @@ const iconImages: Record<string, string> = {
   eventbrite: eventbriteIcon,
   strava: stravaIcon,
   googletasks: googletasksIcon,
+  monday: mondayIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {

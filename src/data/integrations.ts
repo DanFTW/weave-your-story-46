@@ -166,6 +166,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "googletasks",
         status: "unconfigured",
       },
+      {
+        id: "monday",
+        name: "Monday.com",
+        icon: "monday",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -542,6 +548,20 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#4285F4",    // Google blue
       secondary: "#FBBC04",  // Google yellow
       tertiary: "#34A853",   // Google green
+    },
+  },
+  "monday": {
+    id: "monday",
+    name: "Monday.com",
+    icon: "monday",
+    status: "unconfigured",
+    description: "Monday.com allows Weave to access your workspaces, boards, and tasks. Create memories from your projects, track progress, and organize your work management journey.",
+    capabilities: ["View boards", "Access items", "Read updates", "View workspaces"],
+    gradientColors: {
+      primary: "#6161FF",    // Monday blue/purple
+      secondary: "#FF3D57",  // Monday red
+      tertiary: "#00CA72",   // Monday green
+      quaternary: "#FFCB00", // Monday yellow
     },
   },
 };
