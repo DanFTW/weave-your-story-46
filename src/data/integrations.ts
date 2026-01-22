@@ -136,6 +136,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "zoom",
         status: "unconfigured",
       },
+      {
+        id: "docusign",
+        name: "DocuSign",
+        icon: "docusign",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -447,6 +453,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#2D8CFF",    // Zoom blue
       secondary: "#0B5CFF",  // Zoom darker blue
       tertiary: "#71B8FF",   // Zoom lighter blue
+    },
+  },
+  "docusign": {
+    id: "docusign",
+    name: "DocuSign",
+    icon: "docusign",
+    status: "unconfigured",
+    description: "DocuSign allows Weave to access your document signing history and envelope information. Create memories from important agreements, track your signing patterns, and organize your document workflow.",
+    capabilities: ["View envelopes", "Access signing history", "Read profile", "View documents"],
+    gradientColors: {
+      primary: "#FFCC22",    // DocuSign yellow
+      secondary: "#FFB800",  // DocuSign darker yellow
+      tertiary: "#FFE066",   // DocuSign lighter yellow
     },
   },
 };

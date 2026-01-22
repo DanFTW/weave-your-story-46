@@ -74,6 +74,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "zoom": "zoom",
   "zoom_meeting": "zoom",
   "zoomus": "zoom",
+  "docusign": "docusign",
+  "docusign_esignature": "docusign",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -725,6 +727,59 @@ async function fetchZoomProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch DocuSign user profile via DocuSign OAuth userinfo endpoint
+async function fetchDocuSignProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching DocuSign profile via OAuth userinfo...");
+    
+    // Try production environment first
+    let response = await fetch("https://account.docusign.com/oauth/userinfo", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+      },
+    });
+
+    // If production fails, try demo environment
+    if (!response.ok) {
+      console.log("composio-callback: Trying DocuSign demo endpoint...");
+      response = await fetch("https://account-d.docusign.com/oauth/userinfo", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+        },
+      });
+    }
+
+    if (!response.ok) {
+      console.error(`composio-callback: DocuSign userinfo error: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = await response.json();
+    
+    console.log(`composio-callback: DocuSign user data keys: ${Object.keys(userData).join(", ")}`);
+    
+    // DocuSign returns: sub, name, given_name, family_name, email, accounts[]
+    const fullName = userData.name || `${userData.given_name || ''} ${userData.family_name || ''}`.trim() || null;
+
+    console.log(`composio-callback: DocuSign profile - name=${fullName}, email=${userData.email}`);
+    
+    return {
+      email: userData.email || null,
+      name: fullName,
+      avatarUrl: null, // DocuSign doesn't provide avatar URLs
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching DocuSign profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1192,6 +1247,30 @@ serve(async (req) => {
         console.log(`composio-callback: Zoom profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
       } else {
         console.log("composio-callback: No access_token found for Zoom connection");
+      }
+    }
+
+    // For DocuSign, fetch user profile via DocuSign OAuth userinfo endpoint
+    if (toolkit === "docusign") {
+      console.log("composio-callback: Fetching DocuSign profile info via OAuth userinfo...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchDocuSignProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        // No avatar for DocuSign - UI will show fallback
+        
+        console.log(`composio-callback: DocuSign profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for DocuSign connection");
       }
     }
 
