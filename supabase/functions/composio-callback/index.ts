@@ -410,6 +410,57 @@ async function fetchExistingGoogleProfile(
   }
 }
 
+// Fetch WhatsApp Business profile via Composio tool execution API
+async function fetchWhatsAppProfile(connectionId: string): Promise<{
+  name: string | null;
+  phoneNumber: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching WhatsApp profile via Composio API...");
+    
+    // Call WHATSAPPBUSINESS_GETPHONENUMBERS to get phone number and verified name
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/WHATSAPPBUSINESS_GETPHONENUMBERS",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: WhatsApp profile response status=${response.status}`);
+    console.log(`composio-callback: WhatsApp profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch WhatsApp profile");
+      return { name: null, phoneNumber: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    
+    // WhatsApp Business API returns phone numbers array with verified_name
+    const phoneData = Array.isArray(data?.data) ? data.data[0] : data;
+    
+    return {
+      name: phoneData?.verified_name || null,
+      phoneNumber: phoneData?.display_phone_number || null,
+      avatarUrl: phoneData?.profile_picture_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching WhatsApp profile:", error);
+    return { name: null, phoneNumber: null, avatarUrl: null };
+  }
+}
+
 // Fetch Discord user profile via Discord API directly
 async function fetchDiscordProfile(accessToken: string): Promise<{
   email: string | null;
@@ -1565,6 +1616,26 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Google Tasks profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For WhatsApp Business, fetch profile via Composio tool execution
+    if (toolkit === "whatsapp") {
+      console.log("composio-callback: Fetching WhatsApp Business profile info...");
+      
+      const profileInfo = await fetchWhatsAppProfile(connectionId);
+      
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.phoneNumber) {
+        // Display phone number as the identifier (WhatsApp doesn't use email)
+        accountEmail = profileInfo.phoneNumber;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: WhatsApp profile - name=${accountName}, phone=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
