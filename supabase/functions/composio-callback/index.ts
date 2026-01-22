@@ -491,13 +491,13 @@ async function fetchTrelloProfile(connectionId: string): Promise<{
     // Parse response - structure may vary, try multiple paths
     const userData = data.data || data.response_data || data;
     
-    // Build avatar URL from avatarHash
-    // Trello stores avatars in S3 with format: https://trello-members.s3.amazonaws.com/{avatarHash}/170.png
+    // Build avatar URL - prefer avatarUrl from API, fallback to constructing from avatarHash
+    // Correct format: https://trello-avatars.s3.amazonaws.com/{avatarHash}
     let avatarUrl: string | null = null;
-    if (userData.avatarHash) {
-      avatarUrl = `https://trello-members.s3.amazonaws.com/${userData.avatarHash}/170.png`;
-    } else if (userData.avatarUrl) {
+    if (userData.avatarUrl) {
       avatarUrl = userData.avatarUrl;
+    } else if (userData.avatarHash) {
+      avatarUrl = `https://trello-avatars.s3.amazonaws.com/${userData.avatarHash}`;
     }
 
     return {
