@@ -124,6 +124,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "onedrive",
         status: "unconfigured",
       },
+      {
+        id: "todoist",
+        name: "Todoist",
+        icon: "todoist",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -409,6 +415,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0078D4",    // OneDrive blue
       secondary: "#0063B1",  // OneDrive darker
       tertiary: "#50A0F0",   // OneDrive lighter
+    },
+  },
+  "todoist": {
+    id: "todoist",
+    name: "Todoist",
+    icon: "todoist",
+    status: "unconfigured",
+    description: "Todoist allows Weave to access your tasks, projects, and productivity data. Create memories from completed tasks, track your goals, and organize your accomplishments.",
+    capabilities: ["View tasks", "Access projects", "Read labels", "View activity"],
+    gradientColors: {
+      primary: "#E44332",    // Todoist red
+      secondary: "#DB4C3F",  // Todoist darker red
+      tertiary: "#F87171",   // Todoist lighter red
     },
   },
 };
