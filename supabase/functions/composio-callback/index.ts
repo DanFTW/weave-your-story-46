@@ -80,6 +80,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "canva_connect": "canva",
   "eventbrite": "eventbrite",
   "eventbrite_v3": "eventbrite",
+  "strava": "strava",
+  "strava_v3": "strava",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -877,6 +879,52 @@ async function fetchEventbriteProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Strava athlete profile via Strava API
+async function fetchStravaProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Strava profile via API...");
+    
+    const response = await fetch("https://www.strava.com/api/v3/athlete", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`composio-callback: Strava API error: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = await response.json();
+    
+    console.log(`composio-callback: Strava user data keys: ${Object.keys(userData).join(", ")}`);
+    
+    // Strava returns:
+    // - id, firstname, lastname
+    // - profile (large avatar URL)
+    // - profile_medium (medium avatar URL)
+    // - email (if scope allows)
+    
+    const fullName = `${userData.firstname || ''} ${userData.lastname || ''}`.trim() || null;
+
+    console.log(`composio-callback: Strava profile - name=${fullName}, email=${userData.email}`);
+    
+    return {
+      email: userData.email || null,
+      name: fullName,
+      avatarUrl: userData.profile || userData.profile_medium || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Strava profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1414,6 +1462,32 @@ serve(async (req) => {
         console.log(`composio-callback: Eventbrite profile - name=${accountName}, email=${accountEmail}`);
       } else {
         console.log("composio-callback: No access_token found for Eventbrite connection");
+      }
+    }
+
+    // For Strava, fetch athlete profile via Strava API
+    if (toolkit === "strava") {
+      console.log("composio-callback: Fetching Strava profile info via API...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchStravaProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Strava profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Strava connection");
       }
     }
 

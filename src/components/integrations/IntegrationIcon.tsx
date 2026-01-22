@@ -28,6 +28,7 @@ import zoomIcon from "@/assets/integrations/zoom.svg";
 import docusignIcon from "@/assets/integrations/docusign.svg";
 import canvaIcon from "@/assets/integrations/canva.svg";
 import eventbriteIcon from "@/assets/integrations/eventbrite.svg";
+import stravaIcon from "@/assets/integrations/strava.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -63,6 +64,7 @@ const iconImages: Record<string, string> = {
   docusign: docusignIcon,
   canva: canvaIcon,
   eventbrite: eventbriteIcon,
+  strava: stravaIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
