@@ -82,6 +82,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "eventbrite_v3": "eventbrite",
   "strava": "strava",
   "strava_v3": "strava",
+  "googletasks": "googletasks",
+  "google_tasks": "googletasks",
+  "tasks": "googletasks",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1489,6 +1492,26 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Strava connection");
       }
+    }
+
+    // For Google Tasks, fetch profile from Composio connection data (same pattern as Google Docs)
+    if (toolkit === "googletasks") {
+      console.log("composio-callback: Fetching Google Tasks profile via Composio API...");
+      
+      // Reuse fetchGoogleDocsProfile - Google Tasks uses the same Google OAuth/userinfo pattern
+      const profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Google Tasks profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)

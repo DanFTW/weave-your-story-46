@@ -160,6 +160,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "strava",
         status: "unconfigured",
       },
+      {
+        id: "googletasks",
+        name: "Google Tasks",
+        icon: "googletasks",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -523,6 +529,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FC4C02",    // Strava orange
       secondary: "#E34402",  // Strava darker orange
       tertiary: "#FF6B2B",   // Strava lighter orange
+    },
+  },
+  "googletasks": {
+    id: "googletasks",
+    name: "Google Tasks",
+    icon: "googletasks",
+    status: "unconfigured",
+    description: "Google Tasks allows Weave to access your task lists, reminders, and to-do items. Create memories from completed tasks, track your productivity, and organize your accomplishments.",
+    capabilities: ["View tasks", "Access task lists", "Read profile", "View completed items"],
+    gradientColors: {
+      primary: "#4285F4",    // Google blue
+      secondary: "#FBBC04",  // Google yellow
+      tertiary: "#34A853",   // Google green
     },
   },
 };
