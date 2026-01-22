@@ -581,12 +581,13 @@ async function fetchLinearProfile(connectionId: string): Promise<{
           "Content-Type": "application/json",
           "x-api-key": COMPOSIO_API_KEY!,
         },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {
-            query_or_mutation: "query { viewer { id name email displayName avatarUrl } }",
-          },
-        }),
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: {
+          query_or_mutation: "query { viewer { id name email displayName avatarUrl } }",
+          variables: {},
+        },
+      }),
       }
     );
 
