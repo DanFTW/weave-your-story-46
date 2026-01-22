@@ -8,7 +8,8 @@ const corsHeaders = {
 
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
-// Auth config IDs from Composio dashboard
+// Auth config IDs from Composio dashboard (custom configs)
+// If a toolkit is not listed here, we'll use Composio's default managed auth
 const AUTH_CONFIGS: Record<string, string> = {
   gmail: "ac_JO3RFglIYYKs",
   instagram: "ac_N2MwqGEh7F7y",
@@ -24,8 +25,15 @@ const AUTH_CONFIGS: Record<string, string> = {
   discord: "ac_jECZy5E0ycKY",
   googledocs: "ac_L-liU4EHxioi",
   facebook: "ac_ask1Zqimx5P6",
-  trello: "ac_W5LwBBE7ItvC",
+  // trello removed - use Composio default managed auth instead
 };
+
+// All valid toolkits (includes those using Composio default auth)
+const VALID_TOOLKITS = [
+  "gmail", "instagram", "dropbox", "googlephotos", "twitter",
+  "youtube", "whatsapp", "outlook", "teams", "excel",
+  "linkedin", "discord", "googledocs", "facebook", "trello"
+];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -70,25 +78,42 @@ serve(async (req) => {
     console.log(`User ID: ${user.id}`);
     console.log(`Base URL: ${baseUrl}`);
     
-    if (!toolkit || !AUTH_CONFIGS[toolkitLower]) {
+    // Validate toolkit is in our allowed list
+    if (!toolkit || !VALID_TOOLKITS.includes(toolkitLower)) {
       return new Response(
         JSON.stringify({ error: `Invalid toolkit: ${toolkit}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Check if we have a custom auth config, otherwise use toolkit-based auth
     const authConfigId = AUTH_CONFIGS[toolkitLower];
     
     // Build the callback URL that Composio will redirect to after OAuth
     const callbackUrl = `${baseUrl}/oauth-complete?toolkit=${toolkitLower}`;
     
     console.log(`=== COMPOSIO OAUTH DEBUG ===`);
-    console.log(`Auth Config ID: ${authConfigId}`);
+    console.log(`Auth Config ID: ${authConfigId || "USING DEFAULT COMPOSIO MANAGED AUTH"}`);
+    console.log(`Toolkit: ${toolkitLower.toUpperCase()}`);
     console.log(`Callback URL (our app): ${callbackUrl}`);
-    console.log(`NOTE: Composio uses its own redirect_uri for Google OAuth:`);
-    console.log(`  https://backend.composio.dev/api/v3/toolkits/auth/callback`);
-    console.log(`This URI must be whitelisted in Google Cloud Console!`);
     console.log(`============================`);
+
+    // Build request body - use auth_config_id if available, otherwise use toolkit
+    const requestBody: Record<string, unknown> = {
+      user_id: user.id,
+      callback_url: callbackUrl,
+      ...(forceReauth && { force_reauth: true }),
+    };
+
+    if (authConfigId) {
+      // Use specific auth config for services with custom configs
+      requestBody.auth_config_id = authConfigId;
+    } else {
+      // Use toolkit name for Composio-managed default auth
+      requestBody.toolkit = toolkitLower.toUpperCase();
+    }
+
+    console.log(`Composio request body:`, JSON.stringify(requestBody));
 
     // Call Composio v3 API /link endpoint
     const composioResponse = await fetch("https://backend.composio.dev/api/v3/connected_accounts/link", {
@@ -97,17 +122,7 @@ serve(async (req) => {
         "x-api-key": COMPOSIO_API_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        auth_config_id: authConfigId,
-        user_id: user.id,
-        // Composio will redirect here after OAuth completes
-        // We'll add connectionId and toolkit as query params in the callback
-        callback_url: callbackUrl,
-        // Only force re-authentication when explicitly switching accounts
-        // This prevents auto-selecting wrong cached account while still
-        // allowing faster connection when user has active browser session
-        ...(forceReauth && { force_reauth: true }),
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const responseText = await composioResponse.text();
