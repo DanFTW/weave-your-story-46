@@ -63,6 +63,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebookpages": "facebook",
   "calendly": "calendly",
   "calendly_v2": "calendly",
+  "notion": "notion",
+  "notion_v2": "notion",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -520,6 +522,92 @@ async function fetchCalendlyProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Notion user profile via Composio API + Notion API
+async function fetchNotionProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Notion profile via Composio API...");
+    
+    // Step 1: Get connection data from Composio (includes access_token)
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: Failed to fetch Notion connection: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const connectionData = await response.json();
+    const data = connectionData.data || connectionData.connection_params || {};
+    
+    console.log(`composio-callback: Notion connection data keys: ${Object.keys(data).join(", ")}`);
+    
+    // Step 2: Use access_token to call Notion API for user profile
+    const accessToken = data.access_token;
+    if (accessToken) {
+      console.log("composio-callback: Using access_token to fetch Notion profile...");
+      
+      const notionResponse = await fetch(
+        "https://api.notion.com/v1/users/me",
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (notionResponse.ok) {
+        const userData = await notionResponse.json();
+        console.log(`composio-callback: Notion API response: ${JSON.stringify(userData).slice(0, 500)}`);
+        
+        // Notion returns: object, id, name, avatar_url, type, person/bot
+        // For bot integrations, the owner info is in bot.owner.user
+        let email: string | null = null;
+        let name: string | null = userData.name || null;
+        let avatarUrl: string | null = userData.avatar_url || null;
+        
+        // Handle person type (direct OAuth)
+        if (userData.type === "person" && userData.person) {
+          email = userData.person.email || null;
+        }
+        
+        // Handle bot type (workspace integration) - get owner info
+        if (userData.type === "bot" && userData.bot?.owner?.user) {
+          const ownerUser = userData.bot.owner.user;
+          email = ownerUser.person?.email || null;
+          // Prefer owner's name/avatar if available
+          name = ownerUser.name || name;
+          avatarUrl = ownerUser.avatar_url || avatarUrl;
+        }
+        
+        return { email, name, avatarUrl };
+      } else {
+        console.error(`composio-callback: Notion API request failed: ${notionResponse.status}`);
+        const errorText = await notionResponse.text();
+        console.error(`composio-callback: Notion error: ${errorText}`);
+      }
+    }
+    
+    return { email: null, name: null, avatarUrl: null };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Notion profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -871,6 +959,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Calendly profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Notion, fetch profile via Composio API + Notion API
+    if (toolkit === "notion") {
+      console.log("composio-callback: Fetching Notion profile via Composio API...");
+      
+      const profileInfo = await fetchNotionProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Notion profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
