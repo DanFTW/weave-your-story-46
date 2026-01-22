@@ -63,6 +63,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebookpages": "facebook",
   "calendly": "calendly",
   "calendly_v2": "calendly",
+  "trello": "trello",
+  "trello_v2": "trello",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -520,6 +522,92 @@ async function fetchCalendlyProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Trello user profile via Composio API + Trello API
+async function fetchTrelloProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Trello profile via Composio API...");
+    
+    // Step 1: Get connection data from Composio (includes OAuth token)
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: Failed to fetch Trello connection: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const connectionData = await response.json();
+    const data = connectionData.data || connectionData.connection_params || {};
+    
+    console.log(`composio-callback: Trello connection data keys: ${Object.keys(data).join(", ")}`);
+    
+    // Step 2: Use OAuth token to call Trello API for user profile
+    // Trello uses token + key for auth
+    const accessToken = data.access_token || data.oauth_token || data.token;
+    const apiKey = data.api_key || data.apiKey || data.key;
+    
+    if (accessToken) {
+      console.log("composio-callback: Using access_token to fetch Trello profile...");
+      
+      // Build Trello API URL - try with just token first via OAuth header
+      let trelloUrl = `https://api.trello.com/1/members/me?fields=id,fullName,username,email,avatarUrl,avatarHash`;
+      
+      // If we have an API key, add it along with token as query params
+      if (apiKey) {
+        trelloUrl += `&key=${apiKey}&token=${accessToken}`;
+      }
+      
+      const trelloResponse = await fetch(trelloUrl, {
+        method: "GET",
+        headers: {
+          "Authorization": `OAuth oauth_token="${accessToken}"`,
+          "Accept": "application/json",
+        },
+      });
+      
+      if (trelloResponse.ok) {
+        const userData = await trelloResponse.json();
+        console.log(`composio-callback: Trello API response: ${JSON.stringify(userData).slice(0, 500)}`);
+        
+        // Trello returns: id, fullName, username, email, avatarUrl (base path), avatarHash
+        // Full avatar URL format: avatarUrl/50.png (or /170.png for larger)
+        let avatarUrl: string | null = null;
+        if (userData.avatarUrl) {
+          avatarUrl = `${userData.avatarUrl}/170.png`;
+        } else if (userData.avatarHash && userData.id) {
+          avatarUrl = `https://trello-members.s3.amazonaws.com/${userData.id}/${userData.avatarHash}/170.png`;
+        }
+        
+        return {
+          email: userData.email || null,
+          name: userData.fullName || userData.username || null,
+          avatarUrl,
+        };
+      } else {
+        console.error(`composio-callback: Trello API request failed: ${trelloResponse.status}`);
+        const errorText = await trelloResponse.text();
+        console.error(`composio-callback: Trello error: ${errorText}`);
+      }
+    }
+    
+    return { email: null, name: null, avatarUrl: null };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Trello profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -871,6 +959,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Calendly profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Trello, fetch profile via Composio API + Trello API
+    if (toolkit === "trello") {
+      console.log("composio-callback: Fetching Trello profile via Composio API...");
+      
+      const profileInfo = await fetchTrelloProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Trello profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
