@@ -118,6 +118,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "linear",
         status: "unconfigured",
       },
+      {
+        id: "onedrive",
+        name: "OneDrive",
+        icon: "onedrive",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -390,6 +396,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#5E6AD2",    // Linear indigo
       secondary: "#4E5BC2",  // Linear darker
       tertiary: "#7C85D8",   // Linear lighter
+    },
+  },
+  "onedrive": {
+    id: "onedrive",
+    name: "OneDrive",
+    icon: "onedrive",
+    status: "unconfigured",
+    description: "OneDrive allows Weave to access your files, documents, and photos stored in the cloud. Create memories from your important files and keep track of your digital content.",
+    capabilities: ["View files", "Browse folders", "Access documents", "View photos"],
+    gradientColors: {
+      primary: "#0078D4",    // OneDrive blue
+      secondary: "#0063B1",  // OneDrive darker
+      tertiary: "#50A0F0",   // OneDrive lighter
     },
   },
 };
