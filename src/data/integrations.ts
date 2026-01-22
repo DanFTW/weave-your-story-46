@@ -100,18 +100,6 @@ export const integrationSections: IntegrationSection[] = [
         icon: "facebook",
         status: "unconfigured",
       },
-      {
-        id: "calendly",
-        name: "Calendly",
-        icon: "calendly",
-        status: "unconfigured",
-      },
-      {
-        id: "trello",
-        name: "Trello",
-        icon: "trello",
-        status: "unconfigured",
-      },
     ],
   },
   {
@@ -345,32 +333,6 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#1877F2",    // Facebook blue
       secondary: "#166FE5",  // Facebook dark blue
       tertiary: "#4599FF",   // Facebook light blue
-    },
-  },
-  "calendly": {
-    id: "calendly",
-    name: "Calendly",
-    icon: "calendly",
-    status: "unconfigured",
-    description: "Calendly allows Weave to access your scheduling data, events, and availability. Create memories from meetings, track your calendar activity, and manage your scheduling preferences.",
-    capabilities: ["View events", "Access availability", "Read invitees", "View event types"],
-    gradientColors: {
-      primary: "#006BFF",    // Calendly blue
-      secondary: "#0052CC",  // Calendly dark blue
-      tertiary: "#4D9AFF",   // Calendly light blue
-    },
-  },
-  "trello": {
-    id: "trello",
-    name: "Trello",
-    icon: "trello",
-    status: "unconfigured",
-    description: "Trello allows Weave to access your boards, cards, and lists. Create memories from your projects, track your tasks, and organize your work with visual workflows.",
-    capabilities: ["View boards", "Access cards", "Read lists", "View activity"],
-    gradientColors: {
-      primary: "#0052CC",    // Atlassian blue
-      secondary: "#0065FF",  // Trello bright blue
-      tertiary: "#172B4D",   // Trello dark navy
     },
   },
 };
