@@ -142,6 +142,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "docusign",
         status: "unconfigured",
       },
+      {
+        id: "canva",
+        name: "Canva",
+        icon: "canva",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -466,6 +472,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FFCC22",    // DocuSign yellow
       secondary: "#FFB800",  // DocuSign darker yellow
       tertiary: "#FFE066",   // DocuSign lighter yellow
+    },
+  },
+  "canva": {
+    id: "canva",
+    name: "Canva",
+    icon: "canva",
+    status: "unconfigured",
+    description: "Canva allows Weave to access your design history and creative projects. Create memories from your visual content, track your design workflow, and organize your creative journey.",
+    capabilities: ["View designs", "Access folders", "Read profile", "View assets"],
+    gradientColors: {
+      primary: "#00C4CC",    // Canva teal
+      secondary: "#7D2AE8",  // Canva purple
+      tertiary: "#00D5BD",   // Canva lighter teal
     },
   },
 };
