@@ -9,7 +9,7 @@ interface IntegrationSectionProps {
 }
 
 // Integrations that are functional and can be connected
-const availableIntegrations = ["gmail", "twitter", "instagram", "googlephotos", "youtube", "whatsapp", "outlook", "teams", "excel", "linkedin"];
+const availableIntegrations = ["gmail", "twitter", "instagram", "googlephotos", "youtube", "whatsapp", "outlook", "teams", "excel", "linkedin", "discord"];
 
 export function IntegrationSection({ section }: IntegrationSectionProps) {
   const navigate = useNavigate();

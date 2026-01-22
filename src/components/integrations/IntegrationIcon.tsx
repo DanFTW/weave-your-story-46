@@ -16,6 +16,7 @@ import outlookIcon from "@/assets/integrations/outlook.svg";
 import teamsIcon from "@/assets/integrations/teams.svg";
 import excelIcon from "@/assets/integrations/excel.svg";
 import linkedinIcon from "@/assets/integrations/linkedin.svg";
+import discordIcon from "@/assets/integrations/discord.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -39,6 +40,7 @@ const iconImages: Record<string, string> = {
   teams: teamsIcon,
   excel: excelIcon,
   linkedin: linkedinIcon,
+  discord: discordIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
