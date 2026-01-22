@@ -87,6 +87,16 @@ export default function IntegrationDetail() {
 
   const handleChangeAccount = async () => {
     await disconnect();
+    
+    // Show guidance for OAuth providers that don't support account switching well
+    if (integrationId?.toLowerCase() === 'todoist') {
+      toast({
+        title: "Switching accounts",
+        description: "If you're not prompted to choose an account, sign out of Todoist.com first, then try again.",
+        duration: 6000,
+      });
+    }
+    
     // Account switch: force re-auth to show login/account selection
     await connect(`/integration/${integrationId}`, true);
   };
