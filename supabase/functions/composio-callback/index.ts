@@ -58,6 +58,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "googledocs": "googledocs",
   "google_docs": "googledocs",
   "docs": "googledocs",
+  "facebook": "facebook",
+  "facebook_pages": "facebook",
+  "facebookpages": "facebook",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -387,6 +390,66 @@ async function fetchDiscordProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Facebook Page profile using Composio tool execution API
+async function fetchFacebookProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Facebook page profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/FACEBOOK_GET_PAGE_DETAILS",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Facebook profile response status=${response.status}`);
+    console.log(`composio-callback: Facebook profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Facebook page details");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - structure may vary, try multiple paths
+    const pageData = data.data || data.response_data || data;
+    
+    // Facebook Page returns: id, name, picture, etc.
+    // picture can be an object with data.url or a direct URL
+    let avatarUrl: string | null = null;
+    if (pageData.picture?.data?.url) {
+      avatarUrl = pageData.picture.data.url;
+    } else if (typeof pageData.picture === 'string') {
+      avatarUrl = pageData.picture;
+    } else if (pageData.picture?.url) {
+      avatarUrl = pageData.picture.url;
+    }
+    
+    return {
+      email: null, // Pages don't have email
+      name: pageData.name || null,
+      avatarUrl,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Facebook profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -702,6 +765,23 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Google Docs profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Facebook, fetch page profile via Composio tool execution API
+    if (toolkit === "facebook") {
+      console.log("composio-callback: Fetching Facebook page info via Composio API...");
+      
+      const profileInfo = await fetchFacebookProfile(connectionId);
+      
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+        accountEmail = "Facebook Page"; // Identifier for display
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Facebook profile - name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
