@@ -24,7 +24,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   discord: "ac_jECZy5E0ycKY",
   googledocs: "ac_L-liU4EHxioi",
   facebook: "ac_ask1Zqimx5P6",
-  calendly: "ac_mBUY67Z-KmsX",
+  calendly: "ac_X0hZVYHYK8uG",
 };
 
 serve(async (req) => {
