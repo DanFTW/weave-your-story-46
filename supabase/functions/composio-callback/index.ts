@@ -69,6 +69,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "one_drive": "onedrive", // Composio returns this format
   "microsoft_onedrive": "onedrive",
   "ms_onedrive": "onedrive",
+  "todoist": "todoist",
+  "doist": "todoist",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -624,6 +626,63 @@ async function fetchLinearProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Todoist user profile from Composio connection metadata
+async function fetchTodoistProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Todoist profile from Composio connection metadata...");
+    
+    // Fetch connection details from Composio - this includes user metadata
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: Failed to fetch Todoist connection: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const connectionData = await response.json();
+    console.log(`composio-callback: Todoist connection data keys: ${Object.keys(connectionData).join(", ")}`);
+    
+    // Extract user metadata from Composio's OAuth capture
+    const userData = connectionData.user || connectionData.member || {};
+    const data = connectionData.data || connectionData.connection_params || {};
+    
+    console.log(`composio-callback: Todoist data keys: ${Object.keys(data).join(", ")}`);
+    console.log(`composio-callback: Todoist userData keys: ${Object.keys(userData).join(", ")}`);
+    
+    // Try multiple paths to find user info
+    let email = userData.email || data.user_email || connectionData.user_email || null;
+    let name = userData.full_name || userData.name || data.name || connectionData.name || null;
+    let avatarUrl: string | null = null;
+    
+    // Todoist avatar URL pattern: https://dcff1xvirvpfp.cloudfront.net/{image_id}_medium.jpg
+    const imageId = userData.image_id || data.image_id || connectionData.image_id;
+    if (imageId) {
+      avatarUrl = `https://dcff1xvirvpfp.cloudfront.net/${imageId}_medium.jpg`;
+    } else if (userData.avatar_url || userData.picture) {
+      avatarUrl = userData.avatar_url || userData.picture;
+    }
+    
+    console.log(`composio-callback: Todoist profile from Composio - name=${name}, email=${email}, avatar=${avatarUrl ? 'present' : 'missing'}`);
+    
+    return { email, name, avatarUrl };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Todoist profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1040,6 +1099,25 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for OneDrive connection");
       }
+    }
+
+    // For Todoist, fetch user profile from Composio connection metadata
+    if (toolkit === "todoist") {
+      console.log("composio-callback: Fetching Todoist profile info from Composio...");
+      
+      const profileInfo = await fetchTodoistProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Todoist profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)
