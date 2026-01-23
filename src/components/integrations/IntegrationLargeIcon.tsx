@@ -41,6 +41,7 @@ import clickupIcon from "@/assets/integrations/clickup.svg";
 import confluenceIcon from "@/assets/integrations/confluence.svg";
 import mailchimpIcon from "@/assets/integrations/mailchimp.svg";
 import attioIcon from "@/assets/integrations/attio.svg";
+import notionIcon from "@/assets/integrations/notion.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -89,6 +90,7 @@ const iconImages: Record<string, string> = {
   confluence: confluenceIcon,
   mailchimp: mailchimpIcon,
   attio: attioIcon,
+  notion: notionIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
@@ -96,7 +98,7 @@ export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconPr
 
   if (iconSrc) {
     // Icons that need to be inverted for visibility on dark backgrounds
-    const needsInvert = icon === 'twitter' || icon === 'github';
+    const needsInvert = icon === 'twitter' || icon === 'github' || icon === 'notion';
     
     return (
       <div className={cn("w-20 h-20 flex-shrink-0", className)}>

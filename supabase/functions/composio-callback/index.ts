@@ -113,6 +113,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "mailchimp_transactional": "mailchimp",
   "attio": "attio",
   "attio_crm": "attio",
+  "notion": "notion",
+  "notion_api": "notion",
+  "notion_workspace": "notion",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1825,6 +1828,73 @@ async function fetchAttioProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Notion user profile via Notion API directly
+async function fetchNotionProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Notion profile via Notion API...");
+    
+    // Call Notion API /v1/users/me endpoint with OAuth access token
+    // Requires Notion-Version header
+    const response = await fetch(
+      "https://api.notion.com/v1/users/me",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Notion-Version": "2022-06-28",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Notion API /users/me status=${response.status}`);
+    console.log(`composio-callback: Notion API response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Notion profile from Notion API");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = JSON.parse(responseText);
+    
+    // Notion OAuth returns a "bot" user type
+    // The actual user info is in bot.owner.user for workspace integrations
+    const userType = userData.type;
+    let email: string | null = null;
+    let name: string | null = null;
+    let avatarUrl: string | null = null;
+    
+    if (userType === "bot" && userData.bot?.owner?.user) {
+      // Bot integration - get owner user info
+      const ownerUser = userData.bot.owner.user;
+      email = ownerUser.person?.email || null;
+      name = ownerUser.name || null;
+      avatarUrl = ownerUser.avatar_url || null;
+    } else if (userType === "person") {
+      // Direct person user (less common with OAuth)
+      email = userData.person?.email || null;
+      name = userData.name || null;
+      avatarUrl = userData.avatar_url || null;
+    } else {
+      // Fallback to top-level fields
+      name = userData.name || null;
+      avatarUrl = userData.avatar_url || null;
+    }
+    
+    console.log(`composio-callback: Notion profile - type=${userType}, name=${name}, email=${email}`);
+    
+    return { email, name, avatarUrl };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Notion profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2678,6 +2748,32 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Attio profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Notion, fetch user profile via Notion API directly
+    if (toolkit === "notion") {
+      console.log("composio-callback: Fetching Notion profile info via Notion API...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchNotionProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Notion profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Notion connection");
+      }
     }
 
     const { data: savedData, error: dbError } = await supabase
