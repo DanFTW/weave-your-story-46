@@ -88,6 +88,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "supabase": "supabase",
   "supabase_db": "supabase",
   "supabase_management": "supabase",
+  "figma": "figma",
+  "figma_api": "figma",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -527,6 +529,54 @@ async function fetchSupabaseProfile(connectionId: string): Promise<{
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Supabase profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
+// Fetch Figma user profile using Composio tool execution API
+async function fetchFigmaProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Figma profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/FIGMA_GET_CURRENT_USER",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Figma profile response status=${response.status}`);
+    console.log(`composio-callback: Figma profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Figma profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    
+    // Figma API returns: id, email, handle, img_url
+    return {
+      email: data.email || null,
+      name: data.handle || data.name || null,
+      avatarUrl: data.img_url || data.avatar_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Figma profile:", error);
     return { email: null, name: null, avatarUrl: null };
   }
 }
@@ -1797,7 +1847,24 @@ serve(async (req) => {
       console.log(`composio-callback: Supabase profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
-    // Upsert to user_integrations table using service role (works from App Browser context)
+    // For Figma, fetch profile via Composio FIGMA_GET_CURRENT_USER tool
+    if (toolkit === "figma") {
+      console.log("composio-callback: Fetching Figma user info...");
+      
+      const profileInfo = await fetchFigmaProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Figma profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
     const { data: savedData, error: dbError } = await supabase
       .from("user_integrations")
       .upsert({
