@@ -191,7 +191,7 @@ export default function IntegrationDetail() {
                   <IntegrationConnectedAccount
                     avatarUrl={connectedAccount.avatarUrl}
                     name={connectedAccount.name || "Connected Account"}
-                    email={connectedAccount.email || "Email not available"}
+                    email={connectedAccount.email || ""}
                     onChangeAccount={handleChangeAccount}
                   />
                 </div>
