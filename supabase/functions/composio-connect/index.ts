@@ -83,13 +83,14 @@ const AUTH_CONFIGS: Record<string, string> = {
   reddit: "ac_IgIttAjDSfm6",
   stripe: "ac_1F7u7TnRQmvP",
   hubspot: "ac_1B61iXhr6Dil",
+  bitbucket: "ac_0B8ht8fYcTJs",
 };
 
 // All valid toolkits (includes those using Composio default auth)
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "strava", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot"
+  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "strava", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket"
 ];
 
 serve(async (req) => {

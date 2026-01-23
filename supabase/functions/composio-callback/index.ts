@@ -98,6 +98,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "hubspot": "hubspot",
   "hubspot_crm": "hubspot",
   "hubspot_marketing": "hubspot",
+  "bitbucket": "bitbucket",
+  "bitbucket_cloud": "bitbucket",
+  "atlassian_bitbucket": "bitbucket",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1417,6 +1420,80 @@ async function fetchHubSpotProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Bitbucket user profile via Bitbucket API directly
+async function fetchBitbucketProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Bitbucket profile via Bitbucket API...");
+    
+    // Call Bitbucket /2.0/user endpoint
+    const response = await fetch(
+      "https://api.bitbucket.org/2.0/user",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Accept": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: Bitbucket API error: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = await response.json();
+    console.log(`composio-callback: Bitbucket user data: ${JSON.stringify(userData).slice(0, 500)}`);
+    
+    // Bitbucket returns: display_name, username, account_id, links.avatar.href
+    const displayName = userData.display_name || null;
+    const username = userData.username || null;
+    
+    // Avatar URL is in links.avatar.href
+    const avatarUrl = userData.links?.avatar?.href || null;
+    
+    // Bitbucket doesn't return email directly from /user endpoint
+    // We need to fetch from /user/emails endpoint
+    let email: string | null = null;
+    try {
+      const emailResponse = await fetch(
+        "https://api.bitbucket.org/2.0/user/emails",
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Accept": "application/json",
+          },
+        }
+      );
+      
+      if (emailResponse.ok) {
+        const emailData = await emailResponse.json();
+        // Find primary email
+        const primaryEmail = emailData.values?.find((e: { is_primary?: boolean }) => e.is_primary);
+        email = primaryEmail?.email || emailData.values?.[0]?.email || null;
+      }
+    } catch (emailError) {
+      console.error("composio-callback: Error fetching Bitbucket emails:", emailError);
+    }
+    
+    console.log(`composio-callback: Bitbucket profile - name=${displayName}, username=${username}, email=${email}`);
+    
+    return {
+      email: email || (username ? `@${username}` : null),
+      name: displayName,
+      avatarUrl,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Bitbucket profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2168,6 +2245,31 @@ serve(async (req) => {
         console.log(`composio-callback: HubSpot profile - name=${accountName}, email=${accountEmail}`);
       } else {
         console.log("composio-callback: No access_token found for HubSpot connection");
+      }
+    }
+
+    // For Bitbucket, fetch user profile via Bitbucket API
+    if (toolkit === "bitbucket") {
+      console.log("composio-callback: Fetching Bitbucket profile info via Bitbucket API...");
+      
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchBitbucketProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Bitbucket profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Bitbucket connection");
       }
     }
 
