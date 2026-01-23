@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "linkedin-live",
+    title: "LinkedIn Contacts",
+    description: "Automatically save new connections with their full profile as memories",
+    icon: UserPlus,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "professional",
+  },
   {
     id: "twitter-live",
     title: "Twitter Live",
