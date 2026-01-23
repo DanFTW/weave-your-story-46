@@ -461,70 +461,100 @@ async function fetchMondayProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Supabase user profile via Supabase Management API
+// Fetch Supabase user profile via Composio tool execution
 async function fetchSupabaseProfile(connectionId: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Supabase profile from Composio connection...");
+    console.log("composio-callback: Fetching Supabase profile via Composio tools...");
     
-    // Fetch connection details from Composio to get access token
-    const response = await fetch(
-      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+    // Step 1: List all organizations to get org slug
+    const orgsResponse = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/SUPABASE_LIST_ALL_ORGANIZATIONS",
       {
-        method: "GET",
-        headers: { "x-api-key": COMPOSIO_API_KEY! },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
       }
     );
 
-    if (!response.ok) {
-      console.error(`composio-callback: Failed to fetch Supabase connection: ${response.status}`);
+    if (!orgsResponse.ok) {
+      console.error(`composio-callback: Failed to list Supabase orgs: ${orgsResponse.status}`);
       return { email: null, name: null, avatarUrl: null };
     }
 
-    const connectionData = await response.json();
-    const data = connectionData.data || connectionData.connection_params || connectionData;
+    const orgsData = await orgsResponse.json();
+    console.log(`composio-callback: Supabase orgs response: ${JSON.stringify(orgsData).slice(0, 500)}`);
     
-    console.log(`composio-callback: Supabase connection data keys: ${Object.keys(data).join(", ")}`);
-    
-    // Try to get access token to call Supabase Management API
-    const accessToken = data.access_token;
-    
-    if (accessToken) {
-      // Call Supabase Management API to get user profile
-      const profileResponse = await fetch(
-        "https://api.supabase.com/v1/profile",
-        {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      
-      if (profileResponse.ok) {
-        const profile = await profileResponse.json();
-        console.log(`composio-callback: Supabase profile response: ${JSON.stringify(profile).slice(0, 300)}`);
-        
-        return {
-          email: profile.primary_email || profile.email || null,
-          name: profile.username || profile.first_name || profile.gotrue_user?.name || null,
-          avatarUrl: profile.avatar_url || null,
-        };
-      } else {
-        console.error(`composio-callback: Supabase Management API failed: ${profileResponse.status}`);
-      }
+    // Parse organizations from response
+    const organizations = orgsData.data?.data || orgsData.data || [];
+    if (!organizations.length) {
+      console.log("composio-callback: No Supabase organizations found");
+      return { email: null, name: null, avatarUrl: null };
     }
+
+    const firstOrg = organizations[0];
+    const orgSlug = firstOrg.slug || firstOrg.id || firstOrg.name;
     
-    // Fallback to connection metadata
-    return {
-      email: data.user_email || data.email || null,
-      name: data.username || data.name || null,
-      avatarUrl: data.avatar_url || null,
-    };
+    if (!orgSlug) {
+      console.log("composio-callback: No org slug found");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    console.log(`composio-callback: Using Supabase org slug: ${orgSlug}`);
+
+    // Step 2: List organization members to get user profile
+    const membersResponse = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/SUPABASE_LIST_MEMBERS_OF_AN_ORGANIZATION",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: { slug: orgSlug },
+        }),
+      }
+    );
+
+    if (!membersResponse.ok) {
+      console.error(`composio-callback: Failed to list org members: ${membersResponse.status}`);
+      // Return org name as fallback
+      return { 
+        email: null, 
+        name: firstOrg.name || orgSlug, 
+        avatarUrl: null 
+      };
+    }
+
+    const membersData = await membersResponse.json();
+    console.log(`composio-callback: Supabase members response: ${JSON.stringify(membersData).slice(0, 500)}`);
+    
+    // Parse members - find owner or first member
+    const members = membersData.data?.data || membersData.data || [];
+    const owner = members.find((m: any) => m.role_name === "Owner" || m.role === "owner") || members[0];
+    
+    if (owner) {
+      const email = owner.primary_email || owner.email || null;
+      const name = owner.username || owner.display_name || owner.gotrue_user?.display_name || firstOrg.name;
+      const avatarUrl = owner.avatar_url || null;
+      
+      console.log(`composio-callback: Supabase profile - name=${name}, email=${email}, avatar=${avatarUrl ? 'present' : 'missing'}`);
+      
+      return { email, name, avatarUrl };
+    }
+
+    return { email: null, name: firstOrg.name, avatarUrl: null };
   } catch (error) {
     console.error("composio-callback: Error fetching Supabase profile:", error);
     return { email: null, name: null, avatarUrl: null };
