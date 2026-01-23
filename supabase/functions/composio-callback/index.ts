@@ -107,6 +107,10 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "confluence": "confluence",
   "atlassian_confluence": "confluence",
   "confluence_cloud": "confluence",
+  "mailchimp": "mailchimp",
+  "mail_chimp": "mailchimp",
+  "mailchimp_marketing": "mailchimp",
+  "mailchimp_transactional": "mailchimp",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1598,6 +1602,58 @@ async function fetchConfluenceProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Mailchimp user profile via Composio tool execution API
+async function fetchMailchimpProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Mailchimp profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/MAILCHIMP_LIST_API_ROOT_RESOURCES",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Mailchimp profile response status=${response.status}`);
+    console.log(`composio-callback: Mailchimp profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Mailchimp profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    
+    // Mailchimp root API returns: account_name, email, first_name, last_name, avatar_url
+    const firstName = data.first_name || "";
+    const lastName = data.last_name || "";
+    const fullName = [firstName, lastName].filter(Boolean).join(" ") || data.account_name;
+    
+    return {
+      email: data.email || data.login?.email || null,
+      name: fullName || null,
+      avatarUrl: data.avatar_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Mailchimp profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2413,6 +2469,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Confluence profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Mailchimp, fetch user profile via Composio tool execution API
+    if (toolkit === "mailchimp") {
+      console.log("composio-callback: Fetching Mailchimp profile info via Composio API...");
+      
+      const profileInfo = await fetchMailchimpProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Mailchimp profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase

@@ -39,6 +39,7 @@ import hubspotIcon from "@/assets/integrations/hubspot.svg";
 import bitbucketIcon from "@/assets/integrations/bitbucket.svg";
 import clickupIcon from "@/assets/integrations/clickup.svg";
 import confluenceIcon from "@/assets/integrations/confluence.svg";
+import mailchimpIcon from "@/assets/integrations/mailchimp.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -85,6 +86,7 @@ const iconImages: Record<string, string> = {
   bitbucket: bitbucketIcon,
   clickup: clickupIcon,
   confluence: confluenceIcon,
+  mailchimp: mailchimpIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {

@@ -220,6 +220,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "confluence",
         status: "unconfigured",
       },
+      {
+        id: "mailchimp",
+        name: "Mailchimp",
+        icon: "mailchimp",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -715,6 +721,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0052CC",    // Atlassian blue
       secondary: "#2684FF",  // Atlassian light blue
       tertiary: "#0065FF",   // Atlassian bright blue
+    },
+  },
+  "mailchimp": {
+    id: "mailchimp",
+    name: "Mailchimp",
+    icon: "mailchimp",
+    status: "unconfigured",
+    description: "Mailchimp allows Weave to access your email campaigns, audience data, and marketing analytics. Create memories from campaign performance, track subscriber engagement, and organize your marketing journey.",
+    capabilities: ["View campaigns", "Access audiences", "Read analytics", "View profile"],
+    gradientColors: {
+      primary: "#FFE01B",    // Mailchimp Cavendish Yellow
+      secondary: "#241C15",  // Mailchimp Freddie Black
+      tertiary: "#F6D248",   // Light Yellow
     },
   },
 };
