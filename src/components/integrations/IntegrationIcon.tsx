@@ -2,24 +2,23 @@ import { cn } from "@/lib/utils";
 
 // Import integration icons
 import gmailIcon from "@/assets/integrations/gmail.png";
+import twitterIcon from "@/assets/integrations/twitter.svg";
 import instagramIcon from "@/assets/integrations/instagram.png";
-import pinterestIcon from "@/assets/integrations/pinterest.png";
+import googlephotosIcon from "@/assets/integrations/googlephotos.svg";
 import youtubeIcon from "@/assets/integrations/youtube.png";
 import spotifyIcon from "@/assets/integrations/spotify.png";
-import locationIcon from "@/assets/integrations/location.png";
-import cameraIcon from "@/assets/integrations/camera.png";
-import dropboxIcon from "@/assets/integrations/dropbox.png";
-import googlephotosIcon from "@/assets/integrations/googlephotos.svg";
-import twitterIcon from "@/assets/integrations/twitter.svg";
 import whatsappIcon from "@/assets/integrations/whatsapp.svg";
 import outlookIcon from "@/assets/integrations/outlook.svg";
 import teamsIcon from "@/assets/integrations/teams.svg";
 import excelIcon from "@/assets/integrations/excel.svg";
 import linkedinIcon from "@/assets/integrations/linkedin.svg";
 import discordIcon from "@/assets/integrations/discord.svg";
-import googledocsIcon from "@/assets/integrations/googledocs.svg";
+import dropboxIcon from "@/assets/integrations/dropbox.png";
+import googleDocsIcon from "@/assets/integrations/googledocs.svg";
 import facebookIcon from "@/assets/integrations/facebook.svg";
+import notionIcon from "@/assets/integrations/notion.svg";
 import trelloIcon from "@/assets/integrations/trello.svg";
+import slackIcon from "@/assets/integrations/slack.svg";
 import githubIcon from "@/assets/integrations/github.svg";
 import linearIcon from "@/assets/integrations/linear.svg";
 import onedriveIcon from "@/assets/integrations/onedrive.svg";
@@ -30,6 +29,9 @@ import canvaIcon from "@/assets/integrations/canva.svg";
 import eventbriteIcon from "@/assets/integrations/eventbrite.svg";
 import googletasksIcon from "@/assets/integrations/googletasks.svg";
 import mondayIcon from "@/assets/integrations/monday.svg";
+import pinterestIcon from "@/assets/integrations/pinterest.png";
+import cameraIcon from "@/assets/integrations/camera.png";
+import locationIcon from "@/assets/integrations/location.png";
 import supabaseIcon from "@/assets/integrations/supabase.svg";
 import figmaIcon from "@/assets/integrations/figma.svg";
 import redditIcon from "@/assets/integrations/reddit.svg";
@@ -40,7 +42,7 @@ import clickupIcon from "@/assets/integrations/clickup.svg";
 import confluenceIcon from "@/assets/integrations/confluence.svg";
 import mailchimpIcon from "@/assets/integrations/mailchimp.svg";
 import attioIcon from "@/assets/integrations/attio.svg";
-import notionIcon from "@/assets/integrations/notion.svg";
+import stravaIcon from "@/assets/integrations/strava.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -65,7 +67,7 @@ const iconImages: Record<string, string> = {
   excel: excelIcon,
   linkedin: linkedinIcon,
   discord: discordIcon,
-  googledocs: googledocsIcon,
+  googledocs: googleDocsIcon,
   facebook: facebookIcon,
   trello: trelloIcon,
   github: githubIcon,
@@ -89,6 +91,7 @@ const iconImages: Record<string, string> = {
   mailchimp: mailchimpIcon,
   attio: attioIcon,
   notion: notionIcon,
+  strava: stravaIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
