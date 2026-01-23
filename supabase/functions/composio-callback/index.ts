@@ -114,6 +114,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "notion": "notion",
   "notion_api": "notion",
   "notion_workspace": "notion",
+  "strava": "strava",
+  "strava_v3": "strava",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -534,6 +536,58 @@ async function fetchMondayProfile(connectionId: string): Promise<{
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Monday profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
+// Fetch Strava athlete profile via Composio tool execution API
+async function fetchStravaProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Strava profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/STRAVA_GET_AUTHENTICATED_ATHLETE",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Strava profile response status=${response.status}`);
+    console.log(`composio-callback: Strava profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Strava profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    
+    // Strava returns: firstname, lastname, profile (avatar URL), city, state
+    const firstName = data.firstname || "";
+    const lastName = data.lastname || "";
+    const fullName = `${firstName} ${lastName}`.trim() || null;
+    
+    return {
+      email: null, // Strava API doesn't expose email
+      name: fullName,
+      avatarUrl: data.profile || data.profile_medium || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Strava profile:", error);
     return { email: null, name: null, avatarUrl: null };
   }
 }
@@ -2700,6 +2754,25 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Notion connection");
       }
+    }
+
+    // For Strava, fetch athlete profile via Composio tool execution API
+    if (toolkit === "strava") {
+      console.log("composio-callback: Fetching Strava athlete info...");
+      
+      const profileInfo = await fetchStravaProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Strava profile - name=${accountName}, email=${accountEmail || 'N/A'}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase
