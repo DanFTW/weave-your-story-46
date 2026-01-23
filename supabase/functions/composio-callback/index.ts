@@ -2419,7 +2419,7 @@ serve(async (req) => {
         
         if (profileInfo.name) {
           accountName = profileInfo.name;
-          accountEmail = "Canva Account"; // Display identifier since no email available
+          // Canva API doesn't provide email - leave null so UI hides the field
         }
         // No avatar for Canva - UI will show fallback
         
