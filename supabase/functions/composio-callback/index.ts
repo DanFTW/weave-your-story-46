@@ -1127,54 +1127,50 @@ async function fetchZoomProfile(accessToken: string): Promise<{
   }
 }
 
-// Fetch DocuSign user profile via Composio tool execution API
-async function fetchDocuSignProfile(connectionId: string): Promise<{
+// Fetch DocuSign user profile via DocuSign OAuth userinfo endpoint
+async function fetchDocuSignProfile(accessToken: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching DocuSign profile via Composio API...");
+    console.log("composio-callback: Fetching DocuSign profile via OAuth userinfo...");
     
-    // Use Composio tool execution to get user info from DocuSign
-    const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/DOCUSIGN_USERS_GET_INFORMATION_FOR_USER",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {
-            userId: "current_user",
-          },
-        }),
-      }
-    );
+    // Try production environment first
+    let response = await fetch("https://account.docusign.com/oauth/userinfo", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+      },
+    });
 
-    const responseText = await response.text();
-    console.log(`composio-callback: DocuSign profile response status=${response.status}`);
-    console.log(`composio-callback: DocuSign profile response=${responseText.slice(0, 500)}`);
+    // If production fails, try demo environment
+    if (!response.ok) {
+      console.log("composio-callback: Trying DocuSign demo endpoint...");
+      response = await fetch("https://account-d.docusign.com/oauth/userinfo", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+        },
+      });
+    }
 
     if (!response.ok) {
-      console.error("composio-callback: Failed to fetch DocuSign profile via Composio");
+      console.error(`composio-callback: DocuSign userinfo error: ${response.status}`);
       return { email: null, name: null, avatarUrl: null };
     }
 
-    const result = JSON.parse(responseText);
-    const data = result.data || result.response_data || result;
+    const userData = await response.json();
     
-    // DocuSign user info contains: userName, userId, email, firstName, lastName, etc.
-    const firstName = data.firstName || "";
-    const lastName = data.lastName || "";
-    const fullName = `${firstName} ${lastName}`.trim() || data.userName || null;
+    console.log(`composio-callback: DocuSign user data keys: ${Object.keys(userData).join(", ")}`);
+    
+    // DocuSign returns: sub, name, given_name, family_name, email, accounts[]
+    const fullName = userData.name || `${userData.given_name || ''} ${userData.family_name || ''}`.trim() || null;
 
-    console.log(`composio-callback: DocuSign profile - name=${fullName}, email=${data.email}`);
+    console.log(`composio-callback: DocuSign profile - name=${fullName}, email=${userData.email}`);
     
     return {
-      email: data.email || null,
+      email: userData.email || null,
       name: fullName,
       avatarUrl: null, // DocuSign doesn't provide avatar URLs
     };
@@ -2387,21 +2383,28 @@ serve(async (req) => {
       }
     }
 
-    // For DocuSign, fetch user profile via Composio tool execution API
+    // For DocuSign, fetch user profile via DocuSign OAuth userinfo endpoint
     if (toolkit === "docusign") {
-      console.log("composio-callback: Fetching DocuSign profile info via Composio API...");
+      console.log("composio-callback: Fetching DocuSign profile info via OAuth userinfo...");
       
-      const profileInfo = await fetchDocuSignProfile(connectionId);
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
       
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
+      if (accessToken) {
+        const profileInfo = await fetchDocuSignProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        // No avatar for DocuSign - UI will show fallback
+        
+        console.log(`composio-callback: DocuSign profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for DocuSign connection");
       }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      // No avatar for DocuSign - UI will show initials fallback
-      
-      console.log(`composio-callback: DocuSign profile - name=${accountName}, email=${accountEmail}`);
     }
 
     // For Canva, fetch user profile via Canva Connect API

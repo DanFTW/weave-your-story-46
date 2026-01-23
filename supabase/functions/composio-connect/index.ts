@@ -72,7 +72,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   onedrive: "ac_SArQwT66owIm",
   todoist: "ac_E90ichFZZyZo",
   zoom: "ac_R8STImJTk1NU",
-  docusign: "ac_6S2yn6rOJJ8J",
+  docusign: "ac_ZRpGACBv5_5c",
   canva: "ac_zEU1TJt4cJ7K",
   eventbrite: "ac_qIPkRJIL1DT1",
   googletasks: "ac_KaK1VD0skDww",
