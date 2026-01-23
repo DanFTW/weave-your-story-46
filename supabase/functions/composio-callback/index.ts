@@ -116,6 +116,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "notion_workspace": "notion",
   "strava": "strava",
   "strava_v3": "strava",
+  "ticketmaster": "ticketmaster",
+  "ticket_master": "ticketmaster",
+  "ticketmaster_api": "ticketmaster",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -2775,6 +2778,34 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Strava connection");
       }
+    }
+
+    // For Ticketmaster, fetch user profile from Composio connection data (OpenID Connect)
+    if (toolkit === "ticketmaster") {
+      console.log("composio-callback: Fetching Ticketmaster profile from Composio connection data...");
+      
+      // Try to extract profile from id_token (OpenID Connect includes user info in JWT)
+      if (data.id_token) {
+        const jwtPayload = decodeJwtPayload(data.id_token);
+        if (jwtPayload) {
+          accountEmail = (jwtPayload.email as string) || null;
+          accountName = (jwtPayload.name as string) || 
+                        [jwtPayload.given_name, jwtPayload.family_name].filter(Boolean).join(" ") || 
+                        null;
+          accountAvatarUrl = (jwtPayload.picture as string) || null;
+          console.log(`composio-callback: Extracted Ticketmaster profile from id_token - email=${accountEmail}, name=${accountName}`);
+        }
+      }
+      
+      // Fallback to other possible locations in Composio response
+      if (!accountEmail) {
+        accountEmail = data.user_email || data.email || null;
+      }
+      if (!accountName) {
+        accountName = data.name || data.display_name || null;
+      }
+      
+      console.log(`composio-callback: Ticketmaster profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase
