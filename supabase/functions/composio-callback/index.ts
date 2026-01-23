@@ -90,6 +90,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "supabase_management": "supabase",
   "figma": "figma",
   "figma_api": "figma",
+  "reddit": "reddit",
+  "reddit_api": "reddit",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -577,6 +579,52 @@ async function fetchFigmaProfile(connectionId: string): Promise<{
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Figma profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
+// Fetch Reddit user profile via Reddit API directly
+async function fetchRedditProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Reddit profile via Reddit API...");
+    
+    const response = await fetch(
+      "https://oauth.reddit.com/api/v1/me",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "User-Agent": "Weave/1.0",
+        },
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Reddit API /me response status=${response.status}`);
+    console.log(`composio-callback: Reddit API response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Reddit profile from Reddit API");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = JSON.parse(responseText);
+    
+    // Reddit returns: name (username), icon_img (avatar), subreddit.display_name_prefixed
+    // Reddit doesn't provide email via API
+    const avatarUrl = userData.icon_img?.split('?')[0] || userData.snoovatar_img || null;
+    
+    return {
+      email: `u/${userData.name}`,  // Display as u/username (Reddit format)
+      name: userData.name || null,
+      avatarUrl,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Reddit profile:", error);
     return { email: null, name: null, avatarUrl: null };
   }
 }
@@ -1865,6 +1913,32 @@ serve(async (req) => {
       
       console.log(`composio-callback: Figma profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
+
+    // For Reddit, fetch user profile via Reddit API directly
+    if (toolkit === "reddit") {
+      console.log("composio-callback: Fetching Reddit profile info via Reddit API...");
+      
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchRedditProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Reddit profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Reddit connection");
+      }
+    }
+
     const { data: savedData, error: dbError } = await supabase
       .from("user_integrations")
       .upsert({

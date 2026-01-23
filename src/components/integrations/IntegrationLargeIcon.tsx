@@ -33,6 +33,7 @@ import googletasksIcon from "@/assets/integrations/googletasks.svg";
 import mondayIcon from "@/assets/integrations/monday.svg";
 import supabaseIcon from "@/assets/integrations/supabase.svg";
 import figmaIcon from "@/assets/integrations/figma.svg";
+import redditIcon from "@/assets/integrations/reddit.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -73,6 +74,7 @@ const iconImages: Record<string, string> = {
   monday: mondayIcon,
   supabase: supabaseIcon,
   figma: figmaIcon,
+  reddit: redditIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {

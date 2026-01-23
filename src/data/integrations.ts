@@ -184,6 +184,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "figma",
         status: "unconfigured",
       },
+      {
+        id: "reddit",
+        name: "Reddit",
+        icon: "reddit",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -601,6 +607,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#A259FF",  // Figma purple
       tertiary: "#1ABCFE",   // Figma blue
       quaternary: "#0ACF83", // Figma green
+    },
+  },
+  "reddit": {
+    id: "reddit",
+    name: "Reddit",
+    icon: "reddit",
+    status: "unconfigured",
+    description: "Reddit allows Weave to access your profile, saved posts, and subreddit activity. Create memories from your Reddit interactions, track saved content, and organize your community engagement.",
+    capabilities: ["View profile", "Access saved posts", "Read subreddit activity", "View upvoted content"],
+    gradientColors: {
+      primary: "#FF4500",    // Reddit OrangeRed
+      secondary: "#FF5722",  // Lighter orange
+      tertiary: "#1A1A1B",   // Reddit dark
     },
   },
 };
