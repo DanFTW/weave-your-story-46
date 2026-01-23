@@ -1849,41 +1849,36 @@ async function fetchNotionProfile(accessToken: string): Promise<{
   }
 }
 
-// Fetch Strava athlete profile via Composio Tool Execution API
-async function fetchStravaProfile(connectionId: string): Promise<{
+// Fetch Strava athlete profile via Strava API directly
+async function fetchStravaProfile(accessToken: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Strava profile via Composio API...");
+    console.log("composio-callback: Fetching Strava profile via Strava API...");
     
     const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/STRAVA_GET_AUTHENTICATED_ATHLETE",
+      "https://www.strava.com/api/v3/athlete",
       {
-        method: "POST",
+        method: "GET",
         headers: {
+          "Authorization": `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
         },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
       }
     );
 
     const responseText = await response.text();
-    console.log(`composio-callback: Strava profile response status=${response.status}`);
-    console.log(`composio-callback: Strava profile response=${responseText.slice(0, 500)}`);
+    console.log(`composio-callback: Strava API response status=${response.status}`);
+    console.log(`composio-callback: Strava API response=${responseText.slice(0, 500)}`);
 
     if (!response.ok) {
       console.error("composio-callback: Failed to fetch Strava profile");
       return { email: null, name: null, avatarUrl: null };
     }
 
-    const result = JSON.parse(responseText);
-    const data = result.data || result.response_data || result;
+    const data = JSON.parse(responseText);
     
     // Strava returns: firstname, lastname, profile (large avatar), profile_medium
     const firstName = data.firstname || "";
@@ -1891,7 +1886,7 @@ async function fetchStravaProfile(connectionId: string): Promise<{
     const fullName = `${firstName} ${lastName}`.trim() || null;
     
     return {
-      email: data.email || null,  // Strava may not expose email
+      email: null,  // Strava API does not expose email
       name: fullName,
       avatarUrl: data.profile || data.profile_medium || null,
     };
@@ -2756,23 +2751,30 @@ serve(async (req) => {
       }
     }
 
-    // For Strava, fetch athlete profile via Composio Tool Execution API
+    // For Strava, fetch athlete profile via Strava API directly
     if (toolkit === "strava") {
-      console.log("composio-callback: Fetching Strava profile info via Composio API...");
+      console.log("composio-callback: Fetching Strava profile info via Strava API...");
       
-      const profileInfo = await fetchStravaProfile(connectionId);
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
       
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
+      if (accessToken) {
+        const profileInfo = await fetchStravaProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Strava profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Strava connection");
       }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
-      }
-      
-      console.log(`composio-callback: Strava profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase
