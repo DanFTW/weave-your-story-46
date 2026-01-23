@@ -1,0 +1,16 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Attio CRM Logo - Stylized "A" lettermark -->
+  <defs>
+    <linearGradient id="attioGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#266DF0"/>
+      <stop offset="100%" stop-color="#1A4FBF"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="256" height="256" rx="56" fill="url(#attioGradient)"/>
+  <!-- Stylized "A" mark -->
+  <path d="M128 48L60 208h32l12-32h48l12 32h32L128 48zm0 56l16 44h-32l16-44z" fill="white"/>
+  <!-- Decorative dots (Attio's brand element) -->
+  <circle cx="80" cy="68" r="12" fill="white" opacity="0.9"/>
+  <circle cx="176" cy="68" r="12" fill="white" opacity="0.9"/>
+</svg>

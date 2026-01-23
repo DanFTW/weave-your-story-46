@@ -226,6 +226,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "mailchimp",
         status: "unconfigured",
       },
+      {
+        id: "attio",
+        name: "Attio",
+        icon: "attio",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -734,6 +740,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FFE01B",    // Mailchimp Cavendish Yellow
       secondary: "#241C15",  // Mailchimp Freddie Black
       tertiary: "#F6D248",   // Light Yellow
+    },
+  },
+  "attio": {
+    id: "attio",
+    name: "Attio",
+    icon: "attio",
+    status: "unconfigured",
+    description: "Attio is a powerful AI-native CRM platform. Connect Attio to access your contacts, companies, deals, and relationship data. Create memories from your customer interactions and track your business relationships.",
+    capabilities: ["View contacts", "Access companies", "Read deals", "View workspace"],
+    gradientColors: {
+      primary: "#266DF0",    // Attio Dodger Blue
+      secondary: "#1A4FBF",  // Attio darker blue
+      tertiary: "#4A8AF4",   // Attio lighter blue
     },
   },
 };
