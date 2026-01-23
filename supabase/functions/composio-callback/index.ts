@@ -288,6 +288,57 @@ async function fetchLinkedInProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Twitter/X user profile using Composio tool execution API
+async function fetchTwitterProfile(connectionId: string): Promise<{
+  username: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Twitter profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/TWITTER_USER_LOOKUP_ME",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Twitter profile response status=${response.status}`);
+    console.log(`composio-callback: Twitter profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Twitter profile");
+      return { username: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    
+    // Twitter API returns: data.id, data.name, data.username, data.profile_image_url
+    const userData = data.data || data;
+    
+    return {
+      username: userData.username || null,
+      name: userData.name || null,
+      // Replace _normal with _400x400 for higher resolution
+      avatarUrl: userData.profile_image_url?.replace('_normal', '_400x400') || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Twitter profile:", error);
+    return { username: null, name: null, avatarUrl: null };
+  }
+}
+
 // Fetch Google Docs user profile from Composio connection metadata
 async function fetchGoogleDocsProfile(connectionId: string): Promise<{
   email: string | null;
@@ -1389,6 +1440,23 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Instagram profile - name=${accountName}, username=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Twitter/X, fetch user profile via Composio tool execution API
+    if (toolkit === "twitter") {
+      console.log("composio-callback: Fetching Twitter profile info...");
+      const profileInfo = await fetchTwitterProfile(connectionId);
+      
+      // Use profile info (Twitter doesn't expose email, use @username instead)
+      if (profileInfo.username) {
+        accountName = profileInfo.name || profileInfo.username;
+        accountEmail = `@${profileInfo.username}`;  // Display as @username
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Twitter profile - name=${accountName}, username=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // For Outlook, fetch user profile via Microsoft Graph API directly
