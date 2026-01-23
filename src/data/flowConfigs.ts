@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "linkedin-live": {
+    id: "linkedin-live",
+    title: "LinkedIn Contacts",
+    subtitle: "New connection monitoring",
+    description: "Automatically save new LinkedIn connections as memories.",
+    gradient: "blue",
+    icon: UserPlus,
+    entryName: "contact",
+    entryNamePlural: "contacts",
+    memoryTag: "LINKEDIN",
+    fields: [],
+    isLinkedInAutomationFlow: true,
+  },
   "twitter-live": {
     id: "twitter-live",
     title: "Twitter Live",

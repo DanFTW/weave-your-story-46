@@ -53,6 +53,9 @@ import { TwitterAutomationFlow } from "@/components/flows/twitter-automation";
 // YouTube Sync components
 import { YouTubeSyncFlow } from "@/components/flows/youtube-sync";
 
+// LinkedIn Automation components
+import { LinkedInAutomationFlow } from "@/components/flows/linkedin-automation";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -213,6 +216,12 @@ export default function FlowPage() {
   
   if (config.isYouTubeSyncFlow) {
     return <YouTubeSyncFlow />;
+  }
+
+  // === LINKEDIN AUTOMATION FLOW RENDER ===
+  
+  if (config.isLinkedInAutomationFlow) {
+    return <LinkedInAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

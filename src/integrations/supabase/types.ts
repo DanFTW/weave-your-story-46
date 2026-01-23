@@ -233,6 +233,60 @@ export type Database = {
         }
         Relationships: []
       }
+      linkedin_automation_config: {
+        Row: {
+          connections_tracked: number | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_polled_at: string | null
+          monitor_new_connections: boolean | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connections_tracked?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          monitor_new_connections?: boolean | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connections_tracked?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          monitor_new_connections?: boolean | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      linkedin_processed_connections: {
+        Row: {
+          id: string
+          linkedin_connection_id: string
+          processed_at: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          linkedin_connection_id: string
+          processed_at?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          linkedin_connection_id?: string
+          processed_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "linkedin-live": {
+    id: "linkedin-live",
+    title: "LinkedIn Contacts",
+    subtitle: "Professional network memories",
+    description: "When you connect with someone new on LinkedIn, we'll automatically capture their full profile as a memory.",
+    gradient: "blue",
+    icon: UserPlus,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect LinkedIn",
+        description: "Authorize access to your connections",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/c/ca/LinkedIn_logo_initials.png",
+      },
+      {
+        id: "trigger",
+        type: "setup",
+        title: "Choose Trigger",
+        description: "Monitor new connections",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Contacts saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "twitter-live": {
     id: "twitter-live",
     title: "Twitter Live",
