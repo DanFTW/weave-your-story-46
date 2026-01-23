@@ -1,16 +1,14 @@
 <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-  <!-- Attio CRM Logo - Stylized "A" lettermark -->
-  <defs>
-    <linearGradient id="attioGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#266DF0"/>
-      <stop offset="100%" stop-color="#1A4FBF"/>
-    </linearGradient>
-  </defs>
-  <!-- Background -->
-  <rect width="256" height="256" rx="56" fill="url(#attioGradient)"/>
-  <!-- Stylized "A" mark -->
-  <path d="M128 48L60 208h32l12-32h48l12 32h32L128 48zm0 56l16 44h-32l16-44z" fill="white"/>
-  <!-- Decorative dots (Attio's brand element) -->
-  <circle cx="80" cy="68" r="12" fill="white" opacity="0.9"/>
-  <circle cx="176" cy="68" r="12" fill="white" opacity="0.9"/>
+  <!-- Official Attio logo - geometric shapes on dark background -->
+  <rect width="256" height="256" rx="48" fill="#1E1E1E"/>
+  
+  <!-- Left shape: Rounded parallelogram -->
+  <path d="M56 180L80 76c4-16 18-28 35-28h0c20 0 35 18 31 38L122 180c-4 16-18 28-35 28h0c-20 0-35-18-31-38z" 
+        fill="#F5F5F5"/>
+  
+  <!-- Right shape: Hexagon outline -->
+  <path d="M165 48l35 20c8 5 13 14 13 23v40c0 9-5 18-13 23l-35 20c-8 5-17 5-25 0l-35-20c-8-5-13-14-13-23V91c0-9 5-18 13-23l35-20c8-5 17-5 25 0z" 
+        fill="none" 
+        stroke="#F5F5F5" 
+        stroke-width="12"/>
 </svg>

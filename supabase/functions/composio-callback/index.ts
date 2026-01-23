@@ -1686,18 +1686,21 @@ async function fetchMailchimpProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Attio user profile via Composio tool execution API
-// Uses ATTIO_LIST_WORKSPACE_MEMBERS to get the connected user's profile
+// Fetch Attio user profile via two-step Composio Tool Execution:
+// 1. ATTIO_GET_V2_SELF to identify current user's workspace_member_id
+// 2. ATTIO_GET_WORKSPACE_MEMBER to get full profile details
 async function fetchAttioProfile(connectionId: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Attio profile via Composio API...");
+    console.log("composio-callback: Fetching Attio profile via two-step process...");
     
-    const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/ATTIO_LIST_WORKSPACE_MEMBERS",
+    // Step 1: Get current token info to find workspace_member_id
+    console.log("composio-callback: Step 1 - Calling ATTIO_GET_V2_SELF...");
+    const selfResponse = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/ATTIO_GET_V2_SELF",
       {
         method: "POST",
         headers: {
@@ -1711,38 +1714,74 @@ async function fetchAttioProfile(connectionId: string): Promise<{
       }
     );
 
-    const responseText = await response.text();
-    console.log(`composio-callback: Attio profile response status=${response.status}`);
-    console.log(`composio-callback: Attio profile response=${responseText.slice(0, 500)}`);
+    const selfText = await selfResponse.text();
+    console.log(`composio-callback: ATTIO_GET_V2_SELF status=${selfResponse.status}`);
+    console.log(`composio-callback: ATTIO_GET_V2_SELF response=${selfText.slice(0, 500)}`);
 
-    if (!response.ok) {
-      console.error("composio-callback: Failed to fetch Attio profile");
+    if (!selfResponse.ok) {
+      console.error("composio-callback: Failed to get Attio self info");
       return { email: null, name: null, avatarUrl: null };
     }
 
-    const result = JSON.parse(responseText);
-    const data = result.data || result.response_data || result;
+    const selfResult = JSON.parse(selfText);
+    const selfData = selfResult.data || selfResult.response_data || selfResult;
     
-    // Attio workspace members returns array - get first member (current user)
-    const members = data.data || data.members || data;
-    const currentUser = Array.isArray(members) ? members[0] : members;
+    // Extract workspace_member_id from nested structure
+    const workspaceMember = selfData.workspace_member || selfData;
+    const workspaceMemberId = 
+      workspaceMember?.id?.workspace_member_id || 
+      workspaceMember?.workspace_member_id ||
+      workspaceMember?.id;
     
-    if (!currentUser) {
-      console.log("composio-callback: No Attio workspace members found");
+    if (!workspaceMemberId) {
+      console.error("composio-callback: No workspace_member_id found in self response");
+      console.log(`composio-callback: Full self data structure: ${JSON.stringify(selfData).slice(0, 1000)}`);
       return { email: null, name: null, avatarUrl: null };
     }
     
-    // Attio returns: first_name, last_name, email_address, avatar_url
-    const firstName = currentUser.first_name || "";
-    const lastName = currentUser.last_name || "";
-    const fullName = [firstName, lastName].filter(Boolean).join(" ") || currentUser.name;
+    console.log(`composio-callback: Found workspace_member_id=${workspaceMemberId}`);
     
-    console.log(`composio-callback: Attio profile - name=${fullName}, email=${currentUser.email_address}`);
+    // Step 2: Get full member details using the ID
+    console.log("composio-callback: Step 2 - Calling ATTIO_GET_WORKSPACE_MEMBER...");
+    const memberResponse = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/ATTIO_GET_WORKSPACE_MEMBER",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: { workspace_member_id: workspaceMemberId },
+        }),
+      }
+    );
+
+    const memberText = await memberResponse.text();
+    console.log(`composio-callback: ATTIO_GET_WORKSPACE_MEMBER status=${memberResponse.status}`);
+    console.log(`composio-callback: ATTIO_GET_WORKSPACE_MEMBER response=${memberText.slice(0, 500)}`);
+
+    if (!memberResponse.ok) {
+      console.error("composio-callback: Failed to get Attio workspace member");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const memberResult = JSON.parse(memberText);
+    const memberData = memberResult.data || memberResult.response_data || memberResult;
+    const member = memberData.data || memberData;
+    
+    // Extract profile fields
+    const firstName = member.first_name || "";
+    const lastName = member.last_name || "";
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
+    
+    console.log(`composio-callback: Attio profile - name=${fullName}, email=${member.email_address}`);
     
     return {
-      email: currentUser.email_address || currentUser.email || null,
+      email: member.email_address || member.email || null,
       name: fullName || null,
-      avatarUrl: currentUser.avatar_url || currentUser.avatar || null,
+      avatarUrl: member.avatar_url || null,
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Attio profile:", error);
