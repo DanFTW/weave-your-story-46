@@ -178,6 +178,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "supabase",
         status: "unconfigured",
       },
+      {
+        id: "figma",
+        name: "Figma",
+        icon: "figma",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -581,6 +587,20 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#3ECF8E",    // Supabase green
       secondary: "#1C1C1C",  // Supabase dark
       tertiary: "#2DD4BF",   // Lighter teal
+    },
+  },
+  "figma": {
+    id: "figma",
+    name: "Figma",
+    icon: "figma",
+    status: "unconfigured",
+    description: "Figma allows Weave to access your design files, projects, and team resources. Create memories from your design journey, track project iterations, and organize your creative work.",
+    capabilities: ["View design files", "Access projects", "Read profile", "View comments"],
+    gradientColors: {
+      primary: "#F24E1E",    // Figma red-orange
+      secondary: "#A259FF",  // Figma purple
+      tertiary: "#1ABCFE",   // Figma blue
+      quaternary: "#0ACF83", // Figma green
     },
   },
 };
