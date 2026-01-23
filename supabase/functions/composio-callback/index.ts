@@ -104,6 +104,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "clickup": "clickup",
   "click_up": "clickup",
   "clickup_project": "clickup",
+  "confluence": "confluence",
+  "atlassian_confluence": "confluence",
+  "confluence_cloud": "confluence",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1547,6 +1550,54 @@ async function fetchClickUpProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Confluence user profile via Composio tool execution API
+async function fetchConfluenceProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Confluence profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/CONFLUENCE_GET_CURRENT_USER",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Confluence profile response status=${response.status}`);
+    console.log(`composio-callback: Confluence profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Confluence profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    
+    // Confluence returns: accountId, email, displayName, publicName, profilePicture.path
+    return {
+      email: data.email || null,
+      name: data.displayName || data.publicName || null,
+      avatarUrl: data.profilePicture?.path || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Confluence profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2343,6 +2394,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: ClickUp profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Confluence, fetch user profile via Composio tool execution API
+    if (toolkit === "confluence") {
+      console.log("composio-callback: Fetching Confluence profile info via Composio API...");
+      
+      const profileInfo = await fetchConfluenceProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Confluence profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase
