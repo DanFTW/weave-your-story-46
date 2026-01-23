@@ -34,7 +34,6 @@ import mondayIcon from "@/assets/integrations/monday.svg";
 import supabaseIcon from "@/assets/integrations/supabase.svg";
 import figmaIcon from "@/assets/integrations/figma.svg";
 import redditIcon from "@/assets/integrations/reddit.svg";
-import sharepointIcon from "@/assets/integrations/sharepoint.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -76,7 +75,6 @@ const iconImages: Record<string, string> = {
   supabase: supabaseIcon,
   figma: figmaIcon,
   reddit: redditIcon,
-  sharepoint: sharepointIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
