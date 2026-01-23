@@ -1,0 +1,9 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="clickup-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8930FD"/>
+      <stop offset="100%" stop-color="#49CCF9"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#clickup-gradient)" d="M3.5 18.5l3.5-2.75a5.002 5.002 0 008 0l3.5 2.75a9.003 9.003 0 01-15 0zM12 4l-8.5 8.5 3 2.25L12 9.5l5.5 5.25 3-2.25L12 4z"/>
+</svg>

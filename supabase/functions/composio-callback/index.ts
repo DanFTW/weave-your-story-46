@@ -101,6 +101,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "bitbucket": "bitbucket",
   "bitbucket_cloud": "bitbucket",
   "atlassian_bitbucket": "bitbucket",
+  "clickup": "clickup",
+  "click_up": "clickup",
+  "clickup_project": "clickup",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1494,6 +1497,56 @@ async function fetchBitbucketProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch ClickUp user profile via Composio tool execution API
+async function fetchClickUpProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching ClickUp profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/CLICKUP_GET_AUTHORIZED_USER",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: ClickUp profile response status=${response.status}`);
+    console.log(`composio-callback: ClickUp profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch ClickUp profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const data = result.data || result.response_data || result;
+    
+    // ClickUp returns: user.id, user.username, user.email, user.profilePicture
+    const userData = data.user || data;
+    
+    return {
+      email: userData.email || null,
+      name: userData.username || null,
+      avatarUrl: userData.profilePicture || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching ClickUp profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2271,6 +2324,25 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Bitbucket connection");
       }
+    }
+
+    // For ClickUp, fetch user profile via Composio tool execution API
+    if (toolkit === "clickup") {
+      console.log("composio-callback: Fetching ClickUp profile info via Composio API...");
+      
+      const profileInfo = await fetchClickUpProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: ClickUp profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase

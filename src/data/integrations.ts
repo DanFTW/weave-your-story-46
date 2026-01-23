@@ -208,6 +208,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "bitbucket",
         status: "unconfigured",
       },
+      {
+        id: "clickup",
+        name: "ClickUp",
+        icon: "clickup",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -677,6 +683,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0052CC",    // Atlassian blue
       secondary: "#2684FF",  // Bitbucket bright blue
       tertiary: "#0747A6",   // Atlassian dark blue
+    },
+  },
+  "clickup": {
+    id: "clickup",
+    name: "ClickUp",
+    icon: "clickup",
+    status: "unconfigured",
+    description: "ClickUp allows Weave to access your tasks, projects, and workspace activity. Create memories from completed tasks, track project milestones, and organize your productivity journey.",
+    capabilities: ["View tasks", "Access projects", "Read workspaces", "View profile"],
+    gradientColors: {
+      primary: "#7B68EE",    // ClickUp purple
+      secondary: "#49CCF9",  // ClickUp cyan
+      tertiary: "#8930FD",   // ClickUp violet
     },
   },
 };
