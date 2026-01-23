@@ -117,68 +117,223 @@ async function getConnectedAccountId(supabase: any, userId: string): Promise<str
   return data?.composio_connection_id || null;
 }
 
-// Fetch LinkedIn connections via Composio
-async function fetchLinkedInConnections(connectionId: string): Promise<LinkedInConnection[]> {
-  console.log("Fetching LinkedIn connections...");
-  
+// Get OAuth access token from Composio connected account
+async function getLinkedInAccessToken(connectionId: string): Promise<string | null> {
   try {
-    const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/LINKEDIN_GET_MY_CONNECTIONS", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": COMPOSIO_API_KEY,
-      },
-      body: JSON.stringify({
-        connected_account_id: connectionId,
-        arguments: {},
-      }),
-    });
-
-    const responseText = await response.text();
-    console.log("LinkedIn connections response status:", response.status);
+    console.log("Fetching OAuth token for connection:", connectionId);
+    
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY,
+        },
+      }
+    );
 
     if (!response.ok) {
-      console.error("Composio API error fetching connections:", response.status, responseText);
+      console.error("Failed to fetch connected account:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    // Try different paths where the token might be stored
+    const accessToken = 
+      data?.data?.connection_params?.access_token ||
+      data?.data?.access_token ||
+      data?.connection_params?.access_token ||
+      data?.access_token ||
+      null;
+
+    if (!accessToken) {
+      console.error("No access token found in Composio response. Keys:", Object.keys(data?.data || data));
+    }
+
+    return accessToken;
+  } catch (error) {
+    console.error("Error fetching access token:", error);
+    return null;
+  }
+}
+
+// Fetch connections directly from LinkedIn API
+async function fetchLinkedInConnections(connectionId: string): Promise<LinkedInConnection[]> {
+  console.log("Fetching LinkedIn connections via direct API...");
+  
+  try {
+    // First get the OAuth access token from Composio
+    const accessToken = await getLinkedInAccessToken(connectionId);
+    
+    if (!accessToken) {
+      console.error("No access token available for LinkedIn API");
+      return [];
+    }
+
+    console.log("Got access token, calling LinkedIn Connections API...");
+
+    // Call LinkedIn Connections API directly
+    // Note: This requires r_1st_connections scope which may be restricted
+    const response = await fetch(
+      "https://api.linkedin.com/v2/connections?q=viewer&projection=(elements*(to~(id,localizedFirstName,localizedLastName,localizedHeadline,vanityName,profilePicture(displayImage~:playableStreams))))",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+          "LinkedIn-Version": "202401",
+        },
+      }
+    );
+
+    const responseText = await response.text();
+    console.log("LinkedIn API response status:", response.status);
+
+    if (!response.ok) {
+      console.error("LinkedIn Connections API error:", response.status, responseText.slice(0, 500));
+      
+      // If 403/401, the connections API is restricted - try alternative approach
+      if (response.status === 403 || response.status === 401) {
+        console.log("Connections API restricted, trying profile-based approach...");
+        return await fetchConnectionsViaProfile(accessToken);
+      }
+      
       return [];
     }
 
     const data = JSON.parse(responseText);
-    const responseData = data.data || data;
+    const elements = data.elements || [];
     
-    // Parse connections from response
-    let connections = responseData?.response_data?.elements ||
-                      responseData?.response_data?.connections ||
-                      responseData?.elements ||
-                      responseData?.connections ||
-                      responseData?.data ||
-                      [];
+    console.log(`Found ${elements.length} LinkedIn connections`);
 
-    if (!Array.isArray(connections)) {
-      console.log("Connections data is not an array, raw:", JSON.stringify(responseData).slice(0, 500));
-      return [];
-    }
-
-    console.log(`Found ${connections.length} LinkedIn connections`);
-
-    return connections.map((conn: any) => {
-      // Handle different API response formats
-      const profile = conn.miniProfile || conn.profile || conn;
+    return elements.map((element: any) => {
+      const profile = element["to~"] || element.to || {};
       return {
-        id: conn.urn || conn.entityUrn || conn.id || profile.entityUrn || `connection_${Date.now()}`,
-        urn: conn.urn || conn.entityUrn || profile.entityUrn,
-        firstName: profile.firstName || conn.firstName,
-        lastName: profile.lastName || conn.lastName,
-        headline: profile.headline || profile.occupation || conn.headline,
-        company: profile.company?.name || profile.companyName || conn.company,
-        location: profile.locationName || profile.location || conn.location,
-        profilePicture: profile.picture?.displayImageUrl || profile.profilePicture || conn.profilePicture,
-        connectedAt: conn.createdAt || conn.connectedAt,
+        id: profile.id || element.to || `connection_${Date.now()}_${Math.random()}`,
+        urn: element.to || profile.id,
+        firstName: profile.localizedFirstName || profile.firstName,
+        lastName: profile.localizedLastName || profile.lastName,
+        headline: profile.localizedHeadline || profile.headline,
+        company: extractCompanyFromHeadline(profile.localizedHeadline || profile.headline),
+        location: profile.location || profile.locationName,
+        profilePicture: extractProfilePicture(profile.profilePicture),
+        connectedAt: element.createdAt ? new Date(element.createdAt).toISOString() : new Date().toISOString(),
       };
     });
   } catch (error) {
     console.error("Error fetching LinkedIn connections:", error);
     return [];
   }
+}
+
+// Alternative: Fetch profile info when connections API is restricted
+async function fetchConnectionsViaProfile(accessToken: string): Promise<LinkedInConnection[]> {
+  console.log("Attempting profile-based connection fetch...");
+  
+  try {
+    // Get the user's own profile to verify API access works
+    const profileResponse = await fetch(
+      "https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,localizedHeadline,vanityName)",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      }
+    );
+
+    if (!profileResponse.ok) {
+      console.error("Profile API also failed:", profileResponse.status);
+      return [];
+    }
+
+    const profile = await profileResponse.json();
+    console.log("Profile API works, user:", profile.localizedFirstName);
+    
+    // The connections API is restricted - we'll need to use Composio's tool approach
+    // Let's try the LINKEDIN_GET_MY_INFO tool to get connections count at least
+    return await fetchConnectionsViaComposioProfile(accessToken);
+  } catch (error) {
+    console.error("Profile-based fetch failed:", error);
+    return [];
+  }
+}
+
+// Try Composio's profile tool as fallback
+async function fetchConnectionsViaComposioProfile(accessToken: string): Promise<LinkedInConnection[]> {
+  // Since LinkedIn's Connections API is restricted, we'll return empty
+  // and log that users may need to manually trigger or use a different approach
+  console.log("LinkedIn Connections API is restricted. Consider using invitation-based tracking.");
+  
+  // Try to get pending invitations instead - this might be accessible
+  try {
+    const invitationsResponse = await fetch(
+      "https://api.linkedin.com/v2/invitations?q=pending&projection=(elements*(from~(id,localizedFirstName,localizedLastName,localizedHeadline)))",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      }
+    );
+
+    if (invitationsResponse.ok) {
+      const data = await invitationsResponse.json();
+      const elements = data.elements || [];
+      console.log(`Found ${elements.length} pending invitations`);
+      
+      return elements.map((element: any) => {
+        const profile = element["from~"] || {};
+        return {
+          id: profile.id || `invitation_${Date.now()}_${Math.random()}`,
+          urn: profile.id,
+          firstName: profile.localizedFirstName,
+          lastName: profile.localizedLastName,
+          headline: profile.localizedHeadline,
+          company: extractCompanyFromHeadline(profile.localizedHeadline),
+          connectedAt: new Date().toISOString(),
+        };
+      });
+    }
+  } catch (err) {
+    console.error("Invitations API also failed:", err);
+  }
+  
+  return [];
+}
+
+// Helper to extract company from headline like "Product Manager at Google"
+function extractCompanyFromHeadline(headline?: string): string | undefined {
+  if (!headline) return undefined;
+  
+  const atMatch = headline.match(/at\s+(.+?)(?:\s*[|,]|$)/i);
+  if (atMatch) return atMatch[1].trim();
+  
+  const dashMatch = headline.match(/[-–—]\s*(.+?)(?:\s*[|,]|$)/);
+  if (dashMatch) return dashMatch[1].trim();
+  
+  return undefined;
+}
+
+// Helper to extract profile picture URL from LinkedIn's complex structure
+function extractProfilePicture(profilePicture?: any): string | undefined {
+  if (!profilePicture) return undefined;
+  
+  try {
+    const displayImage = profilePicture["displayImage~"];
+    if (displayImage?.elements?.length > 0) {
+      // Get the largest image
+      const largestElement = displayImage.elements[displayImage.elements.length - 1];
+      return largestElement?.identifiers?.[0]?.identifier;
+    }
+  } catch {
+    // Ignore parsing errors
+  }
+  
+  return undefined;
 }
 
 // === LIAM MEMORY API ===
