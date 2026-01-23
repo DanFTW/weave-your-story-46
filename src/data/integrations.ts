@@ -202,6 +202,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "hubspot",
         status: "unconfigured",
       },
+      {
+        id: "bitbucket",
+        name: "Bitbucket",
+        icon: "bitbucket",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -658,6 +664,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FF7A59",    // HubSpot orange
       secondary: "#FF5C35",  // HubSpot dark orange
       tertiary: "#FF8F73",   // HubSpot light orange
+    },
+  },
+  "bitbucket": {
+    id: "bitbucket",
+    name: "Bitbucket",
+    icon: "bitbucket",
+    status: "unconfigured",
+    description: "Bitbucket allows Weave to access your repositories, pull requests, and code activity. Create memories from your commits, track project milestones, and organize your development journey.",
+    capabilities: ["View repositories", "Access pull requests", "Read commits", "View profile"],
+    gradientColors: {
+      primary: "#0052CC",    // Atlassian blue
+      secondary: "#2684FF",  // Bitbucket bright blue
+      tertiary: "#0747A6",   // Atlassian dark blue
     },
   },
 };

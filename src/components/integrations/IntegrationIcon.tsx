@@ -36,6 +36,7 @@ import figmaIcon from "@/assets/integrations/figma.svg";
 import redditIcon from "@/assets/integrations/reddit.svg";
 import stripeIcon from "@/assets/integrations/stripe.svg";
 import hubspotIcon from "@/assets/integrations/hubspot.svg";
+import bitbucketIcon from "@/assets/integrations/bitbucket.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -79,6 +80,7 @@ const iconImages: Record<string, string> = {
   reddit: redditIcon,
   stripe: stripeIcon,
   hubspot: hubspotIcon,
+  bitbucket: bitbucketIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
