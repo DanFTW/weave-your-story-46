@@ -232,6 +232,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "attio",
         status: "unconfigured",
       },
+      {
+        id: "notion",
+        name: "Notion",
+        icon: "notion",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -753,6 +759,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#266DF0",    // Attio Dodger Blue
       secondary: "#1A4FBF",  // Attio darker blue
       tertiary: "#4A8AF4",   // Attio lighter blue
+    },
+  },
+  "notion": {
+    id: "notion",
+    name: "Notion",
+    icon: "notion",
+    status: "unconfigured",
+    description: "Notion allows Weave to access your workspaces, pages, and databases. Create memories from your notes, track project updates, and organize your knowledge base.",
+    capabilities: ["View pages", "Access databases", "Read workspaces", "View profile"],
+    gradientColors: {
+      primary: "#000000",    // Notion black
+      secondary: "#191919",  // Notion dark gray
+      tertiary: "#37352F",   // Notion text gray
     },
   },
 };
