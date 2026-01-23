@@ -307,9 +307,7 @@ async function fetchTwitterProfile(connectionId: string): Promise<{
         },
         body: JSON.stringify({
           connected_account_id: connectionId,
-          arguments: {
-            user__fields: "profile_image_url",
-          },
+          arguments: {},
         }),
       }
     );
