@@ -1886,7 +1886,7 @@ async function fetchStravaProfile(accessToken: string): Promise<{
     const fullName = `${firstName} ${lastName}`.trim() || null;
     
     return {
-      email: null,  // Strava API does not expose email
+      email: data.email || null,  // Extract email if available from Strava API
       name: fullName,
       avatarUrl: data.profile || data.profile_medium || null,
     };
