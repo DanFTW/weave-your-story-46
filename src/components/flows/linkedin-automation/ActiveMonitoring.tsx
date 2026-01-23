@@ -73,7 +73,7 @@ export function ActiveMonitoring({
       <Card className="p-4 bg-muted/30">
         <h4 className="font-medium text-foreground mb-2">How It Works</h4>
         <ul className="text-sm text-muted-foreground space-y-1.5">
-          <li>• We check for new connections every 15 minutes</li>
+          <li>• We check for new connections every minute</li>
           <li>• Each new contact is saved with their full profile</li>
           <li>• Memories include name, headline, company & location</li>
           <li>• Duplicates are automatically prevented</li>
