@@ -116,6 +116,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "notion_workspace": "notion",
   "strava": "strava",
   "strava_v3": "strava",
+  "ticketmaster": "ticketmaster",
+  "ticket_master": "ticketmaster",
+  "ticketmaster_api": "ticketmaster",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -2774,6 +2777,59 @@ serve(async (req) => {
         console.log(`composio-callback: Strava profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
       } else {
         console.log("composio-callback: No access_token found for Strava connection");
+      }
+    }
+
+    // For Ticketmaster, fetch user profile via OpenID Connect userinfo endpoint
+    if (toolkit === "ticketmaster") {
+      console.log("composio-callback: Fetching Ticketmaster profile info via OpenID userinfo...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        try {
+          // Ticketmaster uses standard OpenID Connect userinfo endpoint
+          const response = await fetch(
+            "https://auth.ticketmaster.com/openidconnect/userinfo",
+            {
+              method: "GET",
+              headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Accept": "application/json",
+              },
+            }
+          );
+
+          const responseText = await response.text();
+          console.log(`composio-callback: Ticketmaster userinfo response status=${response.status}`);
+          console.log(`composio-callback: Ticketmaster userinfo response=${responseText.slice(0, 500)}`);
+
+          if (response.ok) {
+            const userData = JSON.parse(responseText);
+            
+            // OpenID Connect standard claims: name, email, picture
+            const fullName = userData.name || 
+                           [userData.given_name, userData.family_name].filter(Boolean).join(" ") || 
+                           null;
+            
+            if (userData.email) {
+              accountEmail = userData.email;
+            }
+            if (fullName) {
+              accountName = fullName;
+            }
+            if (userData.picture) {
+              accountAvatarUrl = userData.picture;
+            }
+          }
+        } catch (error) {
+          console.error("composio-callback: Error fetching Ticketmaster profile:", error);
+        }
+        
+        console.log(`composio-callback: Ticketmaster profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Ticketmaster connection");
       }
     }
 
