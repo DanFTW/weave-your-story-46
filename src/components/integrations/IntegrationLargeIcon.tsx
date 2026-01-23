@@ -40,6 +40,7 @@ import bitbucketIcon from "@/assets/integrations/bitbucket.svg";
 import clickupIcon from "@/assets/integrations/clickup.svg";
 import confluenceIcon from "@/assets/integrations/confluence.svg";
 import mailchimpIcon from "@/assets/integrations/mailchimp.svg";
+import attioIcon from "@/assets/integrations/attio.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -87,6 +88,7 @@ const iconImages: Record<string, string> = {
   clickup: clickupIcon,
   confluence: confluenceIcon,
   mailchimp: mailchimpIcon,
+  attio: attioIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
