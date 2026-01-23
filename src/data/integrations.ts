@@ -155,12 +155,6 @@ export const integrationSections: IntegrationSection[] = [
         status: "unconfigured",
       },
       {
-        id: "strava",
-        name: "Strava",
-        icon: "strava",
-        status: "unconfigured",
-      },
-      {
         id: "googletasks",
         name: "Google Tasks",
         icon: "googletasks",
@@ -588,19 +582,6 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FF5E30",    // Eventbrite orange
       secondary: "#CEFF58",  // Eventbrite lime
       tertiary: "#221D19",   // Eventbrite dark
-    },
-  },
-  "strava": {
-    id: "strava",
-    name: "Strava",
-    icon: "strava",
-    status: "unconfigured",
-    description: "Strava allows Weave to access your athletic activities, workout history, and fitness data. Create memories from your runs, rides, and workouts while tracking your fitness journey.",
-    capabilities: ["View activities", "Access workout history", "Read profile", "View stats"],
-    gradientColors: {
-      primary: "#FC4C02",    // Strava orange
-      secondary: "#E34402",  // Strava darker orange
-      tertiary: "#FF6B2B",   // Strava lighter orange
     },
   },
   "googletasks": {

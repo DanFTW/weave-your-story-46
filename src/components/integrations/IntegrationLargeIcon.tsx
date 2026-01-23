@@ -28,7 +28,6 @@ import zoomIcon from "@/assets/integrations/zoom.svg";
 import docusignIcon from "@/assets/integrations/docusign.svg";
 import canvaIcon from "@/assets/integrations/canva.svg";
 import eventbriteIcon from "@/assets/integrations/eventbrite.svg";
-import stravaIcon from "@/assets/integrations/strava.svg";
 import googletasksIcon from "@/assets/integrations/googletasks.svg";
 import mondayIcon from "@/assets/integrations/monday.svg";
 import supabaseIcon from "@/assets/integrations/supabase.svg";
@@ -77,7 +76,6 @@ const iconImages: Record<string, string> = {
   docusign: docusignIcon,
   canva: canvaIcon,
   eventbrite: eventbriteIcon,
-  strava: stravaIcon,
   googletasks: googletasksIcon,
   monday: mondayIcon,
   supabase: supabaseIcon,

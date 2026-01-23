@@ -75,7 +75,6 @@ const AUTH_CONFIGS: Record<string, string> = {
   docusign: "ac_ZRpGACBv5_5c",
   canva: "ac_zEU1TJt4cJ7K",
   eventbrite: "ac_qIPkRJIL1DT1",
-  strava: "ac_gnmDLF6QDFFV",
   googletasks: "ac_KaK1VD0skDww",
   monday: "ac_qtj0haSLNPl1",
   supabase: "ac_NFPURhvXB8VS",
@@ -95,7 +94,7 @@ const AUTH_CONFIGS: Record<string, string> = {
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "strava", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion"
+  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion"
 ];
 
 serve(async (req) => {
