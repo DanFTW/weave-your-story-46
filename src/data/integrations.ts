@@ -214,6 +214,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "clickup",
         status: "unconfigured",
       },
+      {
+        id: "confluence",
+        name: "Confluence",
+        icon: "confluence",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -696,6 +702,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#7B68EE",    // ClickUp purple
       secondary: "#49CCF9",  // ClickUp cyan
       tertiary: "#8930FD",   // ClickUp violet
+    },
+  },
+  "confluence": {
+    id: "confluence",
+    name: "Confluence",
+    icon: "confluence",
+    status: "unconfigured",
+    description: "Confluence allows Weave to access your pages, spaces, and team documentation. Create memories from your knowledge base, track content changes, and organize your collaborative work.",
+    capabilities: ["View pages", "Access spaces", "Read content", "View profile"],
+    gradientColors: {
+      primary: "#0052CC",    // Atlassian blue
+      secondary: "#2684FF",  // Atlassian light blue
+      tertiary: "#0065FF",   // Atlassian bright blue
     },
   },
 };

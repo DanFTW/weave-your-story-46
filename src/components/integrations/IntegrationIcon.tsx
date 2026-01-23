@@ -38,6 +38,7 @@ import stripeIcon from "@/assets/integrations/stripe.svg";
 import hubspotIcon from "@/assets/integrations/hubspot.svg";
 import bitbucketIcon from "@/assets/integrations/bitbucket.svg";
 import clickupIcon from "@/assets/integrations/clickup.svg";
+import confluenceIcon from "@/assets/integrations/confluence.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -83,6 +84,7 @@ const iconImages: Record<string, string> = {
   hubspot: hubspotIcon,
   bitbucket: bitbucketIcon,
   clickup: clickupIcon,
+  confluence: confluenceIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
