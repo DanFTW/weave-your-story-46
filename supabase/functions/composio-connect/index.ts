@@ -75,7 +75,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   docusign: "ac_ZRpGACBv5_5c",
   canva: "ac_zEU1TJt4cJ7K",
   eventbrite: "ac_qIPkRJIL1DT1",
-  strava: "ac_TlcNZAxXvuCP",
+  strava: "ac_gnmDLF6QDFFV",
   googletasks: "ac_KaK1VD0skDww",
   monday: "ac_qtj0haSLNPl1",
   supabase: "ac_NFPURhvXB8VS",
