@@ -35,6 +35,7 @@ import supabaseIcon from "@/assets/integrations/supabase.svg";
 import figmaIcon from "@/assets/integrations/figma.svg";
 import redditIcon from "@/assets/integrations/reddit.svg";
 import stripeIcon from "@/assets/integrations/stripe.svg";
+import hubspotIcon from "@/assets/integrations/hubspot.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -77,6 +78,7 @@ const iconImages: Record<string, string> = {
   figma: figmaIcon,
   reddit: redditIcon,
   stripe: stripeIcon,
+  hubspot: hubspotIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {

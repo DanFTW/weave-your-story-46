@@ -196,6 +196,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "stripe",
         status: "unconfigured",
       },
+      {
+        id: "hubspot",
+        name: "HubSpot",
+        icon: "hubspot",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -639,6 +645,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#635BFF",    // Stripe Blurple
       secondary: "#7A73FF",  // Lighter blurple
       tertiary: "#0A2540",   // Stripe dark navy
+    },
+  },
+  "hubspot": {
+    id: "hubspot",
+    name: "HubSpot",
+    icon: "hubspot",
+    status: "unconfigured",
+    description: "HubSpot allows Weave to access your CRM data, contacts, deals, and marketing insights. Create memories from your sales milestones, track customer interactions, and organize your business relationships.",
+    capabilities: ["View contacts", "Access deals", "Read companies", "View activities"],
+    gradientColors: {
+      primary: "#FF7A59",    // HubSpot orange
+      secondary: "#FF5C35",  // HubSpot dark orange
+      tertiary: "#FF8F73",   // HubSpot light orange
     },
   },
 };
