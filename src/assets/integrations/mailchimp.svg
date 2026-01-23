@@ -1,9 +1,58 @@
-<svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="26" cy="26" r="26" fill="#FFE01B"/>
-  <g fill="#241C15">
-    <!-- Freddie head silhouette -->
-    <path d="M26 10c-8.8 0-16 7.2-16 16s7.2 16 16 16 16-7.2 16-16-7.2-16-16-16zm-4.5 22c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5zm9 0c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5zm3.5 4c-.4.6-1.2 1.5-2.5 2.2-1.8 1-4 1.3-5.5 1.3s-3.7-.3-5.5-1.3c-1.3-.7-2.1-1.6-2.5-2.2-.2-.3-.1-.7.2-.9.3-.2.7-.1.9.2.3.5 1 1.2 2 1.8 1.5.8 3.4 1.1 4.9 1.1s3.4-.3 4.9-1.1c1-.5 1.7-1.3 2-1.8.2-.3.6-.4.9-.2.3.2.4.6.2.9z"/>
-    <!-- Wink eye -->
-    <ellipse cx="21.5" cy="24" rx="1.2" ry="0.4"/>
-  </g>
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Official Mailchimp Freddie mascot - winking chimp with cap -->
+  <defs>
+    <linearGradient id="mc-cap" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4A90A4"/>
+      <stop offset="100%" stop-color="#3D7A8C"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="128" fill="#FFE01B"/>
+  
+  <!-- Left ear outer -->
+  <ellipse cx="62" cy="115" rx="22" ry="26" fill="#6D4C41"/>
+  <!-- Left ear inner -->
+  <ellipse cx="62" cy="115" rx="13" ry="17" fill="#EFEBE9"/>
+  
+  <!-- Right ear outer -->
+  <ellipse cx="194" cy="115" rx="22" ry="26" fill="#6D4C41"/>
+  <!-- Right ear inner -->
+  <ellipse cx="194" cy="115" rx="13" ry="17" fill="#EFEBE9"/>
+  
+  <!-- Face main -->
+  <ellipse cx="128" cy="145" rx="75" ry="70" fill="#6D4C41"/>
+  
+  <!-- Face inner (muzzle area) -->
+  <ellipse cx="128" cy="155" rx="55" ry="48" fill="#EFEBE9"/>
+  
+  <!-- Cap brim -->
+  <ellipse cx="128" cy="90" rx="70" ry="12" fill="#3D7A8C"/>
+  
+  <!-- Cap top -->
+  <path d="M60 90 Q75 40 128 35 Q181 40 196 90 L190 100 Q175 55 128 50 Q81 55 66 100 Z" fill="url(#mc-cap)"/>
+  
+  <!-- Cap M letter -->
+  <text x="128" y="78" text-anchor="middle" font-size="24" font-weight="bold" fill="#FFE01B" font-family="Arial, sans-serif">M</text>
+  
+  <!-- Left eye (open) -->
+  <ellipse cx="100" cy="135" rx="16" ry="18" fill="#FFFFFF"/>
+  <circle cx="100" cy="137" r="9" fill="#241C15"/>
+  <circle cx="103" cy="134" r="3" fill="#FFFFFF"/>
+  
+  <!-- Right eye (winking) -->
+  <path d="M140 132 Q156 145 172 132" stroke="#241C15" stroke-width="5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Eyebrow left -->
+  <path d="M82 115 Q100 108 118 115" stroke="#5D4037" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Nose -->
+  <ellipse cx="128" cy="165" rx="10" ry="7" fill="#5D4037"/>
+  
+  <!-- Smile -->
+  <path d="M100 185 Q128 210 156 185" stroke="#5D4037" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Cheek lines (smile wrinkles) -->
+  <path d="M88 175 Q85 185 90 195" stroke="#D7CCC8" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M168 175 Q171 185 166 195" stroke="#D7CCC8" stroke-width="2" fill="none" stroke-linecap="round"/>
 </svg>

@@ -1602,51 +1602,81 @@ async function fetchConfluenceProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Mailchimp user profile via Composio tool execution API
+// Fetch Mailchimp user profile via direct Mailchimp API
+// Uses access_token and datacenter from Composio connection metadata
 async function fetchMailchimpProfile(connectionId: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Mailchimp profile via Composio API...");
+    console.log("composio-callback: Fetching Mailchimp profile via direct API...");
     
-    const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/MAILCHIMP_LIST_API_ROOT_RESOURCES",
+    // First, get the connection details to extract access_token and datacenter
+    const connResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
+        method: "GET",
+        headers: { "x-api-key": COMPOSIO_API_KEY! },
       }
     );
 
-    const responseText = await response.text();
-    console.log(`composio-callback: Mailchimp profile response status=${response.status}`);
-    console.log(`composio-callback: Mailchimp profile response=${responseText.slice(0, 500)}`);
+    if (!connResponse.ok) {
+      console.error(`composio-callback: Failed to get Mailchimp connection: ${connResponse.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
 
-    if (!response.ok) {
-      console.error("composio-callback: Failed to fetch Mailchimp profile");
+    const connData = await connResponse.json();
+    const data = connData.data || connData.connection_params || connData;
+    
+    console.log(`composio-callback: Mailchimp connection data keys: ${Object.keys(data).join(", ")}`);
+    
+    const accessToken = data.access_token;
+    // Mailchimp returns datacenter in the metadata or as dc parameter
+    // Format: us1, us2, us21, etc.
+    const datacenter = data.dc || data.datacenter || data.api_endpoint?.match(/https:\/\/([^.]+)\.api\.mailchimp\.com/)?.[1] || "us21";
+    
+    if (!accessToken) {
+      console.error("composio-callback: No access token found for Mailchimp");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    console.log(`composio-callback: Calling Mailchimp API at datacenter=${datacenter}...`);
+
+    // Call Mailchimp API root endpoint directly with OAuth token
+    const apiResponse = await fetch(
+      `https://${datacenter}.api.mailchimp.com/3.0/`,
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const responseText = await apiResponse.text();
+    console.log(`composio-callback: Mailchimp API response status=${apiResponse.status}`);
+    console.log(`composio-callback: Mailchimp API response=${responseText.slice(0, 500)}`);
+
+    if (!apiResponse.ok) {
+      console.error("composio-callback: Failed to fetch Mailchimp profile from API");
       return { email: null, name: null, avatarUrl: null };
     }
 
     const result = JSON.parse(responseText);
-    const data = result.data || result.response_data || result;
     
     // Mailchimp root API returns: account_name, email, first_name, last_name, avatar_url
-    const firstName = data.first_name || "";
-    const lastName = data.last_name || "";
-    const fullName = [firstName, lastName].filter(Boolean).join(" ") || data.account_name;
+    const firstName = result.first_name || "";
+    const lastName = result.last_name || "";
+    const fullName = [firstName, lastName].filter(Boolean).join(" ") || result.account_name;
+    
+    console.log(`composio-callback: Mailchimp profile - name=${fullName}, email=${result.email}`);
     
     return {
-      email: data.email || data.login?.email || null,
+      email: result.email || result.login?.email || null,
       name: fullName || null,
-      avatarUrl: data.avatar_url || null,
+      avatarUrl: result.avatar_url || null,
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Mailchimp profile:", error);
