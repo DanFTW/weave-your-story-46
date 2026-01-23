@@ -37,6 +37,7 @@ import redditIcon from "@/assets/integrations/reddit.svg";
 import stripeIcon from "@/assets/integrations/stripe.svg";
 import hubspotIcon from "@/assets/integrations/hubspot.svg";
 import bitbucketIcon from "@/assets/integrations/bitbucket.svg";
+import clickupIcon from "@/assets/integrations/clickup.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -81,6 +82,7 @@ const iconImages: Record<string, string> = {
   stripe: stripeIcon,
   hubspot: hubspotIcon,
   bitbucket: bitbucketIcon,
+  clickup: clickupIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
