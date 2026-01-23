@@ -85,6 +85,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "googletasks": "googletasks",
   "google_tasks": "googletasks",
   "tasks": "googletasks",
+  "supabase": "supabase",
+  "supabase_db": "supabase",
+  "supabase_management": "supabase",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -454,6 +457,76 @@ async function fetchMondayProfile(connectionId: string): Promise<{
     };
   } catch (error) {
     console.error("composio-callback: Error fetching Monday profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
+// Fetch Supabase user profile via Supabase Management API
+async function fetchSupabaseProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Supabase profile from Composio connection...");
+    
+    // Fetch connection details from Composio to get access token
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: { "x-api-key": COMPOSIO_API_KEY! },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: Failed to fetch Supabase connection: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const connectionData = await response.json();
+    const data = connectionData.data || connectionData.connection_params || connectionData;
+    
+    console.log(`composio-callback: Supabase connection data keys: ${Object.keys(data).join(", ")}`);
+    
+    // Try to get access token to call Supabase Management API
+    const accessToken = data.access_token;
+    
+    if (accessToken) {
+      // Call Supabase Management API to get user profile
+      const profileResponse = await fetch(
+        "https://api.supabase.com/v1/profile",
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (profileResponse.ok) {
+        const profile = await profileResponse.json();
+        console.log(`composio-callback: Supabase profile response: ${JSON.stringify(profile).slice(0, 300)}`);
+        
+        return {
+          email: profile.primary_email || profile.email || null,
+          name: profile.username || profile.first_name || profile.gotrue_user?.name || null,
+          avatarUrl: profile.avatar_url || null,
+        };
+      } else {
+        console.error(`composio-callback: Supabase Management API failed: ${profileResponse.status}`);
+      }
+    }
+    
+    // Fallback to connection metadata
+    return {
+      email: data.user_email || data.email || null,
+      name: data.username || data.name || null,
+      avatarUrl: data.avatar_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Supabase profile:", error);
     return { email: null, name: null, avatarUrl: null };
   }
 }
@@ -1703,6 +1776,25 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Monday profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Supabase, fetch profile via Supabase Management API
+    if (toolkit === "supabase") {
+      console.log("composio-callback: Fetching Supabase user info...");
+      
+      const profileInfo = await fetchSupabaseProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Supabase profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // Upsert to user_integrations table using service role (works from App Browser context)

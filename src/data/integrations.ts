@@ -172,6 +172,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "monday",
         status: "unconfigured",
       },
+      {
+        id: "supabase",
+        name: "Supabase",
+        icon: "supabase",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -562,6 +568,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#FF3D57",  // Monday red
       tertiary: "#00CA72",   // Monday green
       quaternary: "#FFCB00", // Monday yellow
+    },
+  },
+  "supabase": {
+    id: "supabase",
+    name: "Supabase",
+    icon: "supabase",
+    status: "unconfigured",
+    description: "Supabase allows Weave to access your projects, databases, and organization information. Create memories from your development journey, track project milestones, and organize your backend infrastructure.",
+    capabilities: ["View projects", "Access organizations", "Read profile", "View databases"],
+    gradientColors: {
+      primary: "#3ECF8E",    // Supabase green
+      secondary: "#1C1C1C",  // Supabase dark
+      tertiary: "#2DD4BF",   // Lighter teal
     },
   },
 };

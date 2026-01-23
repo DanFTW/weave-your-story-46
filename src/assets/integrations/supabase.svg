@@ -1,0 +1,11 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" rx="14" fill="#1C1C1C"/>
+  <path d="M35.3 48.5C34.5 49.6 32.8 48.9 32.8 47.5V33H48.5C50.9 33 52.2 35.8 50.6 37.6L35.3 48.5Z" fill="url(#supabase-grad-a)"/>
+  <path d="M28.7 15.5C29.5 14.4 31.2 15.1 31.2 16.5V31H15.5C13.1 31 11.8 28.2 13.4 26.4L28.7 15.5Z" fill="#3ECF8E"/>
+  <defs>
+    <linearGradient id="supabase-grad-a" x1="32.8" y1="33" x2="48.5" y2="48.5" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3ECF8E"/>
+      <stop offset="1" stop-color="#3ECF8E" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>
