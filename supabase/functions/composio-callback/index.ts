@@ -92,6 +92,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "figma_api": "figma",
   "reddit": "reddit",
   "reddit_api": "reddit",
+  "stripe": "stripe",
+  "stripe_api": "stripe",
+  "stripe_payments": "stripe",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1295,6 +1298,66 @@ async function fetchStravaProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Stripe account profile using Composio tool execution API
+async function fetchStripeProfile(connectionId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Stripe profile via Composio API...");
+    
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/STRIPE_RETRIEVE_ACCOUNT",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Stripe profile response status=${response.status}`);
+    console.log(`composio-callback: Stripe profile response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Stripe profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    // Parse response - Stripe account returns: email, business_profile.name, settings.branding.icon
+    const accountData = data.data || data.response_data || data;
+    
+    // Extract business name from business_profile
+    const businessName = accountData.business_profile?.name || 
+                         accountData.settings?.dashboard?.display_name ||
+                         null;
+    
+    // Stripe accounts have email at top level
+    const email = accountData.email || null;
+    
+    // Branding icon if set (rarely used)
+    const iconUrl = accountData.settings?.branding?.icon || null;
+
+    return {
+      email,
+      name: businessName || (email ? "Stripe Account" : null),
+      avatarUrl: iconUrl,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Stripe profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2005,6 +2068,25 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Reddit connection");
       }
+    }
+
+    // For Stripe, fetch account profile via Composio tool execution API
+    if (toolkit === "stripe") {
+      console.log("composio-callback: Fetching Stripe account info via Composio API...");
+      
+      const profileInfo = await fetchStripeProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Stripe profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase

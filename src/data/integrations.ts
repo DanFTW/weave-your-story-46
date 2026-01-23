@@ -190,6 +190,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "reddit",
         status: "unconfigured",
       },
+      {
+        id: "stripe",
+        name: "Stripe",
+        icon: "stripe",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -620,6 +626,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FF4500",    // Reddit OrangeRed
       secondary: "#FF5722",  // Lighter orange
       tertiary: "#1A1A1B",   // Reddit dark
+    },
+  },
+  "stripe": {
+    id: "stripe",
+    name: "Stripe",
+    icon: "stripe",
+    status: "unconfigured",
+    description: "Stripe allows Weave to access your payment data, customers, and transaction history. Create memories from your business milestones, track revenue events, and organize your financial journey.",
+    capabilities: ["View transactions", "Access customers", "Read account info", "View payment history"],
+    gradientColors: {
+      primary: "#635BFF",    // Stripe Blurple
+      secondary: "#7A73FF",  // Lighter blurple
+      tertiary: "#0A2540",   // Stripe dark navy
     },
   },
 };
