@@ -1686,63 +1686,99 @@ async function fetchMailchimpProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Attio user profile via two-step Composio Tool Execution:
-// 1. ATTIO_GET_V2_SELF to identify current user's workspace_member_id
-// 2. ATTIO_GET_WORKSPACE_MEMBER to get full profile details
+// Helper to log large JSON in chunks (avoids truncation)
+function logChunked(prefix: string, jsonStr: string, chunkSize: number = 1500): void {
+  const chunks = Math.ceil(jsonStr.length / chunkSize);
+  for (let i = 0; i < chunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, jsonStr.length);
+    console.log(`${prefix} [chunk ${i + 1}/${chunks}]: ${jsonStr.slice(start, end)}`);
+  }
+}
+
+// Fetch Attio user profile via hybrid approach:
+// 1. Get OAuth access_token from Composio connection metadata
+// 2. Call Attio /oauth/introspect directly to get workspace_member_id
+// 3. Call ATTIO_GET_WORKSPACE_MEMBER via Composio for full profile
 async function fetchAttioProfile(connectionId: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Attio profile via two-step process...");
+    console.log("composio-callback: Fetching Attio profile via introspect + member lookup...");
     
-    // Step 1: Get current token info to find workspace_member_id
-    console.log("composio-callback: Step 1 - Calling ATTIO_GET_V2_SELF...");
-    const selfResponse = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/ATTIO_GET_V2_SELF",
+    // Step 1: Get OAuth access_token from Composio connection metadata
+    console.log("composio-callback: Step 1 - Fetching Composio connection for access_token...");
+    const connResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+    
+    const connText = await connResponse.text();
+    console.log(`composio-callback: Composio connection status=${connResponse.status}`);
+    logChunked("composio-callback: Composio connection response", connText);
+    
+    if (!connResponse.ok) {
+      console.error("composio-callback: Failed to get Composio connection details");
+      return { email: null, name: null, avatarUrl: null };
+    }
+    
+    const connData = JSON.parse(connText);
+    const accessToken = 
+      connData.data?.connectionParams?.access_token ||
+      connData.connectionParams?.access_token ||
+      connData.data?.access_token ||
+      connData.access_token;
+    
+    if (!accessToken) {
+      console.error("composio-callback: No access_token found in connection");
+      console.log(`composio-callback: Connection data keys: ${Object.keys(connData.data || connData).join(", ")}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+    
+    console.log(`composio-callback: Found access_token (length=${accessToken.length})`);
+    
+    // Step 2: Call Attio OAuth introspect to get workspace_member_id
+    console.log("composio-callback: Step 2 - Calling Attio /oauth/introspect...");
+    const introspectResponse = await fetch(
+      "https://app.attio.com/oauth/introspect",
       {
         method: "POST",
         headers: {
+          "Authorization": `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
         },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
       }
     );
-
-    const selfText = await selfResponse.text();
-    console.log(`composio-callback: ATTIO_GET_V2_SELF status=${selfResponse.status}`);
-    console.log(`composio-callback: ATTIO_GET_V2_SELF response=${selfText.slice(0, 500)}`);
-
-    if (!selfResponse.ok) {
-      console.error("composio-callback: Failed to get Attio self info");
+    
+    const introspectText = await introspectResponse.text();
+    console.log(`composio-callback: Attio introspect status=${introspectResponse.status}`);
+    logChunked("composio-callback: Attio introspect response", introspectText);
+    
+    if (!introspectResponse.ok) {
+      console.error("composio-callback: Attio introspect failed");
       return { email: null, name: null, avatarUrl: null };
     }
-
-    const selfResult = JSON.parse(selfText);
-    const selfData = selfResult.data || selfResult.response_data || selfResult;
     
-    // Extract workspace_member_id from nested structure
-    const workspaceMember = selfData.workspace_member || selfData;
-    const workspaceMemberId = 
-      workspaceMember?.id?.workspace_member_id || 
-      workspaceMember?.workspace_member_id ||
-      workspaceMember?.id;
+    const introspectData = JSON.parse(introspectText);
+    const workspaceMemberId = introspectData.authorized_by_workspace_member_id;
     
     if (!workspaceMemberId) {
-      console.error("composio-callback: No workspace_member_id found in self response");
-      console.log(`composio-callback: Full self data structure: ${JSON.stringify(selfData).slice(0, 1000)}`);
+      console.error("composio-callback: No authorized_by_workspace_member_id in introspect response");
+      console.log(`composio-callback: Introspect data keys: ${Object.keys(introspectData).join(", ")}`);
       return { email: null, name: null, avatarUrl: null };
     }
     
     console.log(`composio-callback: Found workspace_member_id=${workspaceMemberId}`);
     
-    // Step 2: Get full member details using the ID
-    console.log("composio-callback: Step 2 - Calling ATTIO_GET_WORKSPACE_MEMBER...");
+    // Step 3: Get full member details using Composio tool execution
+    console.log("composio-callback: Step 3 - Calling ATTIO_GET_WORKSPACE_MEMBER...");
     const memberResponse = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/ATTIO_GET_WORKSPACE_MEMBER",
       {
@@ -1760,7 +1796,7 @@ async function fetchAttioProfile(connectionId: string): Promise<{
 
     const memberText = await memberResponse.text();
     console.log(`composio-callback: ATTIO_GET_WORKSPACE_MEMBER status=${memberResponse.status}`);
-    console.log(`composio-callback: ATTIO_GET_WORKSPACE_MEMBER response=${memberText.slice(0, 500)}`);
+    logChunked("composio-callback: ATTIO_GET_WORKSPACE_MEMBER response", memberText);
 
     if (!memberResponse.ok) {
       console.error("composio-callback: Failed to get Attio workspace member");
@@ -1771,12 +1807,12 @@ async function fetchAttioProfile(connectionId: string): Promise<{
     const memberData = memberResult.data || memberResult.response_data || memberResult;
     const member = memberData.data || memberData;
     
-    // Extract profile fields
+    // Extract profile fields from Attio response
     const firstName = member.first_name || "";
     const lastName = member.last_name || "";
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
     
-    console.log(`composio-callback: Attio profile - name=${fullName}, email=${member.email_address}`);
+    console.log(`composio-callback: Attio profile extracted - name=${fullName}, email=${member.email_address}, avatar=${member.avatar_url}`);
     
     return {
       email: member.email_address || member.email || null,
