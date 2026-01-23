@@ -95,6 +95,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "stripe": "stripe",
   "stripe_api": "stripe",
   "stripe_payments": "stripe",
+  "hubspot": "hubspot",
+  "hubspot_crm": "hubspot",
+  "hubspot_marketing": "hubspot",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1358,6 +1361,62 @@ async function fetchStripeProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch HubSpot user profile via HubSpot Owners API
+async function fetchHubSpotProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching HubSpot profile via Owners API...");
+    
+    // Get all owners - the authenticated user should be included
+    const response = await fetch(
+      "https://api.hubapi.com/crm/v3/owners?limit=100",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`composio-callback: HubSpot Owners API error: ${response.status}`);
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const ownersData = await response.json();
+    const owners = ownersData.results || [];
+    
+    console.log(`composio-callback: HubSpot returned ${owners.length} owners`);
+    
+    // Get the first owner (typically the authenticated user for personal accounts)
+    const owner = owners[0];
+    
+    if (!owner) {
+      console.log("composio-callback: No HubSpot owners found");
+      return { email: null, name: null, avatarUrl: null };
+    }
+    
+    const firstName = owner.firstName || "";
+    const lastName = owner.lastName || "";
+    const fullName = `${firstName} ${lastName}`.trim() || null;
+    
+    console.log(`composio-callback: HubSpot profile - name=${fullName}, email=${owner.email}`);
+    
+    return {
+      email: owner.email || null,
+      name: fullName,
+      avatarUrl: null, // HubSpot Owners API doesn't return avatar
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching HubSpot profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2087,6 +2146,29 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Stripe profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For HubSpot, fetch owner profile via HubSpot API
+    if (toolkit === "hubspot") {
+      console.log("composio-callback: Fetching HubSpot profile info via HubSpot API...");
+      
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchHubSpotProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        // No avatar for HubSpot - UI will show fallback
+        
+        console.log(`composio-callback: HubSpot profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for HubSpot connection");
+      }
     }
 
     const { data: savedData, error: dbError } = await supabase
