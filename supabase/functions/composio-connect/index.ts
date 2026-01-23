@@ -65,7 +65,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   linkedin: "ac_kzzsdBscCW-a",
   discord: "ac_jECZy5E0ycKY",
   googledocs: "ac_L-liU4EHxioi",
-  facebook: "aac_jOzgckhOLD_u",
+  facebook: "ac_ask1Zqimx5P6",
   trello: "ac_1s6sLEKtkxuE",
   github: "ac_kDM61t-M_opS",
   linear: "ac_epJLkL96tTtx",
