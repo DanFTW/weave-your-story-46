@@ -232,12 +232,6 @@ export const integrationSections: IntegrationSection[] = [
         icon: "notion",
         status: "unconfigured",
       },
-      {
-        id: "strava",
-        name: "Strava",
-        icon: "strava",
-        status: "unconfigured",
-      },
     ],
   },
   {
@@ -759,19 +753,6 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#000000",    // Notion black
       secondary: "#191919",  // Notion dark gray
       tertiary: "#37352F",   // Notion text gray
-    },
-  },
-  "strava": {
-    id: "strava",
-    name: "Strava",
-    icon: "strava",
-    status: "unconfigured",
-    description: "Strava allows Weave to access your fitness activities, training data, and athlete profile. Create memories from your workouts, track your training journey, and organize your athletic achievements.",
-    capabilities: ["View activities", "Access athlete profile", "Read training stats", "View clubs"],
-    gradientColors: {
-      primary: "#FC5200",    // Strava orange
-      secondary: "#E54700",  // Darker orange
-      tertiary: "#FF6B1A",   // Lighter orange
     },
   },
 };
