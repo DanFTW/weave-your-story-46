@@ -92,6 +92,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "figma_api": "figma",
   "reddit": "reddit",
   "reddit_api": "reddit",
+  "sharepoint": "sharepoint",
+  "microsoft_sharepoint": "sharepoint",
+  "ms_sharepoint": "sharepoint",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1727,6 +1730,33 @@ serve(async (req) => {
         console.log(`composio-callback: OneDrive profile - name=${accountName}, email=${accountEmail}`);
       } else {
         console.log("composio-callback: No access_token found for OneDrive connection");
+      }
+    }
+
+    // For SharePoint, fetch user profile via Microsoft Graph API (same as Outlook/Teams/Excel/OneDrive)
+    if (toolkit === "sharepoint") {
+      console.log("composio-callback: Fetching SharePoint profile info via MS Graph...");
+      
+      // Extract access_token from Composio connection data
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        // Reuse fetchOutlookProfile - SharePoint uses the same Microsoft Graph API
+        const profileInfo = await fetchOutlookProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: SharePoint profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for SharePoint connection");
       }
     }
 

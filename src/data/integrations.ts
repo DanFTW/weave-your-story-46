@@ -190,6 +190,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "reddit",
         status: "unconfigured",
       },
+      {
+        id: "sharepoint",
+        name: "SharePoint",
+        icon: "sharepoint",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -620,6 +626,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FF4500",    // Reddit OrangeRed
       secondary: "#FF5722",  // Lighter orange
       tertiary: "#1A1A1B",   // Reddit dark
+    },
+  },
+  "sharepoint": {
+    id: "sharepoint",
+    name: "SharePoint",
+    icon: "sharepoint",
+    status: "unconfigured",
+    description: "SharePoint allows Weave to access your sites, document libraries, and team content. Create memories from your shared files, track collaboration activities, and organize your workplace content.",
+    capabilities: ["View sites", "Access documents", "Read lists", "View libraries"],
+    gradientColors: {
+      primary: "#038387",    // SharePoint teal
+      secondary: "#005A5A",  // SharePoint dark teal
+      tertiary: "#00A4A6",   // SharePoint light teal
     },
   },
 };
