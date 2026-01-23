@@ -43,7 +43,6 @@ import confluenceIcon from "@/assets/integrations/confluence.svg";
 import mailchimpIcon from "@/assets/integrations/mailchimp.svg";
 import attioIcon from "@/assets/integrations/attio.svg";
 import stravaIcon from "@/assets/integrations/strava.svg";
-import ticketmasterIcon from "@/assets/integrations/ticketmaster.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -93,7 +92,6 @@ const iconImages: Record<string, string> = {
   attio: attioIcon,
   notion: notionIcon,
   strava: stravaIcon,
-  ticketmaster: ticketmasterIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
