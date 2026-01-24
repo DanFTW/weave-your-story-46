@@ -44,6 +44,7 @@ import mailchimpIcon from "@/assets/integrations/mailchimp.svg";
 import attioIcon from "@/assets/integrations/attio.svg";
 import stravaIcon from "@/assets/integrations/strava.svg";
 import ticketmasterIcon from "@/assets/integrations/ticketmaster.svg";
+import perplexityIcon from "@/assets/integrations/perplexity.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -94,6 +95,7 @@ const iconImages: Record<string, string> = {
   notion: notionIcon,
   strava: stravaIcon,
   ticketmaster: ticketmasterIcon,
+  perplexity: perplexityIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
@@ -101,7 +103,7 @@ export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconPr
 
   if (iconSrc) {
     // Icons that need to be inverted for visibility on dark backgrounds
-    const needsInvert = icon === 'twitter' || icon === 'github' || icon === 'notion';
+    const needsInvert = icon === 'twitter' || icon === 'github' || icon === 'notion' || icon === 'perplexity';
     
     return (
       <div className={cn("w-20 h-20 flex-shrink-0", className)}>

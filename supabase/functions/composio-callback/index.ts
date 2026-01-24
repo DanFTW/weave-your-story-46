@@ -119,6 +119,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "ticketmaster": "ticketmaster",
   "ticket_master": "ticketmaster",
   "ticketmaster_api": "ticketmaster",
+  "perplexity": "perplexity",
+  "perplexityai": "perplexity",
+  "perplexity_ai": "perplexity",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1899,6 +1902,21 @@ async function fetchStravaProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Perplexity profile - API key auth service without user profiles
+// Returns service-level identifiers since Perplexity doesn't have user accounts
+function fetchPerplexityProfile(): {
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+} {
+  console.log("composio-callback: Perplexity is API key auth - no user profile available");
+  return {
+    email: "API Key Connected",
+    name: "Perplexity AI",
+    avatarUrl: null,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2840,6 +2858,18 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Strava connection");
       }
+    }
+
+    // For Perplexity, use static profile info (API key auth, no user profile)
+    if (toolkit === "perplexity") {
+      console.log("composio-callback: Setting Perplexity profile info...");
+      
+      const profileInfo = fetchPerplexityProfile();
+      accountEmail = profileInfo.email;
+      accountName = profileInfo.name;
+      accountAvatarUrl = profileInfo.avatarUrl;
+      
+      console.log(`composio-callback: Perplexity profile - name=${accountName}, email=${accountEmail}`);
     }
 
     // For Ticketmaster, fetch full connection data from Composio and log it

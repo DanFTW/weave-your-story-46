@@ -244,6 +244,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "ticketmaster",
         status: "unconfigured",
       },
+      {
+        id: "perplexity",
+        name: "Perplexity",
+        icon: "perplexity",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -791,6 +797,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#026CDF",    // Ticketmaster blue
       secondary: "#0155B2",  // Darker blue
       tertiary: "#3D8EE8",   // Lighter blue
+    },
+  },
+  "perplexity": {
+    id: "perplexity",
+    name: "Perplexity",
+    icon: "perplexity",
+    status: "unconfigured",
+    description: "Perplexity AI allows Weave to perform intelligent web searches and generate AI-powered responses with real-time information, citations, and conversational AI capabilities.",
+    capabilities: ["AI Search", "Real-time answers", "Citation sources", "Conversational AI"],
+    gradientColors: {
+      primary: "#1A1A1A",    // Perplexity dark
+      secondary: "#2D2D2D",  // Perplexity mid gray
+      tertiary: "#404040",   // Perplexity light gray
     },
   },
 };
