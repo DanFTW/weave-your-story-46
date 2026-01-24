@@ -2410,25 +2410,87 @@ serve(async (req) => {
       }
     }
 
-    // For Canva, fetch user profile via Canva Connect API
+    // For Canva, fetch full connection data from Composio and log it, then get profile
     if (toolkit === "canva") {
-      console.log("composio-callback: Fetching Canva profile info via Connect API...");
+      console.log("composio-callback: Fetching Canva connection data from Composio...");
       
-      // Extract access_token from Composio connection data
-      const accessToken = data.access_token;
-      
-      if (accessToken) {
-        const profileInfo = await fetchCanvaProfile(accessToken);
+      try {
+        // Fetch full connection details from Composio API for diagnostics
+        const connResponse = await fetch(
+          `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+          {
+            method: "GET",
+            headers: {
+              "x-api-key": COMPOSIO_API_KEY!,
+              "Content-Type": "application/json",
+            },
+          }
+        );
         
-        if (profileInfo.name) {
-          accountName = profileInfo.name;
-          // Canva API doesn't provide email - leave null so UI hides the field
+        const connText = await connResponse.text();
+        console.log(`composio-callback: Canva connection status=${connResponse.status}`);
+        logChunked("composio-callback: Canva connection response", connText);
+        
+        if (connResponse.ok) {
+          const connData = JSON.parse(connText);
+          const connectionParams = connData.data || connData.connection_params || connData;
+          
+          console.log(`composio-callback: Canva connection keys: ${Object.keys(connectionParams).join(", ")}`);
+          
+          // Check if id_token exists (OpenID Connect) and decode it
+          if (connectionParams.id_token) {
+            console.log("composio-callback: Found Canva id_token, decoding JWT payload...");
+            const jwtPayload = decodeJwtPayload(connectionParams.id_token);
+            if (jwtPayload) {
+              console.log(`composio-callback: Canva JWT payload keys: ${Object.keys(jwtPayload).join(", ")}`);
+              logChunked("composio-callback: Canva JWT payload", JSON.stringify(jwtPayload));
+              
+              accountEmail = (jwtPayload.email as string) || null;
+              accountName = (jwtPayload.name as string) || 
+                            [jwtPayload.given_name, jwtPayload.family_name].filter(Boolean).join(" ") || 
+                            null;
+              accountAvatarUrl = (jwtPayload.picture as string) || null;
+              console.log(`composio-callback: Extracted Canva profile from id_token - email=${accountEmail}, name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+            }
+          } else {
+            console.log("composio-callback: No id_token found in Canva connection data");
+          }
+          
+          // If no id_token, try Canva Connect API with access_token
+          const accessToken = connectionParams.access_token || connectionParams.accessToken || data.access_token;
+          
+          if (!accountName && accessToken) {
+            console.log("composio-callback: Trying Canva Connect API for profile...");
+            const profileInfo = await fetchCanvaProfile(accessToken);
+            
+            if (profileInfo.name) {
+              accountName = profileInfo.name;
+            }
+            // Canva API doesn't provide email or avatar
+          }
+          
+          console.log(`composio-callback: Canva final profile - name=${accountName || 'not found'}, email=${accountEmail || 'not provided'}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+        } else {
+          console.error("composio-callback: Failed to fetch Canva connection data");
+          
+          // Fallback: try original approach with data.access_token
+          if (data.access_token) {
+            const profileInfo = await fetchCanvaProfile(data.access_token);
+            if (profileInfo.name) {
+              accountName = profileInfo.name;
+            }
+          }
         }
-        // No avatar for Canva - UI will show fallback
+      } catch (error) {
+        console.error("composio-callback: Error fetching Canva connection:", error);
         
-        console.log(`composio-callback: Canva profile - name=${accountName}`);
-      } else {
-        console.log("composio-callback: No access_token found for Canva connection");
+        // Fallback: try original approach
+        if (data.access_token) {
+          const profileInfo = await fetchCanvaProfile(data.access_token);
+          if (profileInfo.name) {
+            accountName = profileInfo.name;
+          }
+        }
       }
     }
 
