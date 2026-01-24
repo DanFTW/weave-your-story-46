@@ -25,7 +25,7 @@ import onedriveIcon from "@/assets/integrations/onedrive.svg";
 import todoistIcon from "@/assets/integrations/todoist.svg";
 import zoomIcon from "@/assets/integrations/zoom.svg";
 import docusignIcon from "@/assets/integrations/docusign.svg";
-import canvaIcon from "@/assets/integrations/canva.svg";
+import canvaIcon from "@/assets/integrations/canva.png";
 import eventbriteIcon from "@/assets/integrations/eventbrite.svg";
 import googletasksIcon from "@/assets/integrations/googletasks.svg";
 import mondayIcon from "@/assets/integrations/monday.svg";
