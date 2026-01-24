@@ -58,7 +58,7 @@ export function IntegrationConnectedAccount({
           <h3 className="text-base font-semibold text-foreground truncate">
             {name}
           </h3>
-          {email && email !== "Email not available" && email.includes("@") && (
+          {email && email !== "Email not available" && (email.includes("@") || email.startsWith("+")) && (
             <p className="text-sm text-muted-foreground truncate">
               {email}
             </p>

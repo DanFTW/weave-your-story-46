@@ -710,16 +710,52 @@ async function fetchRedditProfile(accessToken: string): Promise<{
   }
 }
 
-// Fetch WhatsApp Business profile via Composio tool execution API
+// Fetch WhatsApp Business profile via Composio connection metadata + tool execution fallback
 async function fetchWhatsAppProfile(connectionId: string): Promise<{
   name: string | null;
   phoneNumber: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching WhatsApp profile via Composio API...");
+    console.log("composio-callback: Fetching WhatsApp profile...");
     
-    // Call WHATSAPPBUSINESS_GETPHONENUMBERS to get phone number and verified name
+    // First, try to get profile from connection metadata
+    const connResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+      }
+    );
+    
+    if (connResponse.ok) {
+      const connData = await connResponse.json();
+      const data = connData.data || connData;
+      
+      console.log(`composio-callback: WhatsApp connection data keys: ${Object.keys(data || {}).join(', ')}`);
+      
+      // Try to extract from connection metadata or connectionParams
+      const metadata = data.metadata || data.connectionParams || {};
+      const connParams = data.connectionParams || {};
+      
+      console.log(`composio-callback: WhatsApp metadata: ${JSON.stringify(metadata).slice(0, 500)}`);
+      console.log(`composio-callback: WhatsApp connParams: ${JSON.stringify(connParams).slice(0, 500)}`);
+      
+      // Check if we have profile data in metadata
+      if (metadata.verified_name || metadata.display_phone_number || connParams.verified_name || connParams.display_phone_number) {
+        return {
+          name: metadata.verified_name || connParams.verified_name || data.appName || "WhatsApp Business",
+          phoneNumber: metadata.display_phone_number || connParams.display_phone_number || null,
+          avatarUrl: metadata.profile_picture_url || connParams.profile_picture_url || null,
+        };
+      }
+    }
+    
+    // Fallback: Try Composio tool execution API
+    console.log("composio-callback: Trying WhatsApp tool execution API...");
+    
     const response = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/WHATSAPPBUSINESS_GETPHONENUMBERS",
       {
@@ -736,28 +772,28 @@ async function fetchWhatsAppProfile(connectionId: string): Promise<{
     );
 
     const responseText = await response.text();
-    console.log(`composio-callback: WhatsApp profile response status=${response.status}`);
-    console.log(`composio-callback: WhatsApp profile response=${responseText.slice(0, 500)}`);
+    console.log(`composio-callback: WhatsApp tool response status=${response.status}`);
+    console.log(`composio-callback: WhatsApp tool response=${responseText.slice(0, 1000)}`);
 
     if (!response.ok) {
-      console.error("composio-callback: Failed to fetch WhatsApp profile");
-      return { name: null, phoneNumber: null, avatarUrl: null };
+      console.error("composio-callback: WhatsApp tool execution failed, using fallback");
+      return { name: "WhatsApp Business", phoneNumber: null, avatarUrl: null };
     }
 
     const result = JSON.parse(responseText);
-    const data = result.data || result.response_data || result;
+    const toolData = result.data || result.response_data || result;
     
     // WhatsApp Business API returns phone numbers array with verified_name
-    const phoneData = Array.isArray(data?.data) ? data.data[0] : data;
+    const phoneData = Array.isArray(toolData?.data) ? toolData.data[0] : toolData;
     
     return {
-      name: phoneData?.verified_name || null,
+      name: phoneData?.verified_name || "WhatsApp Business",
       phoneNumber: phoneData?.display_phone_number || null,
       avatarUrl: phoneData?.profile_picture_url || null,
     };
   } catch (error) {
     console.error("composio-callback: Error fetching WhatsApp profile:", error);
-    return { name: null, phoneNumber: null, avatarUrl: null };
+    return { name: "WhatsApp Business", phoneNumber: null, avatarUrl: null };
   }
 }
 
