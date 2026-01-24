@@ -710,16 +710,16 @@ async function fetchRedditProfile(accessToken: string): Promise<{
   }
 }
 
-// Fetch WhatsApp Business profile via Composio connection metadata + tool execution fallback
+// Fetch WhatsApp Business profile via Meta Graph API using Composio credentials
 async function fetchWhatsAppProfile(connectionId: string): Promise<{
   name: string | null;
   phoneNumber: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching WhatsApp profile...");
+    console.log("composio-callback: Fetching WhatsApp profile via Meta Graph API...");
     
-    // First, try to get profile from connection metadata
+    // Get connection data from Composio to extract access_token and waba_id
     const connResponse = await fetch(
       `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
       {
@@ -730,66 +730,89 @@ async function fetchWhatsAppProfile(connectionId: string): Promise<{
       }
     );
     
-    if (connResponse.ok) {
-      const connData = await connResponse.json();
-      const data = connData.data || connData;
-      
-      console.log(`composio-callback: WhatsApp connection data keys: ${Object.keys(data || {}).join(', ')}`);
-      
-      // Try to extract from connection metadata or connectionParams
-      const metadata = data.metadata || data.connectionParams || {};
-      const connParams = data.connectionParams || {};
-      
-      console.log(`composio-callback: WhatsApp metadata: ${JSON.stringify(metadata).slice(0, 500)}`);
-      console.log(`composio-callback: WhatsApp connParams: ${JSON.stringify(connParams).slice(0, 500)}`);
-      
-      // Check if we have profile data in metadata
-      if (metadata.verified_name || metadata.display_phone_number || connParams.verified_name || connParams.display_phone_number) {
-        return {
-          name: metadata.verified_name || connParams.verified_name || data.appName || "WhatsApp Business",
-          phoneNumber: metadata.display_phone_number || connParams.display_phone_number || null,
-          avatarUrl: metadata.profile_picture_url || connParams.profile_picture_url || null,
-        };
-      }
-    }
-    
-    // Fallback: Try Composio tool execution API
-    console.log("composio-callback: Trying WhatsApp tool execution API...");
-    
-    const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/WHATSAPPBUSINESS_GETPHONENUMBERS",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
-      }
-    );
-
-    const responseText = await response.text();
-    console.log(`composio-callback: WhatsApp tool response status=${response.status}`);
-    console.log(`composio-callback: WhatsApp tool response=${responseText.slice(0, 1000)}`);
-
-    if (!response.ok) {
-      console.error("composio-callback: WhatsApp tool execution failed, using fallback");
+    if (!connResponse.ok) {
+      console.error("composio-callback: Failed to fetch Composio connection data");
       return { name: "WhatsApp Business", phoneNumber: null, avatarUrl: null };
     }
-
-    const result = JSON.parse(responseText);
-    const toolData = result.data || result.response_data || result;
     
-    // WhatsApp Business API returns phone numbers array with verified_name
-    const phoneData = Array.isArray(toolData?.data) ? toolData.data[0] : toolData;
+    const connData = await connResponse.json();
+    const data = connData.data || connData;
+    
+    console.log(`composio-callback: WhatsApp connection data keys: ${Object.keys(data || {}).join(', ')}`);
+    
+    // Extract access token and WABA ID from connection data
+    const accessToken = data.access_token;
+    const wabaId = data.headers?.waba_id || data.generic_id || data.connectionParams?.waba_id;
+    
+    console.log(`composio-callback: WhatsApp access_token present: ${!!accessToken}, waba_id: ${wabaId}`);
+    
+    if (!accessToken || !wabaId) {
+      console.error("composio-callback: Missing access_token or waba_id for WhatsApp");
+      return { name: "WhatsApp Business", phoneNumber: null, avatarUrl: null };
+    }
+    
+    // Step 1: Get phone numbers from WABA using Meta Graph API
+    const phoneResponse = await fetch(
+      `https://graph.facebook.com/v22.0/${wabaId}/phone_numbers?fields=verified_name,display_phone_number,id`,
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+        },
+      }
+    );
+    
+    const phoneResponseText = await phoneResponse.text();
+    console.log(`composio-callback: Meta Graph phone_numbers status=${phoneResponse.status}`);
+    console.log(`composio-callback: Meta Graph phone_numbers response=${phoneResponseText.slice(0, 500)}`);
+    
+    if (!phoneResponse.ok) {
+      console.error("composio-callback: Meta Graph API phone_numbers call failed");
+      return { name: "WhatsApp Business", phoneNumber: null, avatarUrl: null };
+    }
+    
+    const phoneData = JSON.parse(phoneResponseText);
+    const firstPhone = phoneData.data?.[0];
+    
+    if (!firstPhone) {
+      console.log("composio-callback: No phone numbers found in WABA");
+      return { name: "WhatsApp Business", phoneNumber: null, avatarUrl: null };
+    }
+    
+    const verifiedName = firstPhone.verified_name;
+    const displayPhone = firstPhone.display_phone_number;
+    const phoneNumberId = firstPhone.id;
+    
+    console.log(`composio-callback: WhatsApp verified_name=${verifiedName}, displayPhone=${displayPhone}, phoneNumberId=${phoneNumberId}`);
+    
+    // Step 2: Get business profile for avatar using phone_number_id
+    let avatarUrl: string | null = null;
+    if (phoneNumberId) {
+      try {
+        const profileResponse = await fetch(
+          `https://graph.facebook.com/v22.0/${phoneNumberId}/whatsapp_business_profile?fields=profile_picture_url`,
+          {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+            },
+          }
+        );
+        
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          console.log(`composio-callback: WhatsApp business profile response=${JSON.stringify(profileData).slice(0, 300)}`);
+          avatarUrl = profileData.data?.[0]?.profile_picture_url || null;
+        }
+      } catch (profileError) {
+        console.log("composio-callback: Could not fetch WhatsApp business profile avatar");
+      }
+    }
     
     return {
-      name: phoneData?.verified_name || "WhatsApp Business",
-      phoneNumber: phoneData?.display_phone_number || null,
-      avatarUrl: phoneData?.profile_picture_url || null,
+      name: verifiedName || "WhatsApp Business",
+      phoneNumber: displayPhone || null,
+      avatarUrl,
     };
   } catch (error) {
     console.error("composio-callback: Error fetching WhatsApp profile:", error);
