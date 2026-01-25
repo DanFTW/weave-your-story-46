@@ -119,6 +119,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "ticketmaster": "ticketmaster",
   "ticket_master": "ticketmaster",
   "ticketmaster_api": "ticketmaster",
+  "facebook": "facebook",
+  "facebook_pages": "facebook",
+  "facebookpages": "facebook",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
