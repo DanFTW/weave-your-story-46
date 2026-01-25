@@ -870,60 +870,87 @@ async function fetchDiscordProfile(accessToken: string): Promise<{
   }
 }
 
-// Fetch Facebook Page profile using Composio tool execution API
+// Fetch Facebook profile via Graph API using access token from Composio connection
 async function fetchFacebookProfile(connectionId: string): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Facebook page profile via Composio API...");
+    console.log("composio-callback: Fetching Facebook profile via Graph API...");
     
-    const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/FACEBOOK_GET_PAGE_DETAILS",
+    // Step 1: Get access token from Composio connection
+    const connectionResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY!,
-        },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {},
-        }),
+        method: "GET",
+        headers: { "x-api-key": COMPOSIO_API_KEY! },
       }
     );
 
-    const responseText = await response.text();
-    console.log(`composio-callback: Facebook profile response status=${response.status}`);
-    console.log(`composio-callback: Facebook profile response=${responseText.slice(0, 500)}`);
-
-    if (!response.ok) {
-      console.error("composio-callback: Failed to fetch Facebook page details");
+    if (!connectionResponse.ok) {
+      console.error(`composio-callback: Failed to fetch Facebook connection details: ${connectionResponse.status}`);
       return { email: null, name: null, avatarUrl: null };
     }
 
-    const data = JSON.parse(responseText);
+    const connectionData = await connectionResponse.json();
+    const data = connectionData.data || connectionData;
+    const accessToken = data.access_token || data.params?.access_token;
     
-    // Parse response - structure may vary, try multiple paths
-    const pageData = data.data || data.response_data || data;
-    
-    // Facebook Page returns: id, name, picture, etc.
-    // picture can be an object with data.url or a direct URL
-    let avatarUrl: string | null = null;
-    if (pageData.picture?.data?.url) {
-      avatarUrl = pageData.picture.data.url;
-    } else if (typeof pageData.picture === 'string') {
-      avatarUrl = pageData.picture;
-    } else if (pageData.picture?.url) {
-      avatarUrl = pageData.picture.url;
+    if (!accessToken) {
+      console.error("composio-callback: No access token found for Facebook connection");
+      console.log(`composio-callback: Connection data keys: ${Object.keys(data).join(", ")}`);
+      return { email: null, name: null, avatarUrl: null };
     }
-    
-    return {
-      email: null, // Pages don't have email
-      name: pageData.name || null,
-      avatarUrl,
-    };
+
+    console.log("composio-callback: Got Facebook access token, fetching pages...");
+
+    // Step 2: Try to get user's Facebook Pages first
+    const pagesResponse = await fetch(
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,picture{url}&access_token=${accessToken}`,
+      { method: "GET" }
+    );
+
+    if (pagesResponse.ok) {
+      const pagesData = await pagesResponse.json();
+      console.log(`composio-callback: Facebook pages response: ${JSON.stringify(pagesData).slice(0, 500)}`);
+      
+      // Use first page if available
+      if (pagesData.data && pagesData.data.length > 0) {
+        const page = pagesData.data[0];
+        const avatarUrl = page.picture?.data?.url || page.picture?.url || null;
+        console.log(`composio-callback: Found Facebook Page: ${page.name}`);
+        return {
+          email: null, // Pages don't have email
+          name: page.name || null,
+          avatarUrl,
+        };
+      }
+    } else {
+      console.log(`composio-callback: Pages endpoint failed: ${pagesResponse.status}`);
+    }
+
+    // Step 3: Fallback to user profile if no pages
+    console.log("composio-callback: No pages found, fetching user profile...");
+    const userResponse = await fetch(
+      `https://graph.facebook.com/v19.0/me?fields=id,name,picture{url}&access_token=${accessToken}`,
+      { method: "GET" }
+    );
+
+    if (userResponse.ok) {
+      const userData = await userResponse.json();
+      console.log(`composio-callback: Facebook user response: ${JSON.stringify(userData).slice(0, 500)}`);
+      
+      const avatarUrl = userData.picture?.data?.url || userData.picture?.url || null;
+      return {
+        email: null, // Facebook doesn't provide email via basic profile
+        name: userData.name || null,
+        avatarUrl,
+      };
+    }
+
+    console.error(`composio-callback: Failed to fetch Facebook user profile: ${userResponse.status}`);
+    return { email: null, name: null, avatarUrl: null };
   } catch (error) {
     console.error("composio-callback: Error fetching Facebook profile:", error);
     return { email: null, name: null, avatarUrl: null };
@@ -2310,21 +2337,23 @@ serve(async (req) => {
       console.log(`composio-callback: Google Docs profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
-    // For Facebook, fetch page profile via Composio tool execution API
+    // For Facebook, fetch profile via Graph API using Composio access token
     if (toolkit === "facebook") {
-      console.log("composio-callback: Fetching Facebook page info via Composio API...");
+      console.log("composio-callback: Fetching Facebook profile via Graph API...");
       
       const profileInfo = await fetchFacebookProfile(connectionId);
       
       if (profileInfo.name) {
         accountName = profileInfo.name;
-        accountEmail = "Facebook Page"; // Identifier for display
-      }
-      if (profileInfo.avatarUrl) {
+        accountEmail = "Facebook Page"; // Identifier for display (hidden in UI per existing logic)
         accountAvatarUrl = profileInfo.avatarUrl;
+        console.log(`composio-callback: Facebook profile - name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        // Fallback if profile fetch fails
+        accountName = "Facebook";
+        accountEmail = "Connected";
+        console.log("composio-callback: Facebook profile fetch failed, using fallback");
       }
-      
-      console.log(`composio-callback: Facebook profile - name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // For Trello, fetch member profile via Composio tool execution API
