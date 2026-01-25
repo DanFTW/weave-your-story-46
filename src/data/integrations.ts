@@ -239,12 +239,6 @@ export const integrationSections: IntegrationSection[] = [
         status: "unconfigured",
       },
       {
-        id: "ticketmaster",
-        name: "Ticketmaster",
-        icon: "ticketmaster",
-        status: "unconfigured",
-      },
-      {
         id: "perplexity",
         name: "Perplexity",
         icon: "perplexity",
@@ -784,19 +778,6 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#FC4C02",    // Strava orange
       secondary: "#E54400",  // Strava dark orange
       tertiary: "#FF6B1A",   // Strava light orange
-    },
-  },
-  "ticketmaster": {
-    id: "ticketmaster",
-    name: "Ticketmaster",
-    icon: "ticketmaster",
-    status: "unconfigured",
-    description: "Ticketmaster allows Weave to access your event tickets, orders, and entertainment preferences. Create memories from concerts, sports events, and live experiences you've attended.",
-    capabilities: ["View tickets", "Access orders", "Read event history", "View profile"],
-    gradientColors: {
-      primary: "#026CDF",    // Ticketmaster blue
-      secondary: "#0155B2",  // Darker blue
-      tertiary: "#3D8EE8",   // Lighter blue
     },
   },
   "perplexity": {
