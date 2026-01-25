@@ -34,6 +34,7 @@ import locationIcon from "@/assets/integrations/location.png";
 import supabaseIcon from "@/assets/integrations/supabase.svg";
 import figmaIcon from "@/assets/integrations/figma.svg";
 import redditIcon from "@/assets/integrations/reddit.svg";
+import facebookIcon from "@/assets/integrations/facebook.svg";
 import stripeIcon from "@/assets/integrations/stripe.svg";
 import hubspotIcon from "@/assets/integrations/hubspot.svg";
 import bitbucketIcon from "@/assets/integrations/bitbucket.svg";
@@ -83,6 +84,7 @@ const iconImages: Record<string, string> = {
   supabase: supabaseIcon,
   figma: figmaIcon,
   reddit: redditIcon,
+  facebook: facebookIcon,
   stripe: stripeIcon,
   hubspot: hubspotIcon,
   bitbucket: bitbucketIcon,

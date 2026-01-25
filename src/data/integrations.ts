@@ -244,6 +244,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "ticketmaster",
         status: "unconfigured",
       },
+      {
+        id: "facebook",
+        name: "Facebook",
+        icon: "facebook",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -791,6 +797,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#008CFF",    // Ticketmaster blue
       secondary: "#0066CC",  // Darker blue
       tertiary: "#004182",   // Deep blue
+    },
+  },
+  "facebook": {
+    id: "facebook",
+    name: "Facebook",
+    icon: "facebook",
+    status: "unconfigured",
+    description: "Facebook allows Weave to access your Facebook Pages. Manage posts, view insights, and create memories from your Page content and interactions.",
+    capabilities: ["Manage Page posts", "View Page insights", "Access conversations", "Create content"],
+    gradientColors: {
+      primary: "#1877F2",    // Facebook Blue
+      secondary: "#0866FF",  // Messenger Blue
+      tertiary: "#0062E0",   // Darker blue
     },
   },
 };
