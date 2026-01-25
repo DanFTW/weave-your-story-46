@@ -122,6 +122,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "facebook": "facebook",
   "facebook_pages": "facebook",
   "facebookpages": "facebook",
+  "box": "box",
+  "box_cloud": "box",
+  "boxcloud": "box",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -2003,6 +2006,49 @@ function fetchPerplexityProfile(): {
   };
 }
 
+// Fetch Box user profile via Box API directly
+async function fetchBoxProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Box profile via Box API...");
+    
+    const response = await fetch(
+      "https://api.box.com/2.0/users/me",
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Box API /users/me status=${response.status}`);
+    console.log(`composio-callback: Box API response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Box profile from Box API");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const userData = JSON.parse(responseText);
+    
+    // Box API returns: name, login (email), avatar_url
+    return {
+      email: userData.login || null,
+      name: userData.name || null,
+      avatarUrl: userData.avatar_url || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Box profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2971,6 +3017,30 @@ serve(async (req) => {
       console.log(`composio-callback: Ticketmaster profile - name=${accountName}, email=${accountEmail}`);
     }
 
+    // For Box, fetch user profile via Box API directly
+    if (toolkit === "box") {
+      console.log("composio-callback: Fetching Box profile info via Box API...");
+      
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchBoxProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        if (profileInfo.avatarUrl) {
+          accountAvatarUrl = profileInfo.avatarUrl;
+        }
+        
+        console.log(`composio-callback: Box profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Box connection");
+      }
+    }
 
     const { data: savedData, error: dbError } = await supabase
       .from("user_integrations")
