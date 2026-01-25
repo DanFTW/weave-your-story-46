@@ -250,6 +250,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "facebook",
         status: "unconfigured",
       },
+      {
+        id: "box",
+        name: "Box",
+        icon: "box",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -810,6 +816,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#1877F2",    // Facebook Blue
       secondary: "#0866FF",  // Messenger Blue
       tertiary: "#0062E0",   // Darker blue
+    },
+  },
+  "box": {
+    id: "box",
+    name: "Box",
+    icon: "box",
+    status: "unconfigured",
+    description: "Box allows Weave to access your cloud files and folders. Create memories from your documents, collaborate on files, and organize your cloud storage.",
+    capabilities: ["View files", "Browse folders", "Access shared content", "View recent activity"],
+    gradientColors: {
+      primary: "#0061D5",    // Box blue
+      secondary: "#003C84",  // Box dark blue
+      tertiary: "#151F26",   // Box slate
     },
   },
 };
