@@ -119,6 +119,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "perplexity": "perplexity",
   "perplexityai": "perplexity",
   "perplexity_ai": "perplexity",
+  "ticketmaster": "ticketmaster",
+  "ticket_master": "ticketmaster",
+  "ticketmaster_api": "ticketmaster",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -2926,6 +2929,17 @@ serve(async (req) => {
       accountAvatarUrl = profileInfo.avatarUrl;
       
       console.log(`composio-callback: Perplexity profile - name=${accountName}, email=${accountEmail}`);
+    }
+
+    // For Ticketmaster, use static profile info (API key auth, no user profile)
+    if (toolkit === "ticketmaster") {
+      console.log("composio-callback: Setting Ticketmaster profile info...");
+      
+      accountEmail = "API Key Connected";
+      accountName = "Ticketmaster";
+      accountAvatarUrl = null;
+      
+      console.log(`composio-callback: Ticketmaster profile - name=${accountName}, email=${accountEmail}`);
     }
 
 
