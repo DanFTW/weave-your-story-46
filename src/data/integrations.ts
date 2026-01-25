@@ -244,6 +244,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "perplexity",
         status: "unconfigured",
       },
+      {
+        id: "ticketmaster",
+        name: "Ticketmaster",
+        icon: "ticketmaster",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -791,6 +797,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#1A1A1A",    // Perplexity dark
       secondary: "#2D2D2D",  // Perplexity mid gray
       tertiary: "#404040",   // Perplexity light gray
+    },
+  },
+  "ticketmaster": {
+    id: "ticketmaster",
+    name: "Ticketmaster",
+    icon: "ticketmaster",
+    status: "unconfigured",
+    description: "Ticketmaster allows Weave to access event information, venues, and attractions. Discover concerts, sports events, and performances happening near you.",
+    capabilities: ["Search events", "View attractions", "Browse venues", "Get event details"],
+    gradientColors: {
+      primary: "#008CFF",    // Ticketmaster blue
+      secondary: "#0066CC",  // Darker blue
+      tertiary: "#004182",   // Deep blue
     },
   },
 };
