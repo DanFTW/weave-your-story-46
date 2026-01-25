@@ -95,12 +95,6 @@ export const integrationSections: IntegrationSection[] = [
         status: "unconfigured",
       },
       {
-        id: "facebook",
-        name: "Facebook",
-        icon: "facebook",
-        status: "unconfigured",
-      },
-      {
         id: "trello",
         name: "Trello",
         icon: "trello",
@@ -470,19 +464,6 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#4285F4",    // Google blue
       secondary: "#3367D6",  // Google dark blue
       tertiary: "#669DF6",   // Google light blue
-    },
-  },
-  "facebook": {
-    id: "facebook",
-    name: "Facebook",
-    icon: "facebook",
-    status: "unconfigured",
-    description: "Facebook allows Weave to access your Pages, posts, and insights. Create memories from your page content, track engagement, and manage your social presence.",
-    capabilities: ["View pages", "Access posts", "Read insights", "Manage content"],
-    gradientColors: {
-      primary: "#1877F2",    // Facebook blue
-      secondary: "#166FE5",  // Facebook dark blue
-      tertiary: "#4599FF",   // Facebook light blue
     },
   },
   "trello": {

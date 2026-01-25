@@ -15,7 +15,6 @@ import linkedinIcon from "@/assets/integrations/linkedin.svg";
 import discordIcon from "@/assets/integrations/discord.svg";
 import dropboxIcon from "@/assets/integrations/dropbox.png";
 import googleDocsIcon from "@/assets/integrations/googledocs.svg";
-import facebookIcon from "@/assets/integrations/facebook.svg";
 import notionIcon from "@/assets/integrations/notion.svg";
 import trelloIcon from "@/assets/integrations/trello.svg";
 import slackIcon from "@/assets/integrations/slack.svg";
@@ -70,7 +69,6 @@ const iconImages: Record<string, string> = {
   linkedin: linkedinIcon,
   discord: discordIcon,
   googledocs: googleDocsIcon,
-  facebook: facebookIcon,
   trello: trelloIcon,
   github: githubIcon,
   linear: linearIcon,
