@@ -116,9 +116,6 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "notion_workspace": "notion",
   "strava": "strava",
   "strava_v3": "strava",
-  "ticketmaster": "ticketmaster",
-  "ticket_master": "ticketmaster",
-  "ticketmaster_api": "ticketmaster",
   "perplexity": "perplexity",
   "perplexityai": "perplexity",
   "perplexity_ai": "perplexity",
@@ -2931,66 +2928,6 @@ serve(async (req) => {
       console.log(`composio-callback: Perplexity profile - name=${accountName}, email=${accountEmail}`);
     }
 
-    // For Ticketmaster, fetch full connection data from Composio and log it
-    if (toolkit === "ticketmaster") {
-      console.log("composio-callback: Fetching Ticketmaster connection data from Composio...");
-      
-      try {
-        // Fetch full connection details from Composio API
-        const connResponse = await fetch(
-          `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
-          {
-            method: "GET",
-            headers: {
-              "x-api-key": COMPOSIO_API_KEY!,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-        
-        const connText = await connResponse.text();
-        console.log(`composio-callback: Ticketmaster connection status=${connResponse.status}`);
-        logChunked("composio-callback: Ticketmaster connection response", connText);
-        
-        if (connResponse.ok) {
-          const connData = JSON.parse(connText);
-          const connectionParams = connData.data || connData.connection_params || connData;
-          
-          console.log(`composio-callback: Ticketmaster connection keys: ${Object.keys(connectionParams).join(", ")}`);
-          
-          // Check if id_token exists and decode it
-          if (connectionParams.id_token) {
-            console.log("composio-callback: Found id_token, decoding JWT payload...");
-            const jwtPayload = decodeJwtPayload(connectionParams.id_token);
-            if (jwtPayload) {
-              console.log(`composio-callback: JWT payload keys: ${Object.keys(jwtPayload).join(", ")}`);
-              logChunked("composio-callback: JWT payload", JSON.stringify(jwtPayload));
-              
-              accountEmail = (jwtPayload.email as string) || null;
-              accountName = (jwtPayload.name as string) || 
-                            [jwtPayload.given_name, jwtPayload.family_name].filter(Boolean).join(" ") || 
-                            null;
-              accountAvatarUrl = (jwtPayload.picture as string) || null;
-              console.log(`composio-callback: Extracted from id_token - email=${accountEmail}, name=${accountName}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
-            }
-          } else {
-            console.log("composio-callback: No id_token found in Ticketmaster connection data");
-          }
-          
-          // Only look for name in connection metadata if not already found, DO NOT fabricate email
-          if (!accountName) {
-            accountName = connectionParams.name || connectionParams.display_name || connectionParams.user_name || null;
-          }
-          
-          // Log what we found
-          console.log(`composio-callback: Ticketmaster final profile - name=${accountName || 'not found'}, email=${accountEmail || 'not provided'}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
-        } else {
-          console.error("composio-callback: Failed to fetch Ticketmaster connection data");
-        }
-      } catch (error) {
-        console.error("composio-callback: Error fetching Ticketmaster connection:", error);
-      }
-    }
 
     const { data: savedData, error: dbError } = await supabase
       .from("user_integrations")

@@ -89,7 +89,6 @@ const AUTH_CONFIGS: Record<string, string> = {
   attio: "ac_W5C1G-fdQh11",
   notion: "ac_OhQUfFIwuj3R",
   strava: "ac_LUjuTEN_sarA",
-  ticketmaster: "ac_wR7rAtP6wLNC",
   perplexity: "ac_mfa9ErILfDh-",
 };
 
@@ -97,7 +96,7 @@ const AUTH_CONFIGS: Record<string, string> = {
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "ticketmaster", "perplexity"
+  "linkedin", "discord", "googledocs", "facebook", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity"
 ];
 
 serve(async (req) => {
