@@ -46,6 +46,7 @@ import stravaIcon from "@/assets/integrations/strava.svg";
 import perplexityIcon from "@/assets/integrations/perplexity.svg";
 import ticketmasterIcon from "@/assets/integrations/ticketmaster.svg";
 import boxIcon from "@/assets/integrations/box.svg";
+import googlesuperIcon from "@/assets/integrations/googlesuper.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -98,6 +99,7 @@ const iconImages: Record<string, string> = {
   perplexity: perplexityIcon,
   ticketmaster: ticketmasterIcon,
   box: boxIcon,
+  googlesuper: googlesuperIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {

@@ -125,6 +125,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "box": "box",
   "box_cloud": "box",
   "boxcloud": "box",
+  "googlesuper": "googlesuper",
+  "google_super": "googlesuper",
+  "google-super": "googlesuper",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -3040,6 +3043,33 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Box connection");
       }
+    }
+
+    // For Google Super, fetch profile using Google userinfo endpoint via Composio
+    // (same pattern as Google Docs since it uses Google OAuth)
+    if (toolkit === "googlesuper") {
+      console.log("composio-callback: Fetching Google Super profile via Composio API...");
+      
+      // First try the standard Google userinfo approach (reuses existing function)
+      let profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      // If that fails (401 due to missing scopes), try cross-integration lookup
+      if (!profileInfo.email && !profileInfo.name) {
+        console.log("composio-callback: Google userinfo failed, trying cross-integration lookup...");
+        profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
+      }
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Google Super profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase
