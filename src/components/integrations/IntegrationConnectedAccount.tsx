@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
+// Helper function to get initials from name (e.g., "Daniel Figueroa" → "DF")
+const getInitials = (name: string): string => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+  }
+  return name.charAt(0).toUpperCase();
+};
+
 interface IntegrationConnectedAccountProps {
   avatarUrl?: string;
   name: string;
@@ -47,7 +56,7 @@ export function IntegrationConnectedAccount({
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-primary/10">
               <span className="text-lg font-semibold text-primary">
-                {name.charAt(0).toUpperCase()}
+                {getInitials(name)}
               </span>
             </div>
           )}
