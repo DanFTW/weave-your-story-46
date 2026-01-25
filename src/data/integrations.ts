@@ -256,6 +256,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "box",
         status: "unconfigured",
       },
+      {
+        id: "googlesuper",
+        name: "Google Super",
+        icon: "googlesuper",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -829,6 +835,20 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0061D5",    // Box blue
       secondary: "#003C84",  // Box dark blue
       tertiary: "#151F26",   // Box slate
+    },
+  },
+  "googlesuper": {
+    id: "googlesuper",
+    name: "Google Super",
+    icon: "googlesuper",
+    status: "unconfigured",
+    description: "Google Super is a unified Google toolkit that gives Weave access to Gmail, Drive, Calendar, Sheets, Analytics, and more. Manage your entire Google workspace through a single connection.",
+    capabilities: ["Send emails", "Manage Drive files", "Create calendar events", "Access Sheets", "View Analytics"],
+    gradientColors: {
+      primary: "#4285F4",    // Google blue
+      secondary: "#EA4335",  // Google red
+      tertiary: "#34A853",   // Google green
+      quaternary: "#FBBC05", // Google yellow
     },
   },
 };
