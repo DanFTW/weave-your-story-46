@@ -61,6 +61,21 @@ serve(async (req) => {
 
     const connectionId = integration.composio_connection_id;
 
+    // Helper to safely parse JSON responses
+    const safeJsonParse = async (response: Response) => {
+      const text = await response.text();
+      if (!text || text.trim() === "") {
+        console.log("Empty response from API, status:", response.status);
+        return null;
+      }
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error("Failed to parse JSON:", text.substring(0, 500));
+        throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
+      }
+    };
+
     // Handle different actions
     switch (action) {
       case "get-boards": {
@@ -75,10 +90,16 @@ serve(async (req) => {
           }),
         });
 
-        const data = await response.json();
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Composio API error:", response.status, errorText);
+          throw new Error(`Composio API error: ${response.status}`);
+        }
+
+        const data = await safeJsonParse(response);
         console.log("Get boards response:", JSON.stringify(data));
 
-        const boards = data.data?.response_data || data.data || [];
+        const boards = data?.data?.response_data || data?.data || [];
         
         return new Response(JSON.stringify({ 
           boards: Array.isArray(boards) ? boards.map((b: any) => ({
@@ -111,10 +132,16 @@ serve(async (req) => {
           }),
         });
 
-        const data = await response.json();
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Composio API error:", response.status, errorText);
+          throw new Error(`Composio API error: ${response.status}`);
+        }
+
+        const data = await safeJsonParse(response);
         console.log("Get lists response:", JSON.stringify(data));
 
-        const lists = data.data?.response_data || data.data || [];
+        const lists = data?.data?.response_data || data?.data || [];
         
         return new Response(JSON.stringify({ 
           lists: Array.isArray(lists) ? lists.map((l: any) => ({
@@ -159,10 +186,10 @@ serve(async (req) => {
             }
           );
 
-          const newCardData = await newCardResponse.json();
+          const newCardData = await safeJsonParse(newCardResponse);
           console.log("New card trigger response:", JSON.stringify(newCardData));
           
-          if (newCardData.trigger_id) {
+          if (newCardData?.trigger_id) {
             results.newCardTriggerId = newCardData.trigger_id;
           }
         }
@@ -188,10 +215,10 @@ serve(async (req) => {
             }
           );
 
-          const updatedCardData = await updatedCardResponse.json();
+          const updatedCardData = await safeJsonParse(updatedCardResponse);
           console.log("Updated card trigger response:", JSON.stringify(updatedCardData));
           
-          if (updatedCardData.trigger_id) {
+          if (updatedCardData?.trigger_id) {
             results.updatedCardTriggerId = updatedCardData.trigger_id;
           }
         }
