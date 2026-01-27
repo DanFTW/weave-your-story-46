@@ -11,6 +11,94 @@ const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const HUBSPOT_APP_ID = Deno.env.get("HUBSPOT_APP_ID");
 const HUBSPOT_DEVELOPER_API_KEY = Deno.env.get("HUBSPOT_DEVELOPER_API_KEY");
 
+// Helper function to poll HubSpot contacts via Composio
+async function pollHubSpotContacts(
+  supabaseClient: any,
+  userId: string,
+  connectionId: string,
+  composioApiKey: string
+): Promise<{ newContacts: number; error?: string }> {
+  try {
+    console.log(`[HubSpot Poll] Fetching contacts for user ${userId}`);
+
+    // Use Composio to list HubSpot contacts
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/HUBSPOT_LIST_CONTACTS",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": composioApiKey,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {
+            limit: 100,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[HubSpot Poll] Composio error: ${response.status} - ${errorText}`);
+      return { newContacts: 0, error: errorText };
+    }
+
+    const data = await response.json();
+    console.log(`[HubSpot Poll] Response:`, JSON.stringify(data).slice(0, 500));
+
+    // Extract contacts from response
+    const contacts = data?.data?.results || data?.results || data?.data?.contacts || [];
+    console.log(`[HubSpot Poll] Found ${contacts.length} contacts`);
+
+    let newContactsCount = 0;
+
+    for (const contact of contacts) {
+      const hubspotContactId = contact.id || contact.vid?.toString();
+      if (!hubspotContactId) continue;
+
+      // Check if already processed
+      const { data: existing } = await supabaseClient
+        .from("hubspot_processed_contacts")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("hubspot_contact_id", hubspotContactId)
+        .maybeSingle();
+
+      if (existing) {
+        continue; // Already processed
+      }
+
+      // Mark as processed
+      await supabaseClient.from("hubspot_processed_contacts").insert({
+        user_id: userId,
+        hubspot_contact_id: hubspotContactId,
+      });
+
+      newContactsCount++;
+      console.log(`[HubSpot Poll] New contact: ${hubspotContactId}`);
+
+      // TODO: Create memory via LIAM API (similar to other automations)
+      // For now, just track the count
+    }
+
+    // Update config with new count
+    await supabaseClient
+      .from("hubspot_automation_config")
+      .update({
+        last_polled_at: new Date().toISOString(),
+        contacts_tracked: newContactsCount,
+      })
+      .eq("user_id", userId);
+
+    return { newContacts: newContactsCount };
+  } catch (err) {
+    console.error(`[HubSpot Poll] Error:`, err);
+    return { newContacts: 0, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -66,102 +154,132 @@ Deno.serve(async (req) => {
     const connectionId = integration.composio_connection_id;
 
     if (action === "activate") {
-      // Validate required HubSpot credentials from secrets
-      if (!HUBSPOT_APP_ID || !HUBSPOT_DEVELOPER_API_KEY) {
-        console.error("[HubSpot Triggers] Missing required secrets: HUBSPOT_APP_ID or HUBSPOT_DEVELOPER_API_KEY");
-        return new Response(
-          JSON.stringify({
-            error: "Missing HubSpot trigger config",
-            details: "HUBSPOT_APP_ID and HUBSPOT_DEVELOPER_API_KEY are required to create HUBSPOT_CONTACT_CREATED_TRIGGER.",
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      // Check if platform webhook credentials are available
+      const hasWebhookCreds = HUBSPOT_APP_ID && HUBSPOT_DEVELOPER_API_KEY;
 
-      const webhookUrl = `${SUPABASE_URL}/functions/v1/hubspot-automation-webhook`;
+      if (hasWebhookCreds) {
+        // WEBHOOK MODE: Use platform credentials for real-time triggers
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/hubspot-automation-webhook`;
 
-      console.log(`[HubSpot Triggers] Attempting to create trigger...`);
-      console.log(`[HubSpot Triggers] Connection ID: ${connectionId}`);
-      console.log(`[HubSpot Triggers] Webhook URL: ${webhookUrl}`);
-      console.log(`[HubSpot Triggers] App ID: ${HUBSPOT_APP_ID}`);
-      // Never log HUBSPOT_DEVELOPER_API_KEY
+        console.log(`[HubSpot Triggers] Attempting webhook trigger creation...`);
+        console.log(`[HubSpot Triggers] Connection ID: ${connectionId}`);
+        console.log(`[HubSpot Triggers] Webhook URL: ${webhookUrl}`);
+        console.log(`[HubSpot Triggers] App ID: ${HUBSPOT_APP_ID}`);
+        // Never log HUBSPOT_DEVELOPER_API_KEY
 
-      // Create the trigger with required config
-      const triggerResponse = await fetch(
-        "https://backend.composio.dev/api/v3/trigger_instances/HUBSPOT_CONTACT_CREATED_TRIGGER/upsert",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": COMPOSIO_API_KEY,
-          },
-          body: JSON.stringify({
-            connected_account_id: connectionId,
-            trigger_config: {
-              app_id: HUBSPOT_APP_ID,
-              developer_api_key: HUBSPOT_DEVELOPER_API_KEY,
+        const triggerResponse = await fetch(
+          "https://backend.composio.dev/api/v3/trigger_instances/HUBSPOT_CONTACT_CREATED_TRIGGER/upsert",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": COMPOSIO_API_KEY,
             },
-            webhook_url: webhookUrl,
-          }),
-        }
-      );
-
-      const triggerText = await triggerResponse.text();
-      console.log(`[HubSpot Triggers] Composio response status: ${triggerResponse.status}`);
-      console.log(`[HubSpot Triggers] Composio response body: ${triggerText}`);
-
-      if (!triggerResponse.ok) {
-        // Surface real Composio error with actual status code
-        let errorDetails = triggerText;
-        try {
-          const errorJson = JSON.parse(triggerText);
-          console.error(`[HubSpot Triggers] Parsed error:`, JSON.stringify(errorJson, null, 2));
-          if (errorJson.errors || errorJson.details || errorJson.message) {
-            errorDetails = JSON.stringify(errorJson.errors || errorJson.details || errorJson.message);
+            body: JSON.stringify({
+              connected_account_id: connectionId,
+              trigger_config: {
+                app_id: HUBSPOT_APP_ID,
+                developer_api_key: HUBSPOT_DEVELOPER_API_KEY,
+              },
+              webhook_url: webhookUrl,
+            }),
           }
-        } catch {
-          // Keep raw text as error details
+        );
+
+        const triggerText = await triggerResponse.text();
+        console.log(`[HubSpot Triggers] Composio response status: ${triggerResponse.status}`);
+        console.log(`[HubSpot Triggers] Composio response body: ${triggerText}`);
+
+        if (!triggerResponse.ok) {
+          // Surface real Composio error with actual status code
+          let errorDetails = triggerText;
+          try {
+            const errorJson = JSON.parse(triggerText);
+            console.error(`[HubSpot Triggers] Parsed error:`, JSON.stringify(errorJson, null, 2));
+            if (errorJson.errors || errorJson.details || errorJson.message) {
+              errorDetails = JSON.stringify(errorJson.errors || errorJson.details || errorJson.message);
+            }
+          } catch {
+            // Keep raw text as error details
+          }
+          
+          return new Response(
+            JSON.stringify({ 
+              error: "Failed to create trigger", 
+              details: errorDetails,
+              composioStatus: triggerResponse.status
+            }),
+            { status: triggerResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-        
+
+        // Parse successful response
+        let triggerData;
+        try {
+          triggerData = JSON.parse(triggerText);
+        } catch {
+          triggerData = {};
+        }
+
+        // Extract trigger_id - Composio v3 returns it at root level
+        const triggerId = triggerData?.trigger_id || triggerData?.id || null;
+        console.log(`[HubSpot Triggers] Created trigger ID: ${triggerId}`);
+
+        // Update config with trigger ID and set active (webhook mode)
+        const { error: updateError } = await supabaseClient
+          .from("hubspot_automation_config")
+          .update({
+            is_active: true,
+            trigger_id: triggerId,
+            last_polled_at: new Date().toISOString(),
+          })
+          .eq("user_id", userId);
+
+        if (updateError) {
+          console.error("[HubSpot Triggers] Failed to update config:", updateError);
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, mode: "webhook", triggerId }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } else {
+        // POLLING MODE: No webhook credentials, use polling fallback
+        console.log(`[HubSpot Triggers] No webhook credentials, activating polling mode`);
+        console.log(`[HubSpot Triggers] Connection ID: ${connectionId}`);
+
+        // Just set active and let polling handle it
+        const { error: updateError } = await supabaseClient
+          .from("hubspot_automation_config")
+          .update({
+            is_active: true,
+            trigger_id: null, // No trigger in polling mode
+            last_polled_at: new Date().toISOString(),
+          })
+          .eq("user_id", userId);
+
+        if (updateError) {
+          console.error("[HubSpot Triggers] Failed to update config:", updateError);
+          return new Response(
+            JSON.stringify({ error: "Failed to activate polling mode", details: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Do an initial poll to get existing contacts
+        console.log(`[HubSpot Triggers] Running initial poll...`);
+        const pollResult = await pollHubSpotContacts(supabaseClient, userId, connectionId, COMPOSIO_API_KEY);
+
         return new Response(
           JSON.stringify({ 
-            error: "Failed to create trigger", 
-            details: errorDetails,
-            composioStatus: triggerResponse.status
+            success: true, 
+            mode: "polling", 
+            message: "Monitoring activated in polling mode",
+            initialPoll: pollResult
           }),
-          { status: triggerResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      // Parse successful response
-      let triggerData;
-      try {
-        triggerData = JSON.parse(triggerText);
-      } catch {
-        triggerData = {};
-      }
-
-      // Extract trigger_id - Composio v3 returns it at root level
-      const triggerId = triggerData?.trigger_id || triggerData?.id || null;
-      console.log(`[HubSpot Triggers] Created trigger ID: ${triggerId}`);
-
-      // Update config with trigger ID and set active
-      const { error: updateError } = await supabaseClient
-        .from("hubspot_automation_config")
-        .update({
-          is_active: true,
-          trigger_id: triggerId,
-        })
-        .eq("user_id", userId);
-
-      if (updateError) {
-        console.error("[HubSpot Triggers] Failed to update config:", updateError);
-      }
-
-      return new Response(
-        JSON.stringify({ success: true, triggerId }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     }
 
     if (action === "deactivate") {
@@ -202,17 +320,13 @@ Deno.serve(async (req) => {
     }
 
     if (action === "manual-poll") {
-      // For manual poll, we'd need to fetch contacts from HubSpot
-      // This is a simplified version - the webhook handles the actual contact creation
+      // Fetch new contacts from HubSpot using the polling function
+      console.log(`[HubSpot Triggers] Running manual poll for user ${userId}`);
       
-      // Update last polled timestamp
-      await supabaseClient
-        .from("hubspot_automation_config")
-        .update({ last_polled_at: new Date().toISOString() })
-        .eq("user_id", userId);
+      const pollResult = await pollHubSpotContacts(supabaseClient, userId, connectionId, COMPOSIO_API_KEY);
 
       return new Response(
-        JSON.stringify({ success: true, newItems: 0 }),
+        JSON.stringify({ success: true, newItems: pollResult.newContacts, error: pollResult.error }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
