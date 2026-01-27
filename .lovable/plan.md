@@ -1,178 +1,122 @@
 
-# Fix Trello Task Tracker Flow Navigation Issues
+# Fix Trello Board Fetching - 405 Error Resolution
 
 ## Problem Summary
 
-Two navigation issues prevent users from completing the Trello Task Tracker setup:
+The Trello Task Tracker fails to fetch boards with a **405 Method Not Allowed** error from the Composio API.
 
-1. **Already-connected users are redirected to Connect Trello** - The auth check races and fires before the connection status is confirmed
-2. **Post-connection redirect missing** - After connecting Trello, users land on the integration page without being sent back to the flow
+| Symptom | Cause |
+|---------|-------|
+| "No boards found" + error toast | Wrong API URL path structure |
+| 405 error in logs | The endpoint `/actions/{slug}/execute` doesn't exist |
 
-## Root Cause Analysis
+## Root Cause
 
-### Issue 1: Auth Check Race Condition
-
-The `useTrelloAutomation` hook has an initialization issue:
+The edge function uses an incorrect Composio API URL:
 
 ```text
-Initial State:
-  phase = 'auth-check'
-  isLoading = false     <-- Problem: Should start as true
-  isConnected = false
-
-Effect fires immediately → Redirects to /integration/trello
+WRONG:   /api/v3/actions/TRELLO_GET_BOARDS/execute
+CORRECT: /api/v3/tools/execute/TRELLO_GET_BOARDS
+                 ↑          ↑
+            "tools" first, then "execute", then slug
 ```
 
-The Instagram and LinkedIn flows solve this with a dedicated `isCheckingAuth` state that gates the redirect logic until the check completes.
-
-### Issue 2: Missing Return Path
-
-The Email Dump flow pattern stores a return path:
-```typescript
-sessionStorage.setItem('returnAfterGmailConnect', '/flow/email-dump');
-```
-
-The Trello flow doesn't store any return path, and `IntegrationDetail.tsx` only handles Gmail-specific returns.
-
----
+Additionally, the request body uses `input` instead of `arguments` for parameters.
 
 ## Solution
 
-### Part 1: Fix Auth Check in TrelloAutomationFlow
+Update `supabase/functions/trello-automation-triggers/index.ts`:
 
-Update the flow component to use `useComposio('TRELLO')` for connection checking, following the LinkedIn/Instagram pattern:
-
-1. Add `isCheckingAuth` local state
-2. Use `useComposio` hook to check connection
-3. Gate redirect logic on `isCheckingAuth` completion
-4. Store return path before redirecting
-
-### Part 2: Add Trello Return Path Handling
-
-Update `IntegrationDetail.tsx` to handle Trello return paths using a generic pattern.
+1. Change the API base constant or inline URLs to use `/tools/execute/{SLUG}` pattern
+2. Change request body from `input` to `arguments` for action parameters
+3. Match the proven pattern used in other working edge functions
 
 ---
 
-## Technical Implementation
+## Technical Changes
 
-### File 1: `src/components/flows/trello-automation/TrelloAutomationFlow.tsx`
+### File: `supabase/functions/trello-automation-triggers/index.ts`
 
-**Changes:**
-- Import and use `useComposio('TRELLO')` hook
-- Add `isCheckingAuth` state to track connection check
-- Replace the existing redirect effect with a pattern matching Instagram/LinkedIn
-- Store `returnAfterTrelloConnect` before redirecting to integration page
-- Simplify the hook's auth check responsibility
+**Change 1: Fix get-boards URL (line ~82)**
+
+Before:
+```typescript
+const response = await fetch(`${COMPOSIO_API_BASE}/actions/TRELLO_GET_BOARDS/execute`, {
+```
+
+After:
+```typescript
+const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS", {
+```
+
+**Change 2: Fix get-lists URL (line ~123)**
+
+Before:
+```typescript
+const response = await fetch(`${COMPOSIO_API_BASE}/actions/TRELLO_GET_LISTS_BY_ID_BOARD/execute`, {
+```
+
+After:
+```typescript
+const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_LISTS_BY_ID_BOARD", {
+```
+
+**Change 3: Fix get-lists request body (line ~129-131)**
+
+Before:
+```typescript
+body: JSON.stringify({
+  connected_account_id: connectionId,
+  input: { idBoard: boardId },
+}),
+```
+
+After:
+```typescript
+body: JSON.stringify({
+  connected_account_id: connectionId,
+  arguments: { idBoard: boardId },
+}),
+```
+
+---
+
+## Expected Response Structure
+
+Based on other working integrations, the response format is:
 
 ```typescript
-// Add imports
-import { useComposio } from "@/hooks/useComposio";
-
-// Inside component
-const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-const trello = useComposio('TRELLO');
-
-// Check connection on mount
-useEffect(() => {
-  const checkAuth = async () => {
-    await trello.checkStatus();
-    setIsCheckingAuth(false);
-  };
-  checkAuth();
-}, []);
-
-// Handle connection status after check completes
-useEffect(() => {
-  if (isCheckingAuth) return;
-  
-  if (trello.isConnected) {
-    // Connection confirmed, proceed with hook initialization
-    // The hook will load config and set phase
-  } else {
-    // Store return path for after connection
-    sessionStorage.setItem('returnAfterTrelloConnect', '/flow/trello-tracker');
-    navigate('/integration/trello');
+{
+  data: {
+    // or response_data containing the actual array
+    response_data: [
+      { id: "board1", name: "My Board", url: "https://..." },
+      // ...
+    ]
   }
-}, [trello.isConnected, isCheckingAuth, navigate]);
+}
 ```
 
-### File 2: `src/hooks/useTrelloAutomation.ts`
-
-**Changes:**
-- Remove internal auth checking logic (now handled by component)
-- Accept an `isConnected` parameter or simply assume connected when hook is used
-- Initialize phase to `'select-board'` instead of `'auth-check'`
-- Start `isLoading` as `true` to prevent flash
-
+The existing parsing logic already handles this structure:
 ```typescript
-// Update initial state
-const [phase, setPhase] = useState<TrelloAutomationPhase>('auth-check');
-const [isLoading, setIsLoading] = useState(true);  // Start as true
-
-// Simplify init - remove connection check, just load config
-useEffect(() => {
-  const init = async () => {
-    setIsLoading(true);
-    await loadConfig();
-    setIsLoading(false);
-  };
-  // Only run when connected (component guarantees this)
-  init();
-}, [loadConfig]);
-```
-
-### File 3: `src/pages/IntegrationDetail.tsx`
-
-**Changes:**
-- Generalize the return path handling to support multiple integrations
-- Check for `returnAfterTrelloConnect` in addition to Gmail
-
-```typescript
-// Update the useEffect that handles return redirects
-useEffect(() => {
-  if (isConnected && !hasHandledReturn.current) {
-    // Check for integration-specific return paths
-    const returnPathKey = `returnAfter${integrationId?.charAt(0).toUpperCase()}${integrationId?.slice(1).toLowerCase()}Connect`;
-    const returnPath = sessionStorage.getItem(returnPathKey);
-    
-    if (returnPath) {
-      hasHandledReturn.current = true;
-      sessionStorage.removeItem(returnPathKey);
-      setTimeout(() => {
-        navigate(returnPath);
-      }, 500);
-    }
-  }
-}, [isConnected, integrationId, navigate]);
+const boards = data?.data?.response_data || data?.data || [];
 ```
 
 ---
 
-## Files to Modify
+## Files to Change
 
-| File | Change |
-|------|--------|
-| `src/components/flows/trello-automation/TrelloAutomationFlow.tsx` | Add `useComposio` hook, `isCheckingAuth` state, proper gated redirect with return path storage |
-| `src/hooks/useTrelloAutomation.ts` | Start `isLoading` as `true`, simplify init to assume connection is already verified |
-| `src/pages/IntegrationDetail.tsx` | Generalize return path handling to support Trello and other integrations |
+| File | Changes |
+|------|---------|
+| `supabase/functions/trello-automation-triggers/index.ts` | Fix API URLs from `/actions/{slug}/execute` to `/tools/execute/{slug}`, change `input` to `arguments` |
 
 ---
 
-## Expected Behavior After Fix
+## Verification
 
-1. **Connected User Flow:**
-   - User clicks "Get Started" → `/flow/trello-tracker`
-   - `isCheckingAuth` = true → Shows loader
-   - Connection check completes → `trello.isConnected` = true
-   - Hook loads config → Shows board selection
+After deployment, the expected flow:
 
-2. **Disconnected User Flow:**
-   - User clicks "Get Started" → `/flow/trello-tracker`
-   - `isCheckingAuth` = true → Shows loader
-   - Connection check completes → `trello.isConnected` = false
-   - Stores `returnAfterTrelloConnect = '/flow/trello-tracker'`
-   - Redirects to `/integration/trello`
-   - User connects Trello
-   - `IntegrationDetail` detects connection + return path
-   - Auto-redirects to `/flow/trello-tracker`
-   - Flow resumes at board selection
+1. User navigates to `/flow/trello-tracker`
+2. Edge function calls correct Composio URL
+3. API returns 200 with user's boards
+4. BoardPicker displays all boards (regardless of visibility setting)
