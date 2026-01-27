@@ -72,8 +72,8 @@ function toDER(signature: Uint8Array): string {
 
 async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
   const pemContents = pemKey
-    .replace(/-----BEGIN EC PRIVATE KEY-----/g, "")
-    .replace(/-----END EC PRIVATE KEY-----/g, "")
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
     .replace(/\s/g, "");
 
   const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
