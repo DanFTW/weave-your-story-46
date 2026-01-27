@@ -1,0 +1,271 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3";
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "No authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const anonClient = createClient(
+      SUPABASE_URL,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: userError } = await anonClient.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { action, boardId, doneListId, monitorNewCards, monitorCompletedCards, newCardTriggerId, updatedCardTriggerId } = await req.json();
+
+    // Get user's Trello connection
+    const { data: integration } = await supabaseClient
+      .from("user_integrations")
+      .select("composio_connection_id")
+      .eq("user_id", user.id)
+      .eq("integration_id", "trello")
+      .eq("status", "connected")
+      .single();
+
+    if (!integration?.composio_connection_id) {
+      return new Response(JSON.stringify({ error: "Trello not connected" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const connectionId = integration.composio_connection_id;
+
+    // Handle different actions
+    switch (action) {
+      case "get-boards": {
+        const response = await fetch(`${COMPOSIO_API_BASE}/actions/TRELLO_GET_BOARDS/execute`, {
+          method: "POST",
+          headers: {
+            "x-api-key": COMPOSIO_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            connected_account_id: connectionId,
+          }),
+        });
+
+        const data = await response.json();
+        console.log("Get boards response:", JSON.stringify(data));
+
+        const boards = data.data?.response_data || data.data || [];
+        
+        return new Response(JSON.stringify({ 
+          boards: Array.isArray(boards) ? boards.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            url: b.url,
+          })) : []
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "get-lists": {
+        if (!boardId) {
+          return new Response(JSON.stringify({ error: "boardId required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const response = await fetch(`${COMPOSIO_API_BASE}/actions/TRELLO_GET_LISTS_BY_ID_BOARD/execute`, {
+          method: "POST",
+          headers: {
+            "x-api-key": COMPOSIO_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            connected_account_id: connectionId,
+            input: { idBoard: boardId },
+          }),
+        });
+
+        const data = await response.json();
+        console.log("Get lists response:", JSON.stringify(data));
+
+        const lists = data.data?.response_data || data.data || [];
+        
+        return new Response(JSON.stringify({ 
+          lists: Array.isArray(lists) ? lists.map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            closed: l.closed || false,
+          })) : []
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "activate": {
+        if (!boardId) {
+          return new Response(JSON.stringify({ error: "boardId required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/trello-automation-webhook`;
+        const results: { newCardTriggerId?: string; updatedCardTriggerId?: string } = {};
+
+        // Create TRELLO_NEW_CARD_TRIGGER if monitoring new cards
+        if (monitorNewCards) {
+          console.log("Creating TRELLO_NEW_CARD_TRIGGER...");
+          const newCardResponse = await fetch(
+            `${COMPOSIO_API_BASE}/trigger_instances/TRELLO_NEW_CARD_TRIGGER/upsert`,
+            {
+              method: "POST",
+              headers: {
+                "x-api-key": COMPOSIO_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                connected_account_id: connectionId,
+                trigger_config: {
+                  idBoard: boardId,
+                },
+                webhook_url: webhookUrl,
+              }),
+            }
+          );
+
+          const newCardData = await newCardResponse.json();
+          console.log("New card trigger response:", JSON.stringify(newCardData));
+          
+          if (newCardData.trigger_id) {
+            results.newCardTriggerId = newCardData.trigger_id;
+          }
+        }
+
+        // Create TRELLO_UPDATED_CARD_TRIGGER if monitoring completed cards
+        if (monitorCompletedCards && doneListId) {
+          console.log("Creating TRELLO_UPDATED_CARD_TRIGGER...");
+          const updatedCardResponse = await fetch(
+            `${COMPOSIO_API_BASE}/trigger_instances/TRELLO_UPDATED_CARD_TRIGGER/upsert`,
+            {
+              method: "POST",
+              headers: {
+                "x-api-key": COMPOSIO_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                connected_account_id: connectionId,
+                trigger_config: {
+                  idBoard: boardId,
+                },
+                webhook_url: webhookUrl,
+              }),
+            }
+          );
+
+          const updatedCardData = await updatedCardResponse.json();
+          console.log("Updated card trigger response:", JSON.stringify(updatedCardData));
+          
+          if (updatedCardData.trigger_id) {
+            results.updatedCardTriggerId = updatedCardData.trigger_id;
+          }
+        }
+
+        // Update config with trigger IDs and set active
+        await supabaseClient
+          .from("trello_automation_config")
+          .update({
+            is_active: true,
+            new_card_trigger_id: results.newCardTriggerId || null,
+            updated_card_trigger_id: results.updatedCardTriggerId || null,
+          })
+          .eq("user_id", user.id);
+
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "deactivate": {
+        // Disable triggers if they exist
+        if (newCardTriggerId) {
+          try {
+            await fetch(`${COMPOSIO_API_BASE}/trigger_instances/manage/${newCardTriggerId}`, {
+              method: "PATCH",
+              headers: {
+                "x-api-key": COMPOSIO_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ enabled: false }),
+            });
+          } catch (e) {
+            console.error("Failed to disable new card trigger:", e);
+          }
+        }
+
+        if (updatedCardTriggerId) {
+          try {
+            await fetch(`${COMPOSIO_API_BASE}/trigger_instances/manage/${updatedCardTriggerId}`, {
+              method: "PATCH",
+              headers: {
+                "x-api-key": COMPOSIO_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ enabled: false }),
+            });
+          } catch (e) {
+            console.error("Failed to disable updated card trigger:", e);
+          }
+        }
+
+        // Update config to inactive
+        await supabaseClient
+          .from("trello_automation_config")
+          .update({ is_active: false })
+          .eq("user_id", user.id);
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      default:
+        return new Response(JSON.stringify({ error: "Unknown action" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

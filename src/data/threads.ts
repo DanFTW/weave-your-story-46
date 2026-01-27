@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "trello-tracker",
+    title: "Trello Task Tracker",
+    description: "Automatically save new and completed tasks as memories",
+    icon: ClipboardList,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "productivity",
+  },
   {
     id: "linkedin-live",
     title: "LinkedIn Contacts",

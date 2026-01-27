@@ -314,6 +314,84 @@ export type Database = {
         }
         Relationships: []
       }
+      trello_automation_config: {
+        Row: {
+          board_id: string | null
+          board_name: string | null
+          cards_tracked: number | null
+          completed_tracked: number | null
+          created_at: string | null
+          done_list_id: string | null
+          done_list_name: string | null
+          id: string
+          is_active: boolean | null
+          monitor_completed_cards: boolean | null
+          monitor_new_cards: boolean | null
+          new_card_trigger_id: string | null
+          updated_at: string | null
+          updated_card_trigger_id: string | null
+          user_id: string
+        }
+        Insert: {
+          board_id?: string | null
+          board_name?: string | null
+          cards_tracked?: number | null
+          completed_tracked?: number | null
+          created_at?: string | null
+          done_list_id?: string | null
+          done_list_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          monitor_completed_cards?: boolean | null
+          monitor_new_cards?: boolean | null
+          new_card_trigger_id?: string | null
+          updated_at?: string | null
+          updated_card_trigger_id?: string | null
+          user_id: string
+        }
+        Update: {
+          board_id?: string | null
+          board_name?: string | null
+          cards_tracked?: number | null
+          completed_tracked?: number | null
+          created_at?: string | null
+          done_list_id?: string | null
+          done_list_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          monitor_completed_cards?: boolean | null
+          monitor_new_cards?: boolean | null
+          new_card_trigger_id?: string | null
+          updated_at?: string | null
+          updated_card_trigger_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trello_processed_cards: {
+        Row: {
+          card_type: string
+          id: string
+          processed_at: string | null
+          trello_card_id: string
+          user_id: string
+        }
+        Insert: {
+          card_type: string
+          id?: string
+          processed_at?: string | null
+          trello_card_id: string
+          user_id: string
+        }
+        Update: {
+          card_type?: string
+          id?: string
+          processed_at?: string | null
+          trello_card_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       twitter_automation_config: {
         Row: {
           created_at: string | null

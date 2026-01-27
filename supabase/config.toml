@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.composio-disconnect]
 verify_jwt = false
+
+[functions.trello-automation-triggers]
+verify_jwt = false
+
+[functions.trello-automation-webhook]
+verify_jwt = false

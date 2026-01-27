@@ -1,7 +1,46 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2 } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "trello-tracker": {
+    id: "trello-tracker",
+    title: "Trello Task Tracker",
+    subtitle: "Automatic task memories",
+    description: "Monitor your Trello board and automatically save new tasks and completed tasks as memories.",
+    gradient: "blue",
+    icon: ClipboardList,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Trello",
+        description: "Authorize access to your boards",
+        iconUrl: "https://cdn.worldvectorlogo.com/logos/trello.svg",
+      },
+      {
+        id: "select-board",
+        type: "setup",
+        title: "Select Board",
+        description: "Choose which board to monitor",
+        icon: Layout,
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Configure Monitoring",
+        description: "Set up new & completed task tracking",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Tasks saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "linkedin-live": {
     id: "linkedin-live",
     title: "LinkedIn Contacts",
