@@ -40,6 +40,7 @@ export interface FlowConfig {
   isYouTubeSyncFlow?: boolean; // If true, uses YouTube sync UI
   isTwitterAutomationFlow?: boolean; // If true, uses Twitter automation UI
   isLinkedInAutomationFlow?: boolean; // If true, uses LinkedIn automation UI
+  isTrelloAutomationFlow?: boolean; // If true, uses Trello automation UI
 }
 
 // Single data entry (e.g., one family member)

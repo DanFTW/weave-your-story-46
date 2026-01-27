@@ -56,6 +56,9 @@ import { YouTubeSyncFlow } from "@/components/flows/youtube-sync";
 // LinkedIn Automation components
 import { LinkedInAutomationFlow } from "@/components/flows/linkedin-automation";
 
+// Trello Automation components
+import { TrelloAutomationFlow } from "@/components/flows/trello-automation";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -222,6 +225,12 @@ export default function FlowPage() {
   
   if (config.isLinkedInAutomationFlow) {
     return <LinkedInAutomationFlow />;
+  }
+
+  // === TRELLO AUTOMATION FLOW RENDER ===
+  
+  if (config.isTrelloAutomationFlow) {
+    return <TrelloAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

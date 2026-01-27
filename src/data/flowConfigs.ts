@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "trello-tracker": {
+    id: "trello-tracker",
+    title: "Trello Task Tracker",
+    subtitle: "Task monitoring",
+    description: "Automatically save new and completed Trello tasks as memories.",
+    gradient: "blue",
+    icon: ClipboardList,
+    entryName: "task",
+    entryNamePlural: "tasks",
+    memoryTag: "TRELLO",
+    fields: [],
+    isTrelloAutomationFlow: true,
+  },
   "linkedin-live": {
     id: "linkedin-live",
     title: "LinkedIn Contacts",
