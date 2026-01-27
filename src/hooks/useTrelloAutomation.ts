@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -17,7 +16,6 @@ interface UseTrelloAutomationReturn {
   boards: TrelloBoard[];
   lists: TrelloList[];
   isLoading: boolean;
-  isConnected: boolean;
   stats: TrelloAutomationStats;
   fetchBoards: () => Promise<void>;
   fetchLists: (boardId: string) => Promise<void>;
@@ -27,45 +25,24 @@ interface UseTrelloAutomationReturn {
   activateMonitoring: () => Promise<void>;
   deactivateMonitoring: () => Promise<void>;
   resetConfig: () => Promise<void>;
+  initializeAfterAuthCheck: () => Promise<void>;
 }
 
 export function useTrelloAutomation(): UseTrelloAutomationReturn {
-  const navigate = useNavigate();
   const { toast } = useToast();
   
   const [phase, setPhase] = useState<TrelloAutomationPhase>('auth-check');
   const [config, setConfig] = useState<TrelloAutomationConfig | null>(null);
   const [boards, setBoards] = useState<TrelloBoard[]>([]);
   const [lists, setLists] = useState<TrelloList[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start as true to prevent flash
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const stats: TrelloAutomationStats = {
     cardsTracked: config?.cardsTracked ?? 0,
     completedTracked: config?.completedTracked ?? 0,
     isActive: config?.isActive ?? false,
   };
-
-  // Check Trello connection status
-  const checkConnection = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return false;
-    }
-
-    const { data: integration } = await supabase
-      .from('user_integrations')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('integration_id', 'trello')
-      .eq('status', 'connected')
-      .maybeSingle();
-
-    const connected = !!integration;
-    setIsConnected(connected);
-    return connected;
-  }, [navigate]);
 
   // Load or create config
   const loadConfig = useCallback(async () => {
@@ -110,21 +87,17 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
     }
   }, []);
 
-  // Initialize
-  useEffect(() => {
-    const init = async () => {
-      setIsLoading(true);
-      const connected = await checkConnection();
-      if (!connected) {
-        setPhase('auth-check');
-        setIsLoading(false);
-        return;
-      }
-      await loadConfig();
-      setIsLoading(false);
-    };
-    init();
-  }, [checkConnection, loadConfig]);
+  // Initialize after auth check is complete (called by component)
+  const initializeAfterAuthCheck = useCallback(async () => {
+    if (hasInitialized) return;
+    setHasInitialized(true);
+    setIsLoading(true);
+    await loadConfig();
+    setIsLoading(false);
+  }, [hasInitialized, loadConfig]);
+
+  // Note: Initialization is now triggered by the component via initializeAfterAuthCheck
+  // This removes the old init useEffect that caused the race condition
 
   // Fetch user's Trello boards
   const fetchBoards = useCallback(async () => {
@@ -424,7 +397,6 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
     boards,
     lists,
     isLoading,
-    isConnected,
     stats,
     fetchBoards,
     fetchLists,
@@ -434,5 +406,6 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
     activateMonitoring,
     deactivateMonitoring,
     resetConfig,
+    initializeAfterAuthCheck,
   };
 }

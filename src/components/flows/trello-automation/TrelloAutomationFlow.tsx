@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ClipboardList } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTrelloAutomation } from "@/hooks/useTrelloAutomation";
+import { useComposio } from "@/hooks/useComposio";
 import { BoardPicker } from "./BoardPicker";
 import { ListPicker } from "./ListPicker";
 import { AutomationConfig } from "./AutomationConfig";
@@ -11,6 +12,9 @@ import { ActivatingScreen } from "./ActivatingScreen";
 
 export function TrelloAutomationFlow() {
   const navigate = useNavigate();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const trello = useComposio('TRELLO');
+  
   const {
     phase,
     setPhase,
@@ -18,7 +22,6 @@ export function TrelloAutomationFlow() {
     boards,
     lists,
     isLoading,
-    isConnected,
     stats,
     fetchBoards,
     selectBoard,
@@ -27,27 +30,52 @@ export function TrelloAutomationFlow() {
     activateMonitoring,
     deactivateMonitoring,
     resetConfig,
+    initializeAfterAuthCheck,
   } = useTrelloAutomation();
 
-  // Redirect to Trello integration if not connected
+  // Check Trello connection on mount
   useEffect(() => {
-    if (phase === 'auth-check' && !isLoading && !isConnected) {
+    const checkAuth = async () => {
+      await trello.checkStatus();
+      setIsCheckingAuth(false);
+    };
+    checkAuth();
+  }, []);
+
+  // Handle connection status after check completes
+  useEffect(() => {
+    if (isCheckingAuth) return;
+    
+    if (trello.isConnected) {
+      // Connection confirmed, initialize the hook
+      initializeAfterAuthCheck();
+    } else {
+      // Store return path for after connection
+      sessionStorage.setItem('returnAfterTrelloConnect', '/flow/trello-tracker');
       navigate('/integration/trello');
     }
-  }, [phase, isLoading, isConnected, navigate]);
+  }, [trello.isConnected, isCheckingAuth, navigate, initializeAfterAuthCheck]);
 
-  // Fetch boards when entering select-board phase
-  useEffect(() => {
-    if (phase === 'select-board' && boards.length === 0 && !isLoading) {
-      fetchBoards();
-    }
-  }, [phase, boards.length, isLoading, fetchBoards]);
+  // Show loading while checking auth
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground text-sm">Checking connection...</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Loading state
+  // Loading state from hook
   if (phase === 'auth-check' && isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Checking connection...</div>
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground text-sm">Loading configuration...</p>
+        </div>
       </div>
     );
   }
