@@ -79,7 +79,7 @@ serve(async (req) => {
     // Handle different actions
     switch (action) {
       case "get-boards": {
-        const response = await fetch(`${COMPOSIO_API_BASE}/actions/TRELLO_GET_BOARDS/execute`, {
+        const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS", {
           method: "POST",
           headers: {
             "x-api-key": COMPOSIO_API_KEY,
@@ -120,7 +120,7 @@ serve(async (req) => {
           });
         }
 
-        const response = await fetch(`${COMPOSIO_API_BASE}/actions/TRELLO_GET_LISTS_BY_ID_BOARD/execute`, {
+        const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_LISTS_BY_ID_BOARD", {
           method: "POST",
           headers: {
             "x-api-key": COMPOSIO_API_KEY,
@@ -128,7 +128,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             connected_account_id: connectionId,
-            input: { idBoard: boardId },
+            arguments: { idBoard: boardId },
           }),
         });
 
