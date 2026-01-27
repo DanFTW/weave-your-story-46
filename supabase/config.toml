@@ -50,3 +50,9 @@ verify_jwt = false
 
 [functions.trello-automation-webhook]
 verify_jwt = false
+
+[functions.hubspot-automation-triggers]
+verify_jwt = false
+
+[functions.hubspot-automation-webhook]
+verify_jwt = false

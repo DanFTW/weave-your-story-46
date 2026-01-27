@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2 } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "hubspot-tracker": {
+    id: "hubspot-tracker",
+    title: "HubSpot Contact Tracker",
+    subtitle: "CRM contact memories",
+    description: "Monitor your HubSpot CRM and automatically save new contacts as memories.",
+    gradient: "orange",
+    icon: Contact,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect HubSpot",
+        description: "Authorize access to your CRM",
+        iconUrl: "/src/assets/integrations/hubspot.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Monitoring",
+        description: "Toggle new contact tracking",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Contacts saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "trello-tracker": {
     id: "trello-tracker",
     title: "Trello Task Tracker",

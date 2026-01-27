@@ -98,6 +98,63 @@ export type Database = {
         }
         Relationships: []
       }
+      hubspot_automation_config: {
+        Row: {
+          contacts_tracked: number | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_polled_at: string | null
+          monitor_new_contacts: boolean | null
+          trigger_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          contacts_tracked?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          monitor_new_contacts?: boolean | null
+          trigger_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          contacts_tracked?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          monitor_new_contacts?: boolean | null
+          trigger_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      hubspot_processed_contacts: {
+        Row: {
+          hubspot_contact_id: string
+          id: string
+          processed_at: string | null
+          user_id: string
+        }
+        Insert: {
+          hubspot_contact_id: string
+          id?: string
+          processed_at?: string | null
+          user_id: string
+        }
+        Update: {
+          hubspot_contact_id?: string
+          id?: string
+          processed_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       instagram_automation_config: {
         Row: {
           comments_tracked: number | null
