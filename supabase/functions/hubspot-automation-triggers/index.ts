@@ -64,11 +64,33 @@ Deno.serve(async (req) => {
     const connectionId = integration.composio_connection_id;
 
     if (action === "activate") {
-      // Create the HUBSPOT_CONTACT_CREATED_TRIGGER via Composio
       const webhookUrl = `${SUPABASE_URL}/functions/v1/hubspot-automation-webhook`;
 
-      console.log(`[HubSpot Triggers] Creating trigger with webhook: ${webhookUrl}`);
+      console.log(`[HubSpot Triggers] Attempting to create trigger...`);
+      console.log(`[HubSpot Triggers] Connection ID: ${connectionId}`);
+      console.log(`[HubSpot Triggers] Webhook URL: ${webhookUrl}`);
 
+      // First, query what config is required for this trigger
+      try {
+        const typeResponse = await fetch(
+          "https://backend.composio.dev/api/v3/triggers_types/HUBSPOT_CONTACT_CREATED_TRIGGER",
+          {
+            method: "GET",
+            headers: { "x-api-key": COMPOSIO_API_KEY },
+          }
+        );
+        
+        if (typeResponse.ok) {
+          const typeData = await typeResponse.json();
+          console.log(`[HubSpot Triggers] Trigger type schema:`, JSON.stringify(typeData));
+        } else {
+          console.log(`[HubSpot Triggers] Could not fetch trigger type schema: ${typeResponse.status}`);
+        }
+      } catch (schemaErr) {
+        console.log(`[HubSpot Triggers] Schema fetch error:`, schemaErr);
+      }
+
+      // Create the trigger
       const triggerResponse = await fetch(
         "https://backend.composio.dev/api/v3/trigger_instances/HUBSPOT_CONTACT_CREATED_TRIGGER/upsert",
         {
@@ -86,28 +108,51 @@ Deno.serve(async (req) => {
       );
 
       const triggerText = await triggerResponse.text();
-      console.log(`[HubSpot Triggers] Composio response: ${triggerResponse.status} - ${triggerText}`);
+      console.log(`[HubSpot Triggers] Composio response status: ${triggerResponse.status}`);
+      console.log(`[HubSpot Triggers] Composio response body: ${triggerText}`);
 
       if (!triggerResponse.ok) {
+        // Log detailed error for debugging
+        let errorDetails = triggerText;
+        try {
+          const errorJson = JSON.parse(triggerText);
+          console.error(`[HubSpot Triggers] Parsed error:`, JSON.stringify(errorJson, null, 2));
+          // Check if there's a specific field indicating required config
+          if (errorJson.errors || errorJson.details || errorJson.message) {
+            errorDetails = JSON.stringify(errorJson.errors || errorJson.details || errorJson.message);
+          }
+        } catch {
+          // Keep raw text as error details
+        }
+        
         return new Response(
-          JSON.stringify({ error: "Failed to create trigger", details: triggerText }),
+          JSON.stringify({ 
+            error: "Failed to create trigger", 
+            details: errorDetails,
+            status: triggerResponse.status
+          }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      // Parse successful response
       let triggerData;
       try {
         triggerData = JSON.parse(triggerText);
       } catch {
-        triggerData = { id: null };
+        triggerData = {};
       }
+
+      // Extract trigger_id - Composio v3 returns it at root level
+      const triggerId = triggerData?.trigger_id || triggerData?.id || null;
+      console.log(`[HubSpot Triggers] Created trigger ID: ${triggerId}`);
 
       // Update config with trigger ID and set active
       const { error: updateError } = await supabaseClient
         .from("hubspot_automation_config")
         .update({
           is_active: true,
-          trigger_id: triggerData?.id || triggerData?.data?.id || null,
+          trigger_id: triggerId,
         })
         .eq("user_id", userId);
 
@@ -116,7 +161,7 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, triggerId: triggerData?.id }),
+        JSON.stringify({ success: true, triggerId }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -130,9 +175,9 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (config?.trigger_id) {
-        // Disable the trigger
+        // Disable the trigger using correct endpoint
         const disableResponse = await fetch(
-          `https://backend.composio.dev/api/v3/trigger_instances/${config.trigger_id}`,
+          `https://backend.composio.dev/api/v3/trigger_instances/manage/${config.trigger_id}`,
           {
             method: "PATCH",
             headers: {
@@ -142,8 +187,8 @@ Deno.serve(async (req) => {
             body: JSON.stringify({ enabled: false }),
           }
         );
-        console.log(`[HubSpot Triggers] Disable response: ${disableResponse.status}`);
-        await disableResponse.text();
+        const disableText = await disableResponse.text();
+        console.log(`[HubSpot Triggers] Disable response: ${disableResponse.status} - ${disableText}`);
       }
 
       // Update config
