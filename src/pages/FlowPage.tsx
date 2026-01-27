@@ -59,6 +59,9 @@ import { LinkedInAutomationFlow } from "@/components/flows/linkedin-automation";
 // Trello Automation components
 import { TrelloAutomationFlow } from "@/components/flows/trello-automation";
 
+// HubSpot Automation components
+import { HubSpotAutomationFlow } from "@/components/flows/hubspot-automation";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -231,6 +234,12 @@ export default function FlowPage() {
   
   if (config.isTrelloAutomationFlow) {
     return <TrelloAutomationFlow />;
+  }
+
+  // === HUBSPOT AUTOMATION FLOW RENDER ===
+  
+  if (config.isHubSpotAutomationFlow) {
+    return <HubSpotAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

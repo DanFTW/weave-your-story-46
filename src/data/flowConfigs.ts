@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "hubspot-tracker": {
+    id: "hubspot-tracker",
+    title: "HubSpot Contact Tracker",
+    subtitle: "CRM contact monitoring",
+    description: "Automatically save new HubSpot contacts as memories.",
+    gradient: "orange",
+    icon: Contact,
+    entryName: "contact",
+    entryNamePlural: "contacts",
+    memoryTag: "HUBSPOT",
+    fields: [],
+    isHubSpotAutomationFlow: true,
+  },
   "trello-tracker": {
     id: "trello-tracker",
     title: "Trello Task Tracker",

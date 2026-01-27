@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "hubspot-tracker",
+    title: "HubSpot Contact Tracker",
+    description: "Automatically save new CRM contacts as memories",
+    icon: Contact,
+    gradient: "orange",
+    status: "active",
+    type: "automation",
+    category: "crm",
+  },
   {
     id: "trello-tracker",
     title: "Trello Task Tracker",
