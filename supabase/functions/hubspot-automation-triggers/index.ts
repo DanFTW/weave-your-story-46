@@ -8,6 +8,8 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
+const HUBSPOT_APP_ID = Deno.env.get("HUBSPOT_APP_ID");
+const HUBSPOT_DEVELOPER_API_KEY = Deno.env.get("HUBSPOT_DEVELOPER_API_KEY");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -64,33 +66,27 @@ Deno.serve(async (req) => {
     const connectionId = integration.composio_connection_id;
 
     if (action === "activate") {
+      // Validate required HubSpot credentials from secrets
+      if (!HUBSPOT_APP_ID || !HUBSPOT_DEVELOPER_API_KEY) {
+        console.error("[HubSpot Triggers] Missing required secrets: HUBSPOT_APP_ID or HUBSPOT_DEVELOPER_API_KEY");
+        return new Response(
+          JSON.stringify({
+            error: "Missing HubSpot trigger config",
+            details: "HUBSPOT_APP_ID and HUBSPOT_DEVELOPER_API_KEY are required to create HUBSPOT_CONTACT_CREATED_TRIGGER.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const webhookUrl = `${SUPABASE_URL}/functions/v1/hubspot-automation-webhook`;
 
       console.log(`[HubSpot Triggers] Attempting to create trigger...`);
       console.log(`[HubSpot Triggers] Connection ID: ${connectionId}`);
       console.log(`[HubSpot Triggers] Webhook URL: ${webhookUrl}`);
+      console.log(`[HubSpot Triggers] App ID: ${HUBSPOT_APP_ID}`);
+      // Never log HUBSPOT_DEVELOPER_API_KEY
 
-      // First, query what config is required for this trigger
-      try {
-        const typeResponse = await fetch(
-          "https://backend.composio.dev/api/v3/triggers_types/HUBSPOT_CONTACT_CREATED_TRIGGER",
-          {
-            method: "GET",
-            headers: { "x-api-key": COMPOSIO_API_KEY },
-          }
-        );
-        
-        if (typeResponse.ok) {
-          const typeData = await typeResponse.json();
-          console.log(`[HubSpot Triggers] Trigger type schema:`, JSON.stringify(typeData));
-        } else {
-          console.log(`[HubSpot Triggers] Could not fetch trigger type schema: ${typeResponse.status}`);
-        }
-      } catch (schemaErr) {
-        console.log(`[HubSpot Triggers] Schema fetch error:`, schemaErr);
-      }
-
-      // Create the trigger
+      // Create the trigger with required config
       const triggerResponse = await fetch(
         "https://backend.composio.dev/api/v3/trigger_instances/HUBSPOT_CONTACT_CREATED_TRIGGER/upsert",
         {
@@ -101,7 +97,10 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({
             connected_account_id: connectionId,
-            trigger_config: {},
+            trigger_config: {
+              app_id: HUBSPOT_APP_ID,
+              developer_api_key: HUBSPOT_DEVELOPER_API_KEY,
+            },
             webhook_url: webhookUrl,
           }),
         }
@@ -112,12 +111,11 @@ Deno.serve(async (req) => {
       console.log(`[HubSpot Triggers] Composio response body: ${triggerText}`);
 
       if (!triggerResponse.ok) {
-        // Log detailed error for debugging
+        // Surface real Composio error with actual status code
         let errorDetails = triggerText;
         try {
           const errorJson = JSON.parse(triggerText);
           console.error(`[HubSpot Triggers] Parsed error:`, JSON.stringify(errorJson, null, 2));
-          // Check if there's a specific field indicating required config
           if (errorJson.errors || errorJson.details || errorJson.message) {
             errorDetails = JSON.stringify(errorJson.errors || errorJson.details || errorJson.message);
           }
@@ -129,9 +127,9 @@ Deno.serve(async (req) => {
           JSON.stringify({ 
             error: "Failed to create trigger", 
             details: errorDetails,
-            status: triggerResponse.status
+            composioStatus: triggerResponse.status
           }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: triggerResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
