@@ -38,13 +38,18 @@ export default function IntegrationDetail() {
     checkStatus();
   }, [checkStatus]);
 
-  // Check for return path after connection becomes active
+  // Check for return path after connection becomes active (generic for all integrations)
   useEffect(() => {
-    if (isConnected && !hasHandledReturn.current) {
-      const returnPath = sessionStorage.getItem('returnAfterGmailConnect');
-      if (returnPath && integrationId?.toLowerCase() === 'gmail') {
+    if (isConnected && !hasHandledReturn.current && integrationId) {
+      // Build the return path key using capitalized integration name
+      // e.g., 'gmail' -> 'returnAfterGmailConnect', 'trello' -> 'returnAfterTrelloConnect'
+      const capitalizedId = integrationId.charAt(0).toUpperCase() + integrationId.slice(1).toLowerCase();
+      const returnPathKey = `returnAfter${capitalizedId}Connect`;
+      const returnPath = sessionStorage.getItem(returnPathKey);
+      
+      if (returnPath) {
         hasHandledReturn.current = true;
-        sessionStorage.removeItem('returnAfterGmailConnect');
+        sessionStorage.removeItem(returnPathKey);
         // Small delay to show connection success before redirecting
         setTimeout(() => {
           navigate(returnPath);
