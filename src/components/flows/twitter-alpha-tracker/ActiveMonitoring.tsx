@@ -61,7 +61,7 @@ export function ActiveMonitoring({
       <div className="px-5 pt-6 space-y-6">
         {/* Status Card */}
         <div className="p-4 rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
@@ -72,6 +72,9 @@ export function ActiveMonitoring({
               {trackedAccounts.length} account{trackedAccounts.length > 1 ? "s" : ""}
             </span>
           </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Background sync every 5 minutes
+          </p>
 
           {/* Tracked Accounts List */}
           <div className="space-y-2">
@@ -153,7 +156,7 @@ export function ActiveMonitoring({
         <div className="space-y-3 pt-4">
           <Button onClick={onCheckNow} className="w-full" variant="outline">
             <RefreshCw className="w-4 h-4 mr-2" />
-            Check Now
+            Sync Now
           </Button>
 
           <Button onClick={onPause} className="w-full" variant="outline">
