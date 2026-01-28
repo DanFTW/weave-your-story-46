@@ -470,6 +470,42 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_alpha_tracked_accounts: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          posts_tracked: number | null
+          updated_at: string
+          user_id: string
+          user_id_twitter: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          posts_tracked?: number | null
+          updated_at?: string
+          user_id: string
+          user_id_twitter: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          posts_tracked?: number | null
+          updated_at?: string
+          user_id?: string
+          user_id_twitter?: string
+          username?: string
+        }
+        Relationships: []
+      }
       twitter_alpha_tracker_config: {
         Row: {
           created_at: string | null

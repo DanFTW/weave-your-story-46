@@ -12,14 +12,17 @@ export function TwitterAlphaTrackerFlow() {
     isSearching,
     isActivating,
     searchResults,
-    selectedAccount,
+    selectedAccounts,
     stats,
     searchUsers,
-    selectAccount,
+    addAccount,
+    removeSelectedAccount,
+    confirmAccountSelection,
+    removeTrackedAccount,
     activateTracking,
     deactivateTracking,
     manualPoll,
-    changeAccount,
+    goToAddAccounts,
   } = useTwitterAlphaTracker();
 
   // Loading state
@@ -41,33 +44,40 @@ export function TwitterAlphaTrackerFlow() {
     return (
       <AccountSearch
         onSearch={searchUsers}
-        onSelect={selectAccount}
+        onAddAccount={addAccount}
+        onRemoveAccount={removeSelectedAccount}
+        onConfirm={confirmAccountSelection}
         searchResults={searchResults}
+        selectedAccounts={selectedAccounts}
+        existingAccounts={stats.trackedAccounts}
         isSearching={isSearching}
+        isConfirming={isActivating}
       />
     );
   }
 
   // Configure phase
-  if (phase === "configure" && selectedAccount) {
+  if (phase === "configure" && stats.trackedAccounts.length > 0) {
     return (
       <AutomationConfig
-        account={selectedAccount}
+        accounts={stats.trackedAccounts}
         onActivate={activateTracking}
-        onChangeAccount={changeAccount}
+        onAddMore={goToAddAccounts}
+        onRemoveAccount={removeTrackedAccount}
         isActivating={isActivating}
       />
     );
   }
 
   // Active phase
-  if (phase === "active" && stats.trackedAccount) {
+  if (phase === "active" && stats.trackedAccounts.length > 0) {
     return (
       <ActiveMonitoring
         stats={stats}
         onPause={deactivateTracking}
         onCheckNow={manualPoll}
-        onChangeAccount={changeAccount}
+        onAddAccount={goToAddAccounts}
+        onRemoveAccount={removeTrackedAccount}
       />
     );
   }

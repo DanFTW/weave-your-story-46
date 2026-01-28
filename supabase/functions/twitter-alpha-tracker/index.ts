@@ -171,10 +171,14 @@ async function searchTwitterUser(connectionId: string, username: string): Promis
   }
 }
 
-// Fetch tweets from tracked user
-async function fetchTrackedUserTweets(connectionId: string, trackedUsername: string): Promise<Tweet[]> {
+// Fetch tweets from multiple tracked users
+async function fetchMultipleUsersTweets(connectionId: string, usernames: string[]): Promise<Tweet[]> {
   try {
-    console.log('Fetching tweets from:', trackedUsername);
+    if (usernames.length === 0) return [];
+    
+    // Build query with OR for multiple users
+    const query = usernames.map(u => `from:${u}`).join(' OR ');
+    console.log('Fetching tweets with query:', query);
     
     const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/TWITTER_RECENT_SEARCH', {
       method: 'POST',
@@ -185,9 +189,10 @@ async function fetchTrackedUserTweets(connectionId: string, trackedUsername: str
       body: JSON.stringify({
         connected_account_id: connectionId,
         arguments: {
-          query: `from:${trackedUsername}`,
-          max_results: 50,
-          'tweet.fields': 'created_at,public_metrics',
+          query,
+          max_results: 100,
+          'tweet.fields': 'created_at,public_metrics,author_id',
+          expansions: 'author_id',
         },
       }),
     });
@@ -216,14 +221,20 @@ async function fetchTrackedUserTweets(connectionId: string, trackedUsername: str
       }
     }
 
+    // Try to get user mapping for author usernames
+    const usersData = responseData?.response_data?.includes?.users || 
+                      responseData?.includes?.users || 
+                      [];
+    const userMap = new Map<string, string>(usersData.map((u: any) => [u.id, u.username]));
+
     const tweets: Tweet[] = tweetsData.map((tweet: any) => ({
       id: tweet.id || String(Date.now()),
       text: tweet.text || '',
       createdAt: tweet.created_at || new Date().toISOString(),
-      authorUsername: trackedUsername,
+      authorUsername: userMap.get(tweet.author_id) as string || 'unknown',
     }));
 
-    console.log('Fetched', tweets.length, 'tweets from', trackedUsername);
+    console.log('Fetched', tweets.length, 'tweets from', usernames.length, 'accounts');
     return tweets;
   } catch (error) {
     console.error('Error fetching tweets:', error);
@@ -279,22 +290,27 @@ function formatTweetAsMemory(tweet: Tweet): string {
   return `Twitter Post from @${tweet.authorUsername}\n${date}\n\n${tweet.text}\n\nA post from an account you're tracking.`;
 }
 
-// Process tracked user posts
-async function processTrackedUser(
+// Process all tracked users for a given user
+async function processTrackedUsers(
   supabase: any, 
-  userId: string, 
-  config: any
-): Promise<{ newPosts: number; postsTracked: number }> {
+  userId: string
+): Promise<{ newPosts: number; totalPostsTracked: number }> {
   try {
-    if (!config.tracked_username) {
-      console.log('No tracked username configured');
-      return { newPosts: 0, postsTracked: config.posts_tracked || 0 };
+    // Get all tracked accounts
+    const { data: trackedAccounts, error: accountsError } = await supabase
+      .from('twitter_alpha_tracked_accounts')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (accountsError || !trackedAccounts || trackedAccounts.length === 0) {
+      console.log('No tracked accounts for user', userId);
+      return { newPosts: 0, totalPostsTracked: 0 };
     }
 
     const connectionId = await getConnectedAccountId(supabase, userId);
     if (!connectionId) {
       console.log(`No Twitter connection for user ${userId}`);
-      return { newPosts: 0, postsTracked: config.posts_tracked || 0 };
+      return { newPosts: 0, totalPostsTracked: trackedAccounts.reduce((sum: number, a: any) => sum + (a.posts_tracked || 0), 0) };
     }
 
     // Get API keys
@@ -306,13 +322,16 @@ async function processTrackedUser(
 
     if (!apiKeys) {
       console.log(`No API keys for user ${userId}`);
-      return { newPosts: 0, postsTracked: config.posts_tracked || 0 };
+      return { newPosts: 0, totalPostsTracked: trackedAccounts.reduce((sum: number, a: any) => sum + (a.posts_tracked || 0), 0) };
     }
 
-    // Fetch tweets from tracked user
-    const tweets = await fetchTrackedUserTweets(connectionId, config.tracked_username);
+    // Build list of usernames
+    const usernames = trackedAccounts.map((a: any) => a.username);
+    
+    // Fetch tweets from all tracked users
+    const tweets = await fetchMultipleUsersTweets(connectionId, usernames);
     if (tweets.length === 0) {
-      return { newPosts: 0, postsTracked: config.posts_tracked || 0 };
+      return { newPosts: 0, totalPostsTracked: trackedAccounts.reduce((sum: number, a: any) => sum + (a.posts_tracked || 0), 0) };
     }
 
     // Get already processed tweets
@@ -325,9 +344,10 @@ async function processTrackedUser(
 
     // Filter new tweets
     const newTweets = tweets.filter(t => !processedIds.has(t.id));
-    console.log(`Found ${newTweets.length} new tweets from @${config.tracked_username}`);
+    console.log(`Found ${newTweets.length} new tweets from ${usernames.length} accounts`);
 
     let newPosts = 0;
+    const postsByAuthor: Record<string, number> = {};
 
     for (const tweet of newTweets) {
       const memory = formatTweetAsMemory(tweet);
@@ -343,24 +363,50 @@ async function processTrackedUser(
           });
 
         newPosts++;
+        postsByAuthor[tweet.authorUsername] = (postsByAuthor[tweet.authorUsername] || 0) + 1;
       }
     }
 
-    // Update config stats
-    const newPostsTracked = (config.posts_tracked || 0) + newPosts;
+    // Update per-account stats
+    for (const [username, count] of Object.entries(postsByAuthor)) {
+      const account = trackedAccounts.find((a: any) => a.username === username);
+      if (account) {
+        await supabase
+          .from('twitter_alpha_tracked_accounts')
+          .update({
+            posts_tracked: (account.posts_tracked || 0) + count,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', account.id);
+      }
+    }
+
+    // Update global config
+    const { data: config } = await supabase
+      .from('twitter_alpha_tracker_config')
+      .select('posts_tracked')
+      .eq('user_id', userId)
+      .maybeSingle();
+
     await supabase
       .from('twitter_alpha_tracker_config')
       .update({
         last_polled_at: new Date().toISOString(),
-        posts_tracked: newPostsTracked,
+        posts_tracked: (config?.posts_tracked || 0) + newPosts,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', config.id);
+      .eq('user_id', userId);
 
-    return { newPosts, postsTracked: newPostsTracked };
+    // Calculate total
+    const totalPostsTracked = trackedAccounts.reduce((sum: number, a: any) => {
+      const additional = postsByAuthor[a.username] || 0;
+      return sum + (a.posts_tracked || 0) + additional;
+    }, 0);
+
+    return { newPosts, totalPostsTracked };
   } catch (error) {
-    console.error(`Error processing tracked user for ${userId}:`, error);
-    return { newPosts: 0, postsTracked: config.posts_tracked || 0 };
+    console.error(`Error processing tracked users for ${userId}:`, error);
+    return { newPosts: 0, totalPostsTracked: 0 };
   }
 }
 
@@ -406,8 +452,8 @@ serve(async (req) => {
       let totalNewPosts = 0;
       for (const config of activeConfigs || []) {
         try {
-          console.log(`Cron poll: Processing tracker for user ${config.user_id}, tracking @${config.tracked_username}`);
-          const result = await processTrackedUser(supabase, config.user_id, config);
+          console.log(`Cron poll: Processing tracker for user ${config.user_id}`);
+          const result = await processTrackedUsers(supabase, config.user_id);
           totalNewPosts += result.newPosts;
         } catch (err) {
           console.error(`Cron poll: Error processing user ${config.user_id}:`, err);
@@ -471,34 +517,69 @@ serve(async (req) => {
       });
     }
 
-    // Select account to track
-    if (action === 'select-account') {
-      const { account } = body;
-      if (!account?.username || !account?.userId) {
-        return new Response(JSON.stringify({ error: 'Account details required' }), {
+    // Add multiple accounts to track
+    if (action === 'add-accounts') {
+      const { accounts } = body;
+      if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
+        return new Response(JSON.stringify({ error: 'Accounts array required' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Upsert config
-      const { error } = await supabase
+      // Ensure config exists
+      await supabase
         .from('twitter_alpha_tracker_config')
         .upsert({
           user_id: userId,
-          tracked_username: account.username,
-          tracked_user_id: account.userId,
-          tracked_display_name: account.displayName || null,
-          tracked_avatar_url: account.avatarUrl || null,
           is_active: false,
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id',
         });
 
+      // Insert accounts (ignore duplicates)
+      for (const account of accounts) {
+        if (!account.username || !account.userId) continue;
+
+        await supabase
+          .from('twitter_alpha_tracked_accounts')
+          .upsert({
+            user_id: userId,
+            username: account.username,
+            user_id_twitter: account.userId,
+            display_name: account.displayName || null,
+            avatar_url: account.avatarUrl || null,
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id,username',
+          });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Remove account from tracking
+    if (action === 'remove-account') {
+      const { username } = body;
+      if (!username) {
+        return new Response(JSON.stringify({ error: 'Username required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { error } = await supabase
+        .from('twitter_alpha_tracked_accounts')
+        .delete()
+        .eq('user_id', userId)
+        .eq('username', username);
+
       if (error) {
-        console.error('Error saving account:', error);
-        return new Response(JSON.stringify({ error: 'Failed to save account' }), {
+        console.error('Error removing account:', error);
+        return new Response(JSON.stringify({ error: 'Failed to remove account' }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -509,15 +590,57 @@ serve(async (req) => {
       });
     }
 
+    // Legacy: Select single account (for backward compatibility)
+    if (action === 'select-account') {
+      const { account } = body;
+      if (!account?.username || !account?.userId) {
+        return new Response(JSON.stringify({ error: 'Account details required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Ensure config exists
+      await supabase
+        .from('twitter_alpha_tracker_config')
+        .upsert({
+          user_id: userId,
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        });
+
+      // Add to tracked accounts
+      await supabase
+        .from('twitter_alpha_tracked_accounts')
+        .upsert({
+          user_id: userId,
+          username: account.username,
+          user_id_twitter: account.userId,
+          display_name: account.displayName || null,
+          avatar_url: account.avatarUrl || null,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,username',
+        });
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Activate tracking
     if (action === 'activate') {
       const { error } = await supabase
         .from('twitter_alpha_tracker_config')
-        .update({
+        .upsert({
+          user_id: userId,
           is_active: true,
           updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId);
+        }, {
+          onConflict: 'user_id',
+        });
 
       if (error) {
         console.error('Error activating:', error);
@@ -557,21 +680,7 @@ serve(async (req) => {
 
     // Manual poll
     if (action === 'manual-poll') {
-      // Get config
-      const { data: config, error: configError } = await supabase
-        .from('twitter_alpha_tracker_config')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (configError || !config) {
-        return new Response(JSON.stringify({ error: 'Config not found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const result = await processTrackedUser(supabase, userId, config);
+      const result = await processTrackedUsers(supabase, userId);
 
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

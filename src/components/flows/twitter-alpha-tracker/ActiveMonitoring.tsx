@@ -6,8 +6,9 @@ import {
   User,
   RefreshCw,
   Pause,
-  Settings,
+  Plus,
   CheckCircle2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -17,17 +18,19 @@ interface ActiveMonitoringProps {
   stats: TwitterAlphaTrackerStats;
   onPause: () => void;
   onCheckNow: () => void;
-  onChangeAccount: () => void;
+  onAddAccount: () => void;
+  onRemoveAccount: (username: string) => void;
 }
 
 export function ActiveMonitoring({
   stats,
   onPause,
   onCheckNow,
-  onChangeAccount,
+  onAddAccount,
+  onRemoveAccount,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
-  const account = stats.trackedAccount;
+  const { trackedAccounts } = stats;
 
   const lastCheckedText = stats.lastChecked
     ? formatDistanceToNow(new Date(stats.lastChecked), { addSuffix: true })
@@ -58,39 +61,73 @@ export function ActiveMonitoring({
       <div className="px-5 pt-6 space-y-6">
         {/* Status Card */}
         <div className="p-4 rounded-xl border border-border bg-card">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              Tracking Active
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                Tracking Active
+              </span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {trackedAccounts.length} account{trackedAccounts.length > 1 ? "s" : ""}
             </span>
           </div>
 
-          {account && (
-            <div className="flex items-center gap-3">
-              <Avatar className="w-14 h-14">
-                {account.avatarUrl ? (
-                  <AvatarImage
-                    src={account.avatarUrl}
-                    alt={account.displayName}
-                  />
-                ) : null}
-                <AvatarFallback>
-                  <User className="w-6 h-6 text-muted-foreground" />
-                </AvatarFallback>
-              </Avatar>
+          {/* Tracked Accounts List */}
+          <div className="space-y-2">
+            {trackedAccounts.map((account) => (
+              <div
+                key={account.username}
+                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30"
+              >
+                <Avatar className="w-10 h-10">
+                  {account.avatarUrl ? (
+                    <AvatarImage
+                      src={account.avatarUrl}
+                      alt={account.displayName}
+                    />
+                  ) : null}
+                  <AvatarFallback>
+                    <User className="w-4 h-4 text-muted-foreground" />
+                  </AvatarFallback>
+                </Avatar>
 
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-foreground text-lg truncate">
-                  {account.displayName || account.username}
-                </p>
-                <p className="text-muted-foreground truncate">
-                  @{account.username}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground truncate">
+                    {account.displayName || account.username}
+                  </p>
+                  <p className="text-sm text-muted-foreground truncate">
+                    @{account.username}
+                  </p>
+                </div>
+
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-medium text-foreground">
+                    {account.postsTracked}
+                  </p>
+                  <p className="text-xs text-muted-foreground">posts</p>
+                </div>
+
+                {trackedAccounts.length > 1 && (
+                  <button
+                    onClick={() => onRemoveAccount(account.username)}
+                    className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-destructive/10 flex-shrink-0"
+                  >
+                    <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                  </button>
+                )}
               </div>
+            ))}
+          </div>
 
-              <Twitter className="w-6 h-6 text-primary flex-shrink-0" />
-            </div>
-          )}
+          {/* Add Account Button */}
+          <button
+            onClick={onAddAccount}
+            className="w-full mt-3 p-3 rounded-lg border border-dashed border-border flex items-center justify-center gap-2 text-sm text-muted-foreground hover:bg-muted/30 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add another account
+          </button>
         </div>
 
         {/* Stats */}
@@ -98,9 +135,9 @@ export function ActiveMonitoring({
           <div className="p-4 rounded-xl border border-border bg-card text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-2" />
             <p className="text-2xl font-bold text-foreground">
-              {stats.postsTracked}
+              {stats.totalPostsTracked}
             </p>
-            <p className="text-sm text-muted-foreground">Posts Tracked</p>
+            <p className="text-sm text-muted-foreground">Total Posts</p>
           </div>
 
           <div className="p-4 rounded-xl border border-border bg-card text-center">
@@ -122,11 +159,6 @@ export function ActiveMonitoring({
           <Button onClick={onPause} className="w-full" variant="outline">
             <Pause className="w-4 h-4 mr-2" />
             Pause Tracking
-          </Button>
-
-          <Button onClick={onChangeAccount} className="w-full" variant="ghost">
-            <Settings className="w-4 h-4 mr-2" />
-            Change Account
           </Button>
         </div>
       </div>
