@@ -62,6 +62,9 @@ import { TrelloAutomationFlow } from "@/components/flows/trello-automation";
 // HubSpot Automation components
 import { HubSpotAutomationFlow } from "@/components/flows/hubspot-automation";
 
+// Twitter Alpha Tracker components
+import { TwitterAlphaTrackerFlow } from "@/components/flows/twitter-alpha-tracker";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -240,6 +243,12 @@ export default function FlowPage() {
   
   if (config.isHubSpotAutomationFlow) {
     return <HubSpotAutomationFlow />;
+  }
+
+  // === TWITTER ALPHA TRACKER FLOW RENDER ===
+  
+  if (config.isTwitterAlphaTrackerFlow) {
+    return <TwitterAlphaTrackerFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

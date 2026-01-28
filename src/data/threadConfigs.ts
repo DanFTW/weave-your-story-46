@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "twitter-alpha-tracker": {
+    id: "twitter-alpha-tracker",
+    title: "Twitter Alpha Tracker",
+    subtitle: "Track any Twitter account",
+    description: "Monitor posts from any Twitter account and save them as memories automatically.",
+    gradient: "blue",
+    icon: Target,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Twitter",
+        description: "Authorize access to search tweets",
+        iconUrl: "https://abs.twimg.com/responsive-web/client-web/icon-ios.b1fc7279.png",
+      },
+      {
+        id: "select",
+        type: "setup",
+        title: "Select Account",
+        description: "Search and choose who to track",
+        icon: User,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Posts saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "hubspot-tracker": {
     id: "hubspot-tracker",
     title: "HubSpot Contact Tracker",

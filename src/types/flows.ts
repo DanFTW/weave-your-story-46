@@ -42,6 +42,7 @@ export interface FlowConfig {
   isLinkedInAutomationFlow?: boolean; // If true, uses LinkedIn automation UI
   isTrelloAutomationFlow?: boolean; // If true, uses Trello automation UI
   isHubSpotAutomationFlow?: boolean; // If true, uses HubSpot automation UI
+  isTwitterAlphaTrackerFlow?: boolean; // If true, uses Twitter Alpha Tracker UI
 }
 
 // Single data entry (e.g., one family member)

@@ -1,7 +1,17 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "twitter-alpha-tracker",
+    title: "Twitter Alpha Tracker",
+    description: "Track posts from any Twitter account as memories",
+    icon: Target,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "social",
+  },
   {
     id: "hubspot-tracker",
     title: "HubSpot Contact Tracker",

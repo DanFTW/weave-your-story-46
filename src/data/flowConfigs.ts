@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "twitter-alpha-tracker": {
+    id: "twitter-alpha-tracker",
+    title: "Twitter Alpha Tracker",
+    subtitle: "Monitor any Twitter account",
+    description: "Track posts from any Twitter account and save them as memories.",
+    gradient: "blue",
+    icon: Target,
+    entryName: "post",
+    entryNamePlural: "posts",
+    memoryTag: "TWITTER",
+    fields: [],
+    isTwitterAlphaTrackerFlow: true,
+  },
   "hubspot-tracker": {
     id: "hubspot-tracker",
     title: "HubSpot Contact Tracker",

@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.hubspot-automation-webhook]
 verify_jwt = false
+
+[functions.twitter-alpha-tracker]
+verify_jwt = false

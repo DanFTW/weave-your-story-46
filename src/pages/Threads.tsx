@@ -8,7 +8,7 @@ import { getThreadConfig } from "@/data/threadConfigs";
 import { Thread } from "@/types/threads";
 
 // Threads that navigate directly to overview (no detail sheet)
-const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests', 'llm-import', 'email-dump', 'email-automation', 'google-photos-sync', 'instagram-sync', 'instagram-live', 'twitter-sync', 'twitter-live', 'youtube-sync', 'linkedin-live', 'trello-tracker', 'hubspot-tracker'];
+const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests', 'llm-import', 'email-dump', 'email-automation', 'google-photos-sync', 'instagram-sync', 'instagram-live', 'twitter-sync', 'twitter-live', 'youtube-sync', 'linkedin-live', 'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker'];
 
 export default function Threads() {
   const navigate = useNavigate();
