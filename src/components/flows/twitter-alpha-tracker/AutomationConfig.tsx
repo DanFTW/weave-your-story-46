@@ -1,20 +1,22 @@
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Twitter, User, Zap, ArrowRight } from "lucide-react";
+import { ChevronLeft, Twitter, User, Zap, ArrowRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { TrackedTwitterAccount } from "@/types/twitterAlphaTracker";
+import { TrackedTwitterAccountWithStats } from "@/types/twitterAlphaTracker";
 
 interface AutomationConfigProps {
-  account: TrackedTwitterAccount;
+  accounts: TrackedTwitterAccountWithStats[];
   onActivate: () => void;
-  onChangeAccount: () => void;
+  onAddMore: () => void;
+  onRemoveAccount: (username: string) => void;
   isActivating: boolean;
 }
 
 export function AutomationConfig({
-  account,
+  accounts,
   onActivate,
-  onChangeAccount,
+  onAddMore,
+  onRemoveAccount,
   isActivating,
 }: AutomationConfigProps) {
   const navigate = useNavigate();
@@ -42,29 +44,57 @@ export function AutomationConfig({
 
       {/* Content */}
       <div className="px-5 pt-6 space-y-6">
-        {/* Selected Account Card */}
+        {/* Accounts List */}
         <div className="p-4 rounded-xl border border-border bg-card">
-          <p className="text-sm text-muted-foreground mb-3">Tracking</p>
-          <div className="flex items-center gap-3">
-            <Avatar className="w-14 h-14">
-              {account.avatarUrl ? (
-                <AvatarImage src={account.avatarUrl} alt={account.displayName} />
-              ) : null}
-              <AvatarFallback>
-                <User className="w-6 h-6 text-muted-foreground" />
-              </AvatarFallback>
-            </Avatar>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm text-muted-foreground">
+              Tracking {accounts.length} account{accounts.length > 1 ? "s" : ""}
+            </p>
+            <button
+              onClick={onAddMore}
+              className="text-sm text-primary flex items-center gap-1 hover:opacity-80"
+            >
+              <Plus className="w-4 h-4" />
+              Add more
+            </button>
+          </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-foreground text-lg truncate">
-                {account.displayName || account.username}
-              </p>
-              <p className="text-muted-foreground truncate">
-                @{account.username}
-              </p>
-            </div>
+          <div className="space-y-3">
+            {accounts.map((account) => (
+              <div
+                key={account.username}
+                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30"
+              >
+                <Avatar className="w-10 h-10">
+                  {account.avatarUrl ? (
+                    <AvatarImage src={account.avatarUrl} alt={account.displayName} />
+                  ) : null}
+                  <AvatarFallback>
+                    <User className="w-4 h-4 text-muted-foreground" />
+                  </AvatarFallback>
+                </Avatar>
 
-            <Twitter className="w-6 h-6 text-[#1DA1F2] flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground truncate">
+                    {account.displayName || account.username}
+                  </p>
+                  <p className="text-sm text-muted-foreground truncate">
+                    @{account.username}
+                  </p>
+                </div>
+
+                <Twitter className="w-4 h-4 text-[#1DA1F2] flex-shrink-0" />
+
+                {accounts.length > 1 && (
+                  <button
+                    onClick={() => onRemoveAccount(account.username)}
+                    className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-destructive/10"
+                  >
+                    <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -77,7 +107,10 @@ export function AutomationConfig({
             <div>
               <p className="font-medium text-foreground">How it works</p>
               <p className="text-sm text-muted-foreground mt-1">
-                We'll check for new posts from @{account.username} periodically
+                We'll periodically check for new posts from{" "}
+                {accounts.length === 1
+                  ? `@${accounts[0].username}`
+                  : `these ${accounts.length} accounts`}{" "}
                 and save them as memories automatically.
               </p>
             </div>
@@ -94,14 +127,6 @@ export function AutomationConfig({
             <Zap className="w-5 h-5 mr-2" />
             Start Tracking
             <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={onChangeAccount}
-            className="w-full"
-          >
-            Change Account
           </Button>
         </div>
       </div>

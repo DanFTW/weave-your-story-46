@@ -1,24 +1,34 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Search, Loader2, Twitter, User } from "lucide-react";
+import { ChevronLeft, Search, Loader2, Twitter, User, X, Check, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { TrackedTwitterAccount } from "@/types/twitterAlphaTracker";
+import { TrackedTwitterAccount, TrackedTwitterAccountWithStats } from "@/types/twitterAlphaTracker";
 import { cn } from "@/lib/utils";
 
 interface AccountSearchProps {
   onSearch: (query: string) => void;
-  onSelect: (account: TrackedTwitterAccount) => void;
+  onAddAccount: (account: TrackedTwitterAccount) => void;
+  onRemoveAccount: (username: string) => void;
+  onConfirm: () => void;
   searchResults: TrackedTwitterAccount[];
+  selectedAccounts: TrackedTwitterAccount[];
+  existingAccounts: TrackedTwitterAccountWithStats[];
   isSearching: boolean;
+  isConfirming: boolean;
 }
 
 export function AccountSearch({
   onSearch,
-  onSelect,
+  onAddAccount,
+  onRemoveAccount,
+  onConfirm,
   searchResults,
+  selectedAccounts,
+  existingAccounts,
   isSearching,
+  isConfirming,
 }: AccountSearchProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -34,6 +44,18 @@ export function AccountSearch({
       handleSearch();
     }
   };
+
+  const isAccountSelected = (username: string) =>
+    selectedAccounts.some((a) => a.username === username);
+
+  const isAccountExisting = (username: string) =>
+    existingAccounts.some((a) => a.username === username);
+
+  const totalNewSelected = selectedAccounts.filter(
+    (a) => !isAccountExisting(a.username)
+  ).length;
+
+  const allAccountsCount = existingAccounts.length + totalNewSelected;
 
   return (
     <div className="min-h-screen bg-background pb-nav">
@@ -52,7 +74,7 @@ export function AccountSearch({
               Twitter Alpha Tracker
             </h1>
             <p className="text-white/70 text-sm truncate">
-              Select an account to track
+              Select accounts to track
             </p>
           </div>
         </div>
@@ -81,44 +103,125 @@ export function AccountSearch({
         </div>
 
         <p className="text-xs text-muted-foreground mt-2">
-          Enter a Twitter username to find the account you want to track
+          Search and add multiple Twitter accounts to track
         </p>
       </div>
 
-      {/* Results */}
+      {/* Selected Accounts */}
+      {selectedAccounts.length > 0 && (
+        <div className="px-5 pt-4">
+          <p className="text-sm font-medium text-foreground mb-2">
+            Selected ({selectedAccounts.length})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {selectedAccounts.map((account) => (
+              <div
+                key={account.username}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full",
+                  "bg-primary/10 border border-primary/20"
+                )}
+              >
+                <Avatar className="w-5 h-5">
+                  {account.avatarUrl ? (
+                    <AvatarImage src={account.avatarUrl} alt={account.displayName} />
+                  ) : null}
+                  <AvatarFallback className="text-xs">
+                    <User className="w-3 h-3" />
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">@{account.username}</span>
+                <button
+                  onClick={() => onRemoveAccount(account.username)}
+                  className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/30"
+                >
+                  <X className="w-3 h-3 text-primary" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Existing Tracked Accounts */}
+      {existingAccounts.length > 0 && (
+        <div className="px-5 pt-4">
+          <p className="text-sm font-medium text-muted-foreground mb-2">
+            Already tracking ({existingAccounts.length})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {existingAccounts.map((account) => (
+              <div
+                key={account.username}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full",
+                  "bg-muted/50 border border-border"
+                )}
+              >
+                <Avatar className="w-5 h-5">
+                  {account.avatarUrl ? (
+                    <AvatarImage src={account.avatarUrl} alt={account.displayName} />
+                  ) : null}
+                  <AvatarFallback className="text-xs">
+                    <User className="w-3 h-3" />
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm text-muted-foreground">@{account.username}</span>
+                <Check className="w-3 h-3 text-muted-foreground" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Search Results */}
       <div className="px-5 pt-6 space-y-3">
-        {searchResults.map((account) => (
-          <button
-            key={account.userId}
-            onClick={() => onSelect(account)}
-            className={cn(
-              "w-full p-4 rounded-xl border border-border bg-card",
-              "flex items-center gap-3 text-left",
-              "transition-all duration-200",
-              "hover:border-primary/50 hover:bg-accent/50"
-            )}
-          >
-            <Avatar className="w-12 h-12">
-              {account.avatarUrl ? (
-                <AvatarImage src={account.avatarUrl} alt={account.displayName} />
-              ) : null}
-              <AvatarFallback>
-                <User className="w-5 h-5 text-muted-foreground" />
-              </AvatarFallback>
-            </Avatar>
+        {searchResults.map((account) => {
+          const selected = isAccountSelected(account.username);
+          const existing = isAccountExisting(account.username);
 
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-foreground truncate">
-                {account.displayName || account.username}
-              </p>
-              <p className="text-sm text-muted-foreground truncate">
-                @{account.username}
-              </p>
-            </div>
+          return (
+            <button
+              key={account.userId}
+              onClick={() => !existing && !selected && onAddAccount(account)}
+              disabled={existing || selected}
+              className={cn(
+                "w-full p-4 rounded-xl border bg-card",
+                "flex items-center gap-3 text-left",
+                "transition-all duration-200",
+                existing || selected
+                  ? "border-primary/50 bg-primary/5 cursor-default"
+                  : "border-border hover:border-primary/50 hover:bg-accent/50"
+              )}
+            >
+              <Avatar className="w-12 h-12">
+                {account.avatarUrl ? (
+                  <AvatarImage src={account.avatarUrl} alt={account.displayName} />
+                ) : null}
+                <AvatarFallback>
+                  <User className="w-5 h-5 text-muted-foreground" />
+                </AvatarFallback>
+              </Avatar>
 
-            <Twitter className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-          </button>
-        ))}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-foreground truncate">
+                  {account.displayName || account.username}
+                </p>
+                <p className="text-sm text-muted-foreground truncate">
+                  @{account.username}
+                </p>
+              </div>
+
+              {existing ? (
+                <Check className="w-5 h-5 text-primary flex-shrink-0" />
+              ) : selected ? (
+                <Check className="w-5 h-5 text-primary flex-shrink-0" />
+              ) : (
+                <Plus className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              )}
+            </button>
+          );
+        })}
 
         {searchResults.length === 0 && query && !isSearching && (
           <div className="text-center py-8">
@@ -130,6 +233,24 @@ export function AccountSearch({
           </div>
         )}
       </div>
+
+      {/* Continue Button */}
+      {(selectedAccounts.length > 0 || existingAccounts.length > 0) && (
+        <div className="fixed bottom-nav left-0 right-0 p-5 bg-background border-t border-border">
+          <Button
+            onClick={onConfirm}
+            disabled={isConfirming || (selectedAccounts.length === 0 && existingAccounts.length === 0)}
+            className="w-full h-12 text-base thread-gradient-blue border-0 hover:opacity-90"
+          >
+            {isConfirming ? (
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            ) : null}
+            {selectedAccounts.length > 0
+              ? `Continue with ${allAccountsCount} account${allAccountsCount > 1 ? "s" : ""}`
+              : `Continue with ${existingAccounts.length} account${existingAccounts.length > 1 ? "s" : ""}`}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

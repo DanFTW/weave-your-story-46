@@ -12,6 +12,11 @@ export interface TrackedTwitterAccount {
   avatarUrl?: string;
 }
 
+export interface TrackedTwitterAccountWithStats extends TrackedTwitterAccount {
+  id: string;
+  postsTracked: number;
+}
+
 export interface TwitterAlphaTrackerConfig {
   id: string;
   userId: string;
@@ -25,8 +30,8 @@ export interface TwitterAlphaTrackerConfig {
 }
 
 export interface TwitterAlphaTrackerStats {
-  postsTracked: number;
+  totalPostsTracked: number;
   isActive: boolean;
   lastChecked: string | null;
-  trackedAccount: TrackedTwitterAccount | null;
+  trackedAccounts: TrackedTwitterAccountWithStats[];
 }

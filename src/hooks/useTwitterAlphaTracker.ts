@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   TwitterAlphaTrackerPhase,
   TrackedTwitterAccount,
+  TrackedTwitterAccountWithStats,
   TwitterAlphaTrackerStats,
 } from "@/types/twitterAlphaTracker";
 
@@ -19,12 +20,12 @@ export function useTwitterAlphaTracker() {
   const [isSearching, setIsSearching] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [searchResults, setSearchResults] = useState<TrackedTwitterAccount[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<TrackedTwitterAccount | null>(null);
+  const [selectedAccounts, setSelectedAccounts] = useState<TrackedTwitterAccount[]>([]);
   const [stats, setStats] = useState<TwitterAlphaTrackerStats>({
-    postsTracked: 0,
+    totalPostsTracked: 0,
     isActive: false,
     lastChecked: null,
-    trackedAccount: null,
+    trackedAccounts: [],
   });
 
   // Check Twitter connection and existing config
@@ -45,7 +46,6 @@ export function useTwitterAlphaTracker() {
       if (integrationError) throw integrationError;
 
       if (!integration) {
-        // Not connected - redirect to integration page
         toast({
           title: "Twitter not connected",
           description: "Please connect your Twitter account first.",
@@ -63,33 +63,51 @@ export function useTwitterAlphaTracker() {
 
       if (configError) throw configError;
 
-      if (config && config.is_active) {
-        // Already active - go to dashboard
+      // Fetch tracked accounts from new table
+      const { data: trackedAccounts, error: accountsError } = await supabase
+        .from("twitter_alpha_tracked_accounts")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (accountsError) throw accountsError;
+
+      const accountsWithStats: TrackedTwitterAccountWithStats[] = (trackedAccounts || []).map((a: any) => ({
+        id: a.id,
+        username: a.username,
+        userId: a.user_id_twitter,
+        displayName: a.display_name || undefined,
+        avatarUrl: a.avatar_url || undefined,
+        postsTracked: a.posts_tracked || 0,
+      }));
+
+      const totalPosts = accountsWithStats.reduce((sum, a) => sum + a.postsTracked, 0);
+
+      if (config && config.is_active && accountsWithStats.length > 0) {
+        // Already active with accounts
         setStats({
-          postsTracked: config.posts_tracked || 0,
+          totalPostsTracked: totalPosts,
           isActive: true,
           lastChecked: config.last_polled_at,
-          trackedAccount: config.tracked_username
-            ? {
-                username: config.tracked_username,
-                userId: config.tracked_user_id || "",
-                displayName: config.tracked_display_name || undefined,
-                avatarUrl: config.tracked_avatar_url || undefined,
-              }
-            : null,
+          trackedAccounts: accountsWithStats,
         });
         setPhase("active");
-      } else if (config && config.tracked_username) {
-        // Has selected account but not active
-        setSelectedAccount({
-          username: config.tracked_username,
-          userId: config.tracked_user_id || "",
-          displayName: config.tracked_display_name || undefined,
-          avatarUrl: config.tracked_avatar_url || undefined,
+      } else if (accountsWithStats.length > 0) {
+        // Has selected accounts but not active
+        setSelectedAccounts(accountsWithStats.map(a => ({
+          username: a.username,
+          userId: a.userId,
+          displayName: a.displayName,
+          avatarUrl: a.avatarUrl,
+        })));
+        setStats({
+          totalPostsTracked: totalPosts,
+          isActive: false,
+          lastChecked: config?.last_polled_at || null,
+          trackedAccounts: accountsWithStats,
         });
         setPhase("configure");
       } else {
-        // No config - go to account selection
+        // No accounts - go to account selection
         setPhase("select-account");
       }
     } catch (error) {
@@ -149,38 +167,118 @@ export function useTwitterAlphaTracker() {
     [user?.id]
   );
 
-  // Select account to track
-  const selectAccount = useCallback(
-    async (account: TrackedTwitterAccount) => {
+  // Add account to selection
+  const addAccount = useCallback((account: TrackedTwitterAccount) => {
+    setSelectedAccounts((prev) => {
+      if (prev.some((a) => a.username === account.username)) {
+        return prev;
+      }
+      return [...prev, account];
+    });
+    setSearchResults([]);
+  }, []);
+
+  // Remove account from selection
+  const removeSelectedAccount = useCallback((username: string) => {
+    setSelectedAccounts((prev) => prev.filter((a) => a.username !== username));
+  }, []);
+
+  // Confirm account selection and save to database
+  const confirmAccountSelection = useCallback(async () => {
+    if (!user?.id || selectedAccounts.length === 0) return;
+
+    setIsActivating(true);
+    try {
+      const { error } = await supabase.functions.invoke(
+        "twitter-alpha-tracker",
+        {
+          body: { action: "add-accounts", accounts: selectedAccounts },
+        }
+      );
+
+      if (error) throw error;
+
+      // Refresh stats
+      const { data: trackedAccounts } = await supabase
+        .from("twitter_alpha_tracked_accounts")
+        .select("*")
+        .eq("user_id", user.id);
+
+      const accountsWithStats: TrackedTwitterAccountWithStats[] = (trackedAccounts || []).map((a: any) => ({
+        id: a.id,
+        username: a.username,
+        userId: a.user_id_twitter,
+        displayName: a.display_name || undefined,
+        avatarUrl: a.avatar_url || undefined,
+        postsTracked: a.posts_tracked || 0,
+      }));
+
+      setStats((prev) => ({
+        ...prev,
+        trackedAccounts: accountsWithStats,
+        totalPostsTracked: accountsWithStats.reduce((sum, a) => sum + a.postsTracked, 0),
+      }));
+
+      setPhase("configure");
+    } catch (error) {
+      console.error("Error saving accounts:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save selected accounts",
+        variant: "destructive",
+      });
+    } finally {
+      setIsActivating(false);
+    }
+  }, [user?.id, selectedAccounts, toast]);
+
+  // Remove a tracked account
+  const removeTrackedAccount = useCallback(
+    async (username: string) => {
       if (!user?.id) return;
 
       try {
         const { error } = await supabase.functions.invoke(
           "twitter-alpha-tracker",
           {
-            body: { action: "select-account", account },
+            body: { action: "remove-account", username },
           }
         );
 
         if (error) throw error;
 
-        setSelectedAccount(account);
-        setPhase("configure");
+        setStats((prev) => ({
+          ...prev,
+          trackedAccounts: prev.trackedAccounts.filter((a) => a.username !== username),
+          totalPostsTracked: prev.trackedAccounts
+            .filter((a) => a.username !== username)
+            .reduce((sum, a) => sum + a.postsTracked, 0),
+        }));
+
+        toast({
+          title: "Account removed",
+          description: `Stopped tracking @${username}`,
+        });
+
+        // If no accounts left, go back to selection
+        if (stats.trackedAccounts.length <= 1) {
+          setPhase("select-account");
+        }
       } catch (error) {
-        console.error("Error selecting account:", error);
+        console.error("Error removing account:", error);
         toast({
           title: "Error",
-          description: "Failed to save selected account",
+          description: "Failed to remove account",
           variant: "destructive",
         });
       }
     },
-    [user?.id, toast]
+    [user?.id, stats.trackedAccounts.length, toast]
   );
 
   // Activate tracking
   const activateTracking = useCallback(async () => {
-    if (!user?.id || !selectedAccount) return;
+    if (!user?.id || stats.trackedAccounts.length === 0) return;
 
     setPhase("activating");
     setIsActivating(true);
@@ -195,17 +293,16 @@ export function useTwitterAlphaTracker() {
 
       if (error) throw error;
 
-      setStats({
-        postsTracked: 0,
+      setStats((prev) => ({
+        ...prev,
         isActive: true,
         lastChecked: new Date().toISOString(),
-        trackedAccount: selectedAccount,
-      });
+      }));
       setPhase("active");
 
       toast({
         title: "Tracking activated!",
-        description: `Now monitoring @${selectedAccount.username}`,
+        description: `Now monitoring ${stats.trackedAccounts.length} account${stats.trackedAccounts.length > 1 ? "s" : ""}`,
       });
     } catch (error) {
       console.error("Error activating tracking:", error);
@@ -218,7 +315,7 @@ export function useTwitterAlphaTracker() {
     } finally {
       setIsActivating(false);
     }
-  }, [user?.id, selectedAccount, toast]);
+  }, [user?.id, stats.trackedAccounts.length, toast]);
 
   // Deactivate tracking
   const deactivateTracking = useCallback(async () => {
@@ -265,9 +362,25 @@ export function useTwitterAlphaTracker() {
 
       if (error) throw error;
 
+      // Refresh tracked accounts to get updated stats
+      const { data: trackedAccounts } = await supabase
+        .from("twitter_alpha_tracked_accounts")
+        .select("*")
+        .eq("user_id", user.id);
+
+      const accountsWithStats: TrackedTwitterAccountWithStats[] = (trackedAccounts || []).map((a: any) => ({
+        id: a.id,
+        username: a.username,
+        userId: a.user_id_twitter,
+        displayName: a.display_name || undefined,
+        avatarUrl: a.avatar_url || undefined,
+        postsTracked: a.posts_tracked || 0,
+      }));
+
       setStats((prev) => ({
         ...prev,
-        postsTracked: data?.postsTracked ?? prev.postsTracked,
+        trackedAccounts: accountsWithStats,
+        totalPostsTracked: accountsWithStats.reduce((sum, a) => sum + a.postsTracked, 0),
         lastChecked: new Date().toISOString(),
       }));
 
@@ -287,9 +400,8 @@ export function useTwitterAlphaTracker() {
     }
   }, [user?.id, toast]);
 
-  // Change tracked account
-  const changeAccount = useCallback(() => {
-    setSelectedAccount(null);
+  // Go to add more accounts
+  const goToAddAccounts = useCallback(() => {
     setSearchResults([]);
     setPhase("select-account");
   }, []);
@@ -300,13 +412,16 @@ export function useTwitterAlphaTracker() {
     isSearching,
     isActivating,
     searchResults,
-    selectedAccount,
+    selectedAccounts,
     stats,
     searchUsers,
-    selectAccount,
+    addAccount,
+    removeSelectedAccount,
+    confirmAccountSelection,
+    removeTrackedAccount,
     activateTracking,
     deactivateTracking,
     manualPoll,
-    changeAccount,
+    goToAddAccounts,
   };
 }
