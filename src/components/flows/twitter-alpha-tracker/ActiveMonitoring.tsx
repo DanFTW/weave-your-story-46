@@ -73,7 +73,7 @@ export function ActiveMonitoring({
             </span>
           </div>
           <p className="text-xs text-muted-foreground mb-4">
-            Background sync every 5 minutes
+            Background sync every minute
           </p>
 
           {/* Tracked Accounts List */}
