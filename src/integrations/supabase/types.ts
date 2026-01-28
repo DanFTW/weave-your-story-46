@@ -449,6 +449,69 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_alpha_processed_posts: {
+        Row: {
+          id: string
+          processed_at: string | null
+          tweet_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          processed_at?: string | null
+          tweet_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          processed_at?: string | null
+          tweet_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      twitter_alpha_tracker_config: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_polled_at: string | null
+          posts_tracked: number | null
+          tracked_avatar_url: string | null
+          tracked_display_name: string | null
+          tracked_user_id: string | null
+          tracked_username: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          posts_tracked?: number | null
+          tracked_avatar_url?: string | null
+          tracked_display_name?: string | null
+          tracked_user_id?: string | null
+          tracked_username?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_polled_at?: string | null
+          posts_tracked?: number | null
+          tracked_avatar_url?: string | null
+          tracked_display_name?: string | null
+          tracked_user_id?: string | null
+          tracked_username?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       twitter_automation_config: {
         Row: {
           created_at: string | null
