@@ -131,9 +131,9 @@ export function useTwitterAlphaTracker() {
           setSearchResults([
             {
               username: data.user.username,
-              userId: data.user.id,
-              displayName: data.user.name,
-              avatarUrl: data.user.profile_image_url,
+              userId: data.user.userId,
+              displayName: data.user.displayName,
+              avatarUrl: data.user.avatarUrl,
             },
           ]);
         } else {
