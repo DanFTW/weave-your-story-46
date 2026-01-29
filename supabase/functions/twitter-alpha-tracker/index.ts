@@ -453,8 +453,14 @@ serve(async (req) => {
     // Handle cron-triggered poll for all active users
     if (action === 'cron-poll') {
       const cronSecret = req.headers.get('x-cron-secret');
-      if (cronSecret !== CRON_SECRET) {
-        console.log('Cron poll: Invalid or missing secret');
+      const cronTrigger = req.headers.get('x-cron-trigger');
+      
+      // Accept either: matching secret OR internal cron trigger header
+      const validSecret = cronSecret && cronSecret === CRON_SECRET;
+      const validTrigger = cronTrigger === 'supabase-internal';
+      
+      if (!validSecret && !validTrigger) {
+        console.log('Cron poll: Invalid or missing authentication');
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
