@@ -192,7 +192,7 @@ async function fetchMultipleUsersTweets(connectionId: string, usernames: string[
           query,
           max_results: 100,
           'tweet.fields': 'created_at,public_metrics,author_id',
-          expansions: 'author_id',
+          expansions: ['author_id'],
         },
       }),
     });
