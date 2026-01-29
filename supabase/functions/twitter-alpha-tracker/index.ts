@@ -197,14 +197,33 @@ async function fetchMultipleUsersTweets(connectionId: string, usernames: string[
       }),
     });
 
-    if (!response.ok) {
-      console.error('Failed to fetch tweets:', await response.text());
+    // Log raw response for debugging
+    const responseText = await response.text();
+    console.log('Twitter API response status:', response.status);
+    console.log('Twitter API response (first 2000 chars):', responseText.slice(0, 2000));
+
+    // Check for rate limit
+    if (response.status === 429) {
+      console.log('Twitter API rate limit hit - will retry on next poll');
       return [];
     }
 
-    const data = await response.json();
+    if (!response.ok) {
+      console.error('Failed to fetch tweets:', responseText);
+      return [];
+    }
+
+    const data = JSON.parse(responseText);
     const responseData = data?.data || data;
     
+    // Log response structure for debugging
+    console.log('Response structure keys:', Object.keys(responseData || {}));
+    if (responseData?.response_data) {
+      console.log('response_data keys:', Object.keys(responseData.response_data || {}));
+      const resultCount = responseData.response_data?.meta?.result_count;
+      console.log('result_count from meta:', resultCount);
+    }
+
     // Parse tweets from response
     const possiblePaths = [
       responseData?.response_data?.data,
@@ -221,6 +240,11 @@ async function fetchMultipleUsersTweets(connectionId: string, usernames: string[
       }
     }
 
+    // Log result count from API
+    const apiResultCount = responseData?.response_data?.meta?.result_count || 
+                           responseData?.meta?.result_count || 0;
+    console.log(`Twitter API returned ${apiResultCount} results for query`);
+
     // Try to get user mapping for author usernames
     const usersData = responseData?.response_data?.includes?.users || 
                       responseData?.includes?.users || 
@@ -235,6 +259,12 @@ async function fetchMultipleUsersTweets(connectionId: string, usernames: string[
     }));
 
     console.log('Fetched', tweets.length, 'tweets from', usernames.length, 'accounts');
+    
+    if (tweets.length === 0) {
+      console.log(`No tweets found in last 7 days for accounts: ${usernames.join(', ')}`);
+      console.log('This is expected if tracked accounts have not posted recently');
+    }
+    
     return tweets;
   } catch (error) {
     console.error('Error fetching tweets:', error);
