@@ -1,108 +1,99 @@
 
-# Fix Trello Task Tracker: Board Loading & Trigger Configuration
+# Fix Trello Board Loading with Correct Composio Tool Names
 
-## Problem Diagnosis
+## Problem Summary
 
-The screenshot shows a runtime error: `Edge function returned 500: {"error":"Composio API error: 400"}`. This indicates Composio is rejecting our request with a 400 Bad Request, but the actual error details are being lost.
+The Trello Task Tracker fails to load boards because the edge function uses incorrect Composio tool names:
 
-### Root Causes Identified
+| Current (Wrong) | Correct (From Composio Docs) |
+|-----------------|------------------------------|
+| `TRELLO_GET_BOARDS` | `TRELLO_GET_MEMBERS_BOARDS_BY_ID_MEMBER` |
+| `TRELLO_GET_LISTS_BY_ID_BOARD` | `TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD` |
 
-| Issue | Location | Problem |
-|-------|----------|---------|
-| Missing `arguments` key | `get-boards` action | Composio v3 API may require `arguments: {}` even when empty |
-| Error details lost | catch/throw pattern | UI sees "400" but not the actual rejection reason |
-| No connection ID logging | All actions | Can't verify if `ca_*` is being used correctly |
-| Silent failures | Board/list loading | Shows "no boards found" instead of real error state |
-
-### Evidence from Code
-
-The `get-boards` action (lines 82-91):
-```typescript
-body: JSON.stringify({
-  connected_account_id: connectionId,
-  // ❌ Missing: arguments: {}
-}),
-```
-
-Compare to working `gmail-fetch-emails` (lines 86-92):
-```typescript
-body: JSON.stringify({
-  connected_account_id: connectionId,
-  arguments: {  // ✅ Has arguments key
-    query: query,
-    max_results: 100,
-  },
-}),
-```
+The Composio API returns a 404 with `{"error":{"message":"Tool TRELLO_GET_BOARDS not found"}}` because the tool slug doesn't exist.
 
 ---
 
-## Solution: Three-Part Fix
+## Solution
 
-### Part 1: Add `arguments` Key to Tool Executions
+### 1. Update Edge Function Tool Names
 
-Update all Composio tool execution calls to include the `arguments` key:
+**File:** `supabase/functions/trello-automation-triggers/index.ts`
 
-**`get-boards` action:**
+**`get-boards` action (lines 95-145):**
+- Change endpoint from `TRELLO_GET_BOARDS` to `TRELLO_GET_MEMBERS_BOARDS_BY_ID_MEMBER`
+- Add required `idMember: "me"` parameter to get the authenticated user's boards
+
 ```typescript
-body: JSON.stringify({
-  connected_account_id: connectionId,
-  arguments: {},  // Required by Composio v3 API
-}),
+// BEFORE
+const response = await fetch(
+  "https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS",
+  {
+    // ...
+    body: JSON.stringify({
+      connected_account_id: connectionId,
+      arguments: {},
+    }),
+  }
+);
+
+// AFTER
+const response = await fetch(
+  "https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_MEMBERS_BOARDS_BY_ID_MEMBER",
+  {
+    // ...
+    body: JSON.stringify({
+      connected_account_id: connectionId,
+      arguments: { idMember: "me" },  // "me" = authenticated user
+    }),
+  }
+);
 ```
 
-**`get-lists` action:**
+**`get-lists` action (lines 147-204):**
+- Change endpoint from `TRELLO_GET_LISTS_BY_ID_BOARD` to `TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD`
+- Keep `idBoard` parameter as-is
+
 ```typescript
-body: JSON.stringify({
-  connected_account_id: connectionId,
-  arguments: { idBoard: boardId },  // Already correct, keep as-is
-}),
+// BEFORE
+const response = await fetch(
+  "https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_LISTS_BY_ID_BOARD",
+  // ...
+);
+
+// AFTER
+const response = await fetch(
+  "https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD",
+  // ...
+);
 ```
 
-### Part 2: Expose Full Error Details to UI
+### 2. Fix Error Handling for Complex Error Objects
 
-When Composio returns 400/4xx, include the error body in the response:
+**File:** `supabase/functions/trello-automation-triggers/index.ts`
 
-```typescript
-if (!response.ok) {
-  const errorText = await response.text();
-  console.error(`Composio ${action} error:`, response.status, errorText);
-  
-  // Parse error for structured details
-  let errorDetails = errorText;
-  try {
-    const parsed = JSON.parse(errorText);
-    errorDetails = parsed.message || parsed.error || errorText;
-  } catch {}
-  
-  return new Response(JSON.stringify({ 
-    error: `Failed to load boards`,
-    details: errorDetails,
-    composioStatus: response.status,
-  }), {
-    status: 200, // Return 200 so frontend can show user-friendly error
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-```
-
-### Part 3: Add Connection ID Logging & Validation
-
-Add explicit logging to verify the correct ID format is being used:
+Update the error parsing logic to handle deeply nested Composio error objects:
 
 ```typescript
-const connectionId = integration.composio_connection_id;
-console.log(`[Trello] Action: ${action}, Connection ID: ${connectionId}`);
+// BEFORE
+let errorDetails = "Unknown error";
+try {
+  const parsed = JSON.parse(errorText);
+  errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+} catch {}
 
-// Validate it's a connected_account_id (ca_*) not auth_config_id (ac_*)
-if (!connectionId || !connectionId.startsWith('ca_')) {
-  console.error('[Trello] Invalid connection ID format:', connectionId);
-  return new Response(JSON.stringify({ 
-    error: "Invalid Trello connection. Please reconnect your account." 
-  }), {
-    status: 400,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+// AFTER
+let errorDetails = "Unknown error";
+try {
+  const parsed = JSON.parse(errorText);
+  // Handle nested error structure: {"error": {"message": "..."}}
+  if (parsed.error && typeof parsed.error === 'object') {
+    errorDetails = parsed.error.message || parsed.error.suggested_fix || JSON.stringify(parsed.error);
+  } else {
+    errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+  }
+} catch {
+  errorDetails = errorText || `HTTP ${response.status}`;
 }
 ```
 
@@ -112,168 +103,39 @@ if (!connectionId || !connectionId.startsWith('ca_')) {
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/trello-automation-triggers/index.ts` | Add `arguments: {}` to get-boards, enhance error handling, add connection ID logging |
-| `src/hooks/useTrelloAutomation.ts` | Handle new error response format, show detailed error toast |
-| `src/components/flows/trello-automation/BoardPicker.tsx` | Show error state with retry button when loading fails |
+| `supabase/functions/trello-automation-triggers/index.ts` | Fix tool names, add `idMember` parameter, improve error parsing |
 
 ---
 
-## Detailed Code Changes
+## Technical Details
 
-### 1. Edge Function Updates (`trello-automation-triggers/index.ts`)
+### Composio Tool Naming Convention
 
-**Add connection ID validation after line 62:**
-```typescript
-const connectionId = integration.composio_connection_id;
+Composio uses a specific naming pattern for Trello tools:
+- `TRELLO_GET_MEMBERS_BOARDS_BY_ID_MEMBER` - Get boards for a member (use `idMember: "me"`)
+- `TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD` - Get lists on a board (use `idBoard: "<board_id>"`)
 
-// Validate connection ID format
-if (!connectionId?.startsWith('ca_')) {
-  console.error('[Trello] Invalid connection ID:', connectionId);
-  return new Response(JSON.stringify({ 
-    error: "Invalid Trello connection",
-    details: "Connection ID must be a connected_account_id (ca_*). Please reconnect Trello." 
-  }), {
-    status: 400,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+### Response Structure
 
-console.log(`[Trello] Action: ${action}, Connection ID: ${connectionId}`);
-```
-
-**Fix get-boards action (lines 82-112):**
-```typescript
-case "get-boards": {
-  console.log(`[Trello] Fetching boards for connection: ${connectionId}`);
-  
-  const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS", {
-    method: "POST",
-    headers: {
-      "x-api-key": COMPOSIO_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      connected_account_id: connectionId,
-      arguments: {},  // Required by Composio v3
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[Trello] Get boards error ${response.status}:`, errorText);
-    
-    let errorDetails = "Unknown error";
-    try {
-      const parsed = JSON.parse(errorText);
-      errorDetails = parsed.message || parsed.error || parsed.details || errorText;
-    } catch {}
-    
-    return new Response(JSON.stringify({ 
-      error: "Failed to load boards",
-      details: errorDetails,
-      boards: [],
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+Both tools return data in `data.response_data` or directly in `data`:
+```json
+{
+  "data": {
+    "response_data": [
+      { "id": "...", "name": "My Board", "url": "..." }
+    ]
   }
-
-  // ... rest of handler
 }
 ```
 
-### 2. Hook Updates (`useTrelloAutomation.ts`)
-
-**Update fetchBoards to handle error response (lines 103-122):**
-```typescript
-const fetchBoards = useCallback(async () => {
-  setIsLoading(true);
-  try {
-    const { data, error } = await supabase.functions.invoke('trello-automation-triggers', {
-      body: { action: 'get-boards' },
-    });
-
-    if (error) throw error;
-    
-    // Check for error in response body (our new format)
-    if (data.error) {
-      console.error('Board loading error:', data.details);
-      toast({
-        title: "Failed to load boards",
-        description: data.details || data.error,
-        variant: "destructive",
-      });
-      setBoards([]);
-      return;
-    }
-    
-    setBoards(data.boards || []);
-  } catch (error) {
-    console.error('Failed to fetch boards:', error);
-    toast({
-      title: "Failed to fetch boards",
-      description: "Could not load your Trello boards. Please try again.",
-      variant: "destructive",
-    });
-  } finally {
-    setIsLoading(false);
-  }
-}, [toast]);
-```
-
-### 3. BoardPicker UI Updates
-
-Add error state display:
-```typescript
-// Show error state if boards is explicitly empty after loading
-if (!isLoading && boards.length === 0) {
-  return (
-    <div className="flex flex-col items-center justify-center py-12">
-      <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
-      <p className="text-foreground font-medium mb-2">Failed to load boards</p>
-      <p className="text-muted-foreground text-sm text-center mb-4">
-        Could not connect to Trello. This may be a temporary issue.
-      </p>
-      <Button onClick={onRefresh} disabled={isLoading}>
-        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-        Try Again
-      </Button>
-    </div>
-  );
-}
-```
+The existing response parsing logic already handles this structure correctly.
 
 ---
 
 ## Expected Outcome
 
 After implementation:
-
-1. **Visible errors**: When Composio returns 400, users see the actual reason (e.g., "Token expired", "Permission denied") instead of generic "no boards found"
-
-2. **Connection validation**: Invalid `ca_*` IDs are caught early with clear messaging
-
-3. **Successful board loading**: With `arguments: {}` added, Composio v3 API should accept the request
-
-4. **Debuggable logs**: Edge function logs will show the exact connection ID being used, making it easy to verify the correct account is being accessed
-
----
-
-## Technical Notes
-
-### Why `arguments: {}` Matters
-
-The Composio v3 API tool execution endpoint expects a consistent request shape:
-```json
-{
-  "connected_account_id": "ca_xxx",
-  "arguments": { ... }
-}
-```
-
-Even when a tool has no required parameters (like `TRELLO_GET_BOARDS`), the `arguments` key should be present. This aligns with how other working integrations (Gmail, HubSpot) structure their requests.
-
-### Trigger Configuration Verification
-
-The trigger upsert calls (lines 171-224) already use the correct format with `connected_account_id`. Once board loading is fixed, trigger creation should work. The triggers use:
-- `TRELLO_NEW_CARD_TRIGGER` - fires when any card is created on the board
-- `TRELLO_UPDATED_CARD_TRIGGER` - fires when any card is updated (used to detect moves to Done list)
+1. Boards load successfully in the board picker UI
+2. Lists load successfully after selecting a board
+3. Error messages display the actual Composio error (e.g., "Token expired") instead of "Tool not found"
+4. No React runtime errors from rendering objects as children
