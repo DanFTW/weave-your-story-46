@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret, x-cron-trigger",
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -493,11 +493,17 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // Handle cron-poll action (no user auth required, uses cron secret)
+    // Handle cron-poll action (no user auth required, uses cron secret or internal trigger)
     if (action === "cron-poll") {
       const cronSecret = req.headers.get("x-cron-secret");
-      if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
-        console.error("Cron poll: Invalid or missing cron secret");
+      const cronTrigger = req.headers.get("x-cron-trigger");
+      
+      // Accept either: matching secret OR internal cron trigger header
+      const validSecret = CRON_SECRET && cronSecret === CRON_SECRET;
+      const validTrigger = cronTrigger === "supabase-internal";
+      
+      if (!validSecret && !validTrigger) {
+        console.error("Cron poll: Invalid or missing authentication");
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
