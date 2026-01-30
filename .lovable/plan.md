@@ -1,248 +1,279 @@
 
+# Fix Trello Task Tracker: Board Loading & Trigger Configuration
 
-# LinkedIn Auto-Capture: Chrome Extension Solution
+## Problem Diagnosis
 
-## Overview
+The screenshot shows a runtime error: `Edge function returned 500: {"error":"Composio API error: 400"}`. This indicates Composio is rejecting our request with a 400 Bad Request, but the actual error details are being lost.
 
-Since LinkedIn's Connections API requires Partner-only OAuth scopes, server-side polling cannot detect new connections. The solution is a lightweight Chrome Extension (Manifest V3) that runs on `linkedin.com`, detects connection events via DOM observation, and posts them to a dedicated Weave backend endpoint for idempotent memory creation.
+### Root Causes Identified
 
----
+| Issue | Location | Problem |
+|-------|----------|---------|
+| Missing `arguments` key | `get-boards` action | Composio v3 API may require `arguments: {}` even when empty |
+| Error details lost | catch/throw pattern | UI sees "400" but not the actual rejection reason |
+| No connection ID logging | All actions | Can't verify if `ca_*` is being used correctly |
+| Silent failures | Board/list loading | Shows "no boards found" instead of real error state |
 
-## Architecture
+### Evidence from Code
 
-```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│                          USER'S BROWSER                                     │
-│                                                                            │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │              Chrome Extension (MV3)                                 │   │
-│  │  ┌─────────────────────────────────────────────────────────────┐   │   │
-│  │  │  Content Script (linkedin.com/*)                            │   │   │
-│  │  │  • MutationObserver on DOM                                  │   │   │
-│  │  │  • Detects "Connected" toasts & button state changes        │   │   │
-│  │  │  • Extracts profile data from page                          │   │   │
-│  │  │  • Client-side throttle (5min per profile_url)              │   │   │
-│  │  └──────────────────────┬──────────────────────────────────────┘   │   │
-│  │                         │                                          │   │
-│  │  ┌──────────────────────▼──────────────────────────────────────┐   │   │
-│  │  │  Background Service Worker                                  │   │   │
-│  │  │  • Manages auth token from Weave webapp                     │   │   │
-│  │  │  • Queues events with retry logic                           │   │   │
-│  │  │  • Sends POST to Weave backend                              │   │   │
-│  │  └──────────────────────┬──────────────────────────────────────┘   │   │
-│  └─────────────────────────┼──────────────────────────────────────────┘   │
-└────────────────────────────┼──────────────────────────────────────────────┘
-                             │
-                             │ POST /functions/v1/linkedin-connection-event
-                             │ Authorization: Bearer <weave_jwt>
-                             ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                          SUPABASE BACKEND                                   │
-│                                                                            │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  linkedin-connection-event Edge Function                            │   │
-│  │  • Validates JWT → user_id                                          │   │
-│  │  • Normalizes profile_url                                           │   │
-│  │  • Dedupe: linkedin:contact:<user_id>:<profile_url>                │   │
-│  │  • Upserts to linkedin_processed_connections                        │   │
-│  │  • Creates memory via LIAM API (if new)                             │   │
-│  │  • Updates linkedin_automation_config stats                         │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  linkedin_extension_events Table (new)                              │   │
-│  │  • user_id, profile_url, full_name, received_at, status             │   │
-│  │  • For debugging/audit trail                                        │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────────────────┘
+The `get-boards` action (lines 82-91):
+```typescript
+body: JSON.stringify({
+  connected_account_id: connectionId,
+  // ❌ Missing: arguments: {}
+}),
+```
+
+Compare to working `gmail-fetch-emails` (lines 86-92):
+```typescript
+body: JSON.stringify({
+  connected_account_id: connectionId,
+  arguments: {  // ✅ Has arguments key
+    query: query,
+    max_results: 100,
+  },
+}),
 ```
 
 ---
 
-## Implementation Components
+## Solution: Three-Part Fix
 
-### 1. Chrome Extension (New Directory: `extension/`)
+### Part 1: Add `arguments` Key to Tool Executions
 
-| File | Purpose |
-|------|---------|
-| `manifest.json` | MV3 manifest with permissions for `linkedin.com` |
-| `content.js` | Content script: DOM observation + data extraction |
-| `background.js` | Service worker: auth management + API calls |
-| `popup.html/js` | Status UI + login flow trigger |
-| `icons/` | Extension icons (16, 48, 128px) |
+Update all Composio tool execution calls to include the `arguments` key:
 
-**Key Features:**
-- MutationObserver targeting:
-  - Toast notifications ("You're now connected with...")
-  - Profile page Connect → Message button transitions
-  - My Network "Connected" confirmations
-- Data extraction from DOM:
-  - `profile_url` from page URL or anchor href
-  - `public_identifier` parsed from URL
-  - Name, headline, company, location, avatar from visible elements
-- 5-minute client-side throttle per `profile_url` using chrome.storage.local
-- Queued retry with exponential backoff for failed sends
+**`get-boards` action:**
+```typescript
+body: JSON.stringify({
+  connected_account_id: connectionId,
+  arguments: {},  // Required by Composio v3 API
+}),
+```
 
-### 2. Backend Edge Function (New)
+**`get-lists` action:**
+```typescript
+body: JSON.stringify({
+  connected_account_id: connectionId,
+  arguments: { idBoard: boardId },  // Already correct, keep as-is
+}),
+```
 
-**File:** `supabase/functions/linkedin-connection-event/index.ts`
+### Part 2: Expose Full Error Details to UI
 
-| Endpoint | Method | Auth |
-|----------|--------|------|
-| `/linkedin-connection-event` | POST | JWT required |
+When Composio returns 400/4xx, include the error body in the response:
 
-**Request Payload:**
-```json
-{
-  "source": "linkedin_extension",
-  "event": "connection_added",
-  "profile_url": "https://www.linkedin.com/in/johndoe/",
-  "public_identifier": "johndoe",
-  "full_name": "John Doe",
-  "headline": "Product Manager at Acme Corp",
-  "company": "Acme Corp",
-  "location": "San Francisco, CA",
-  "avatar_url": "https://media.licdn.com/...",
-  "occurred_at": "2026-01-30T12:34:56.789Z"
+```typescript
+if (!response.ok) {
+  const errorText = await response.text();
+  console.error(`Composio ${action} error:`, response.status, errorText);
+  
+  // Parse error for structured details
+  let errorDetails = errorText;
+  try {
+    const parsed = JSON.parse(errorText);
+    errorDetails = parsed.message || parsed.error || errorText;
+  } catch {}
+  
+  return new Response(JSON.stringify({ 
+    error: `Failed to load boards`,
+    details: errorDetails,
+    composioStatus: response.status,
+  }), {
+    status: 200, // Return 200 so frontend can show user-friendly error
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 ```
 
-**Response:**
-- `{ saved: true, memory_id: "..." }` - New contact saved
-- `{ saved: false, reason: "duplicate" }` - Already exists
-- `{ error: "..." }` - Validation/auth failure
+### Part 3: Add Connection ID Logging & Validation
 
-**Dedupe Key:** `linkedin:contact:<user_id>:<normalized_profile_url>`
+Add explicit logging to verify the correct ID format is being used:
 
-### 3. Database Changes
+```typescript
+const connectionId = integration.composio_connection_id;
+console.log(`[Trello] Action: ${action}, Connection ID: ${connectionId}`);
 
-**New Table:** `linkedin_extension_events`
-```sql
-CREATE TABLE linkedin_extension_events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id),
-  profile_url TEXT NOT NULL,
-  public_identifier TEXT,
-  full_name TEXT,
-  headline TEXT,
-  company TEXT,
-  location TEXT,
-  avatar_url TEXT,
-  occurred_at TIMESTAMPTZ,
-  status TEXT DEFAULT 'received', -- received, saved, duplicate, error
-  error_message TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_linkedin_ext_events_user ON linkedin_extension_events(user_id);
-CREATE INDEX idx_linkedin_ext_events_profile ON linkedin_extension_events(user_id, profile_url);
+// Validate it's a connected_account_id (ca_*) not auth_config_id (ac_*)
+if (!connectionId || !connectionId.startsWith('ca_')) {
+  console.error('[Trello] Invalid connection ID format:', connectionId);
+  return new Response(JSON.stringify({ 
+    error: "Invalid Trello connection. Please reconnect your account." 
+  }), {
+    status: 400,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 ```
 
-**Add Column:** `linkedin_automation_config.extension_last_event_at`
-```sql
-ALTER TABLE linkedin_automation_config 
-ADD COLUMN extension_last_event_at TIMESTAMPTZ,
-ADD COLUMN extension_enabled BOOLEAN DEFAULT false;
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `supabase/functions/trello-automation-triggers/index.ts` | Add `arguments: {}` to get-boards, enhance error handling, add connection ID logging |
+| `src/hooks/useTrelloAutomation.ts` | Handle new error response format, show detailed error toast |
+| `src/components/flows/trello-automation/BoardPicker.tsx` | Show error state with retry button when loading fails |
+
+---
+
+## Detailed Code Changes
+
+### 1. Edge Function Updates (`trello-automation-triggers/index.ts`)
+
+**Add connection ID validation after line 62:**
+```typescript
+const connectionId = integration.composio_connection_id;
+
+// Validate connection ID format
+if (!connectionId?.startsWith('ca_')) {
+  console.error('[Trello] Invalid connection ID:', connectionId);
+  return new Response(JSON.stringify({ 
+    error: "Invalid Trello connection",
+    details: "Connection ID must be a connected_account_id (ca_*). Please reconnect Trello." 
+  }), {
+    status: 400,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+console.log(`[Trello] Action: ${action}, Connection ID: ${connectionId}`);
 ```
 
-### 4. UI Updates
+**Fix get-boards action (lines 82-112):**
+```typescript
+case "get-boards": {
+  console.log(`[Trello] Fetching boards for connection: ${connectionId}`);
+  
+  const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS", {
+    method: "POST",
+    headers: {
+      "x-api-key": COMPOSIO_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      connected_account_id: connectionId,
+      arguments: {},  // Required by Composio v3
+    }),
+  });
 
-**File:** `src/components/flows/linkedin-automation/ActiveMonitoring.tsx`
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[Trello] Get boards error ${response.status}:`, errorText);
+    
+    let errorDetails = "Unknown error";
+    try {
+      const parsed = JSON.parse(errorText);
+      errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+    } catch {}
+    
+    return new Response(JSON.stringify({ 
+      error: "Failed to load boards",
+      details: errorDetails,
+      boards: [],
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
-Replace fake "Background Sync Active" with:
-
-| State | Display |
-|-------|---------|
-| Extension events received in last 5 min | ✅ "Extension Active" (green badge) |
-| No recent events but config enabled | ⚠️ "Extension Not Detected" + setup CTA |
-| Extension disabled | Setup instructions + Chrome Web Store link |
-
-**New Components:**
-- `ExtensionStatus.tsx` - Real-time extension health indicator
-- `ExtensionSetupGuide.tsx` - Installation instructions drawer
-
-**Update Hook:** `useLinkedInAutomation.ts`
-- Query `extension_last_event_at` to determine extension health
-- Remove/hide "Sync Now" button (no longer applicable)
-- Add `isExtensionActive` computed property
-
----
-
-## Files to Create/Modify
-
-| Path | Action | Description |
-|------|--------|-------------|
-| `extension/manifest.json` | CREATE | Chrome extension manifest (MV3) |
-| `extension/content.js` | CREATE | LinkedIn DOM observer script |
-| `extension/background.js` | CREATE | Service worker for API calls |
-| `extension/popup.html` | CREATE | Extension popup UI |
-| `extension/popup.js` | CREATE | Popup logic |
-| `supabase/functions/linkedin-connection-event/index.ts` | CREATE | New edge function |
-| `supabase/config.toml` | MODIFY | Add function config |
-| `src/components/flows/linkedin-automation/ActiveMonitoring.tsx` | MODIFY | Show extension status |
-| `src/components/flows/linkedin-automation/ExtensionStatus.tsx` | CREATE | Extension health component |
-| `src/components/flows/linkedin-automation/ExtensionSetupGuide.tsx` | CREATE | Setup instructions |
-| `src/hooks/useLinkedInAutomation.ts` | MODIFY | Add extension status logic |
-| `src/types/linkedinAutomation.ts` | MODIFY | Add extension-related types |
-| Database | MODIFY | New table + column additions |
-
----
-
-## Technical Details
-
-### Content Script Detection Patterns
-
-```javascript
-// Pattern 1: Toast notifications
-const toastSelectors = [
-  '[data-test-artdeco-toast-item]',
-  '.artdeco-toast-item',
-  '.msg-overlay-bubble-header',
-];
-
-// Pattern 2: Profile page "Message" button (indicates connected)
-const connectedIndicators = [
-  'button[aria-label*="Message"]',
-  '.pv-top-card--list .connected',
-];
-
-// Pattern 3: URL patterns
-const profileUrlPattern = /linkedin\.com\/in\/([^\/\?]+)/;
+  // ... rest of handler
+}
 ```
 
-### Auth Flow (Extension ↔ Webapp)
+### 2. Hook Updates (`useTrelloAutomation.ts`)
 
-1. User opens extension popup
-2. If not authenticated, popup shows "Login to Weave" button
-3. Button opens Weave login page in new tab
-4. After login, webapp sends auth token to extension via `chrome.runtime.sendMessage`
-5. Extension stores token in `chrome.storage.local`
-6. Token auto-refreshes before expiry
+**Update fetchBoards to handle error response (lines 103-122):**
+```typescript
+const fetchBoards = useCallback(async () => {
+  setIsLoading(true);
+  try {
+    const { data, error } = await supabase.functions.invoke('trello-automation-triggers', {
+      body: { action: 'get-boards' },
+    });
 
-### Rate Limiting
+    if (error) throw error;
+    
+    // Check for error in response body (our new format)
+    if (data.error) {
+      console.error('Board loading error:', data.details);
+      toast({
+        title: "Failed to load boards",
+        description: data.details || data.error,
+        variant: "destructive",
+      });
+      setBoards([]);
+      return;
+    }
+    
+    setBoards(data.boards || []);
+  } catch (error) {
+    console.error('Failed to fetch boards:', error);
+    toast({
+      title: "Failed to fetch boards",
+      description: "Could not load your Trello boards. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsLoading(false);
+  }
+}, [toast]);
+```
 
-- Client-side: 1 event per profile_url per 5 minutes
-- Server-side: 100 events per user per hour
-- Structured logging for all events (received, saved, duplicate, rate_limited)
+### 3. BoardPicker UI Updates
+
+Add error state display:
+```typescript
+// Show error state if boards is explicitly empty after loading
+if (!isLoading && boards.length === 0) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12">
+      <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
+      <p className="text-foreground font-medium mb-2">Failed to load boards</p>
+      <p className="text-muted-foreground text-sm text-center mb-4">
+        Could not connect to Trello. This may be a temporary issue.
+      </p>
+      <Button onClick={onRefresh} disabled={isLoading}>
+        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+        Try Again
+      </Button>
+    </div>
+  );
+}
+```
 
 ---
 
-## Acceptance Criteria Verification
+## Expected Outcome
 
-| Requirement | Implementation |
-|-------------|----------------|
-| Automatic memory creation on new connection | ✅ Content script detects, background sends, edge function creates |
-| Zero manual input in Weave | ✅ Extension runs passively in background |
-| No duplicates | ✅ Server-side dedupe by normalized profile_url per user |
-| Correct user attribution | ✅ JWT auth maps to user_id |
-| Accurate UI status | ✅ Based on `extension_last_event_at` timestamp |
+After implementation:
+
+1. **Visible errors**: When Composio returns 400, users see the actual reason (e.g., "Token expired", "Permission denied") instead of generic "no boards found"
+
+2. **Connection validation**: Invalid `ca_*` IDs are caught early with clear messaging
+
+3. **Successful board loading**: With `arguments: {}` added, Composio v3 API should accept the request
+
+4. **Debuggable logs**: Edge function logs will show the exact connection ID being used, making it easy to verify the correct account is being accessed
 
 ---
 
-## Deployment Notes
+## Technical Notes
 
-1. Extension will be distributed as unpacked for testing, then Chrome Web Store for production
-2. Users install extension and authenticate once
-3. Extension works silently in background whenever LinkedIn is open
-4. No changes needed to existing OAuth/Composio integration (extension is additive)
+### Why `arguments: {}` Matters
 
+The Composio v3 API tool execution endpoint expects a consistent request shape:
+```json
+{
+  "connected_account_id": "ca_xxx",
+  "arguments": { ... }
+}
+```
+
+Even when a tool has no required parameters (like `TRELLO_GET_BOARDS`), the `arguments` key should be present. This aligns with how other working integrations (Gmail, HubSpot) structure their requests.
+
+### Trigger Configuration Verification
+
+The trigger upsert calls (lines 171-224) already use the correct format with `connected_account_id`. Once board loading is fixed, trigger creation should work. The triggers use:
+- `TRELLO_NEW_CARD_TRIGGER` - fires when any card is created on the board
+- `TRELLO_UPDATED_CARD_TRIGGER` - fires when any card is updated (used to detect moves to Done list)
