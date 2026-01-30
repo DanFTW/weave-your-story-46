@@ -22,6 +22,7 @@ export function TrelloAutomationFlow() {
     boards,
     lists,
     isLoading,
+    hasLoadError,
     stats,
     fetchBoards,
     selectBoard,
@@ -138,6 +139,7 @@ export function TrelloAutomationFlow() {
           <BoardPicker
             boards={boards}
             isLoading={isLoading}
+            hasError={hasLoadError}
             onSelectBoard={selectBoard}
             onRefresh={fetchBoards}
           />
