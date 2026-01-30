@@ -275,6 +275,9 @@ async function fetchMultipleUsersTweets(connectionId: string, usernames: string[
 // Create memory via LIAM API
 async function createMemory(apiKeys: { api_key: string; private_key: string; user_key: string }, content: string): Promise<boolean> {
   try {
+    console.log('Creating memory with content length:', content.length);
+    console.log('Memory content preview:', content.slice(0, 300));
+    
     const requestBody = {
       content,
       userKey: apiKeys.user_key,
@@ -296,7 +299,8 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
     });
 
     if (response.ok) {
-      console.log('Memory created successfully');
+      const responseData = await response.text();
+      console.log('Memory created successfully. Response:', responseData.slice(0, 200));
       return true;
     } else {
       const errorText = await response.text();
@@ -309,7 +313,7 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
   }
 }
 
-// Format tweet as memory
+// Format tweet as memory - structured format for LIAM tokenization
 function formatTweetAsMemory(tweet: Tweet): string {
   const date = new Date(tweet.createdAt).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -317,7 +321,21 @@ function formatTweetAsMemory(tweet: Tweet): string {
     day: 'numeric',
   });
 
-  return `Twitter Post from @${tweet.authorUsername}\n${date}\n\n${tweet.text}\n\nA post from an account you're tracking.`;
+  let memory = `Twitter/X Post from @${tweet.authorUsername}`;
+  memory += `\nPosted on ${date}\n\n`;
+  
+  // Quote the tweet text for clear extraction
+  if (tweet.text) {
+    memory += `"${tweet.text}"\n\n`;
+  }
+  
+  // Add explicit metadata for LIAM tokenization
+  memory += `This is a tracked post from @${tweet.authorUsername} on Twitter/X.`;
+  
+  // Include post ID for reference (will be stripped in UI display)
+  memory += `\n\n[tweet_id:${tweet.id}]`;
+
+  return memory;
 }
 
 // Process all tracked users for a given user
@@ -719,6 +737,52 @@ serve(async (req) => {
       const result = await processTrackedUsers(supabase, userId);
 
       return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Reset sync - clears all processed posts to allow re-sync
+    if (action === 'reset-sync') {
+      console.log(`Reset sync requested for user ${userId}`);
+      
+      // Clear all processed posts for this user
+      const { error: deleteError } = await supabase
+        .from('twitter_alpha_processed_posts')
+        .delete()
+        .eq('user_id', userId);
+      
+      if (deleteError) {
+        console.error('Error clearing processed posts:', deleteError);
+        return new Response(JSON.stringify({ error: 'Failed to clear processed posts' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // Reset stats in config
+      await supabase
+        .from('twitter_alpha_tracker_config')
+        .update({ 
+          posts_tracked: 0, 
+          last_polled_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+      
+      // Reset per-account stats
+      await supabase
+        .from('twitter_alpha_tracked_accounts')
+        .update({ 
+          posts_tracked: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+
+      console.log('Sync history cleared successfully');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Sync history cleared. Next poll will re-process all tweets.' 
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

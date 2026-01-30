@@ -2,17 +2,17 @@ import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import {
   ChevronLeft,
-  Twitter,
-  User,
   RefreshCw,
   Pause,
   Plus,
   CheckCircle2,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { TwitterAlphaTrackerStats } from "@/types/twitterAlphaTracker";
+import { User } from "lucide-react";
 
 interface ActiveMonitoringProps {
   stats: TwitterAlphaTrackerStats;
@@ -20,6 +20,7 @@ interface ActiveMonitoringProps {
   onCheckNow: () => void;
   onAddAccount: () => void;
   onRemoveAccount: (username: string) => void;
+  onResetSync: () => void;
 }
 
 export function ActiveMonitoring({
@@ -28,6 +29,7 @@ export function ActiveMonitoring({
   onCheckNow,
   onAddAccount,
   onRemoveAccount,
+  onResetSync,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
   const { trackedAccounts } = stats;
@@ -162,6 +164,17 @@ export function ActiveMonitoring({
           <Button onClick={onPause} className="w-full" variant="outline">
             <Pause className="w-4 h-4 mr-2" />
             Pause Tracking
+          </Button>
+        </div>
+
+        {/* Danger Zone */}
+        <div className="pt-6 mt-6 border-t border-border">
+          <p className="text-xs text-muted-foreground mb-3">
+            Clear sync history to re-process all recent tweets with updated formatting.
+          </p>
+          <Button onClick={onResetSync} className="w-full" variant="ghost" size="sm">
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reset Sync History
           </Button>
         </div>
       </div>

@@ -400,6 +400,41 @@ export function useTwitterAlphaTracker() {
     }
   }, [user?.id, toast]);
 
+  // Reset sync - clears processed posts to allow re-sync
+  const resetSync = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "twitter-alpha-tracker",
+        {
+          body: { action: "reset-sync" },
+        }
+      );
+
+      if (error) throw error;
+
+      // Reset local stats
+      setStats((prev) => ({
+        ...prev,
+        totalPostsTracked: 0,
+        trackedAccounts: prev.trackedAccounts.map(a => ({ ...a, postsTracked: 0 })),
+      }));
+
+      toast({
+        title: "Sync reset",
+        description: data?.message || "Sync history cleared. Click 'Sync Now' to re-process tweets.",
+      });
+    } catch (error) {
+      console.error("Error resetting sync:", error);
+      toast({
+        title: "Error",
+        description: "Failed to reset sync history",
+        variant: "destructive",
+      });
+    }
+  }, [user?.id, toast]);
+
   // Go to add more accounts
   const goToAddAccounts = useCallback(() => {
     setSearchResults([]);
@@ -422,6 +457,7 @@ export function useTwitterAlphaTracker() {
     activateTracking,
     deactivateTracking,
     manualPoll,
+    resetSync,
     goToAddAccounts,
   };
 }
