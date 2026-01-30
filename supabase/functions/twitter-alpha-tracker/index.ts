@@ -26,6 +26,15 @@ interface Tweet {
   authorUsername: string;
 }
 
+// Delay utility for rate limiting
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Batch processing configuration
+const BATCH_SIZE = 10; // Max tweets to process per poll
+const MEMORY_CREATION_DELAY_MS = 500; // Delay between memory creations
+
 // Crypto utilities for LIAM API signing
 function removeLeadingZeros(arr: Uint8Array): Uint8Array {
   let i = 0;
@@ -272,11 +281,11 @@ async function fetchMultipleUsersTweets(connectionId: string, usernames: string[
   }
 }
 
-// Create memory via LIAM API
+// Create memory via LIAM API with enhanced logging
 async function createMemory(apiKeys: { api_key: string; private_key: string; user_key: string }, content: string): Promise<boolean> {
   try {
-    console.log('Creating memory with content length:', content.length);
-    console.log('Memory content preview:', content.slice(0, 300));
+    console.log(`[Memory] Creating memory, content length: ${content.length}`);
+    console.log(`[Memory] Preview: ${content.slice(0, 150)}...`);
     
     const requestBody = {
       content,
@@ -287,7 +296,7 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
     const bodyString = JSON.stringify(requestBody);
     const signature = await signRequest(apiKeys.private_key, bodyString);
 
-    console.log('Creating memory via LIAM API...');
+    console.log('[Memory] Sending request to LIAM API...');
     const response = await fetch(LIAM_API_URL, {
       method: 'POST',
       headers: {
@@ -298,17 +307,21 @@ async function createMemory(apiKeys: { api_key: string; private_key: string; use
       body: bodyString,
     });
 
+    const responseText = await response.text();
+
     if (response.ok) {
-      const responseData = await response.text();
-      console.log('Memory created successfully. Response:', responseData.slice(0, 200));
+      console.log(`[Memory] SUCCESS - Status: ${response.status}`);
+      console.log(`[Memory] SUCCESS - Response: ${responseText.slice(0, 200)}`);
       return true;
     } else {
-      const errorText = await response.text();
-      console.error('LIAM API error:', response.status, errorText);
+      // Log full error details for debugging
+      console.error(`[Memory] FAILED - Status: ${response.status}`);
+      console.error(`[Memory] FAILED - Response: ${responseText}`);
+      console.error(`[Memory] FAILED - Content was: ${content.slice(0, 300)}`);
       return false;
     }
   } catch (error) {
-    console.error('Create memory error:', error);
+    console.error(`[Memory] EXCEPTION: ${error}`);
     return false;
   }
 }
@@ -394,15 +407,24 @@ async function processTrackedUsers(
     const newTweets = tweets.filter(t => !processedIds.has(t.id));
     console.log(`Found ${newTweets.length} new tweets from ${usernames.length} accounts`);
 
+    // Batch processing - limit tweets per poll to avoid timeouts and rate limits
+    const tweetsToProcess = newTweets.slice(0, BATCH_SIZE);
+    console.log(`Processing ${tweetsToProcess.length} of ${newTweets.length} new tweets (batch limit: ${BATCH_SIZE})`);
+    
+    if (newTweets.length > BATCH_SIZE) {
+      console.log(`Remaining ${newTweets.length - BATCH_SIZE} tweets will be processed in subsequent polls`);
+    }
+
     let newPosts = 0;
     const postsByAuthor: Record<string, number> = {};
 
-    for (const tweet of newTweets) {
+    for (let i = 0; i < tweetsToProcess.length; i++) {
+      const tweet = tweetsToProcess[i];
       const memory = formatTweetAsMemory(tweet);
       const success = await createMemory(apiKeys, memory);
 
       if (success) {
-        // Record as processed
+        // Record as processed only if memory creation succeeded
         await supabase
           .from('twitter_alpha_processed_posts')
           .insert({
@@ -412,6 +434,15 @@ async function processTrackedUsers(
 
         newPosts++;
         postsByAuthor[tweet.authorUsername] = (postsByAuthor[tweet.authorUsername] || 0) + 1;
+        
+        // Add delay between memory creations to avoid rate limiting
+        if (i < tweetsToProcess.length - 1) {
+          console.log(`[RateLimit] Waiting ${MEMORY_CREATION_DELAY_MS}ms before next memory creation...`);
+          await delay(MEMORY_CREATION_DELAY_MS);
+        }
+      } else {
+        // Log failure but don't mark as processed - will retry on next poll
+        console.error(`[Memory] Failed to create memory for tweet ${tweet.id}, will retry on next poll`);
       }
     }
 
