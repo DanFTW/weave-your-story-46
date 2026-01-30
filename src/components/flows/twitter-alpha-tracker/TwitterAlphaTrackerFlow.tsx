@@ -22,6 +22,7 @@ export function TwitterAlphaTrackerFlow() {
     activateTracking,
     deactivateTracking,
     manualPoll,
+    resetSync,
     goToAddAccounts,
   } = useTwitterAlphaTracker();
 
@@ -78,6 +79,7 @@ export function TwitterAlphaTrackerFlow() {
         onCheckNow={manualPoll}
         onAddAccount={goToAddAccounts}
         onRemoveAccount={removeTrackedAccount}
+        onResetSync={resetSync}
       />
     );
   }

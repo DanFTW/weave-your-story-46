@@ -168,8 +168,8 @@ function parseLinkUrl(content: string): string | null {
   return match ? match[1] : null;
 }
 
-// Clean content by removing URLs and metadata for display
-function cleanContentForDisplay(content: string): string {
+// Clean Instagram content by removing URLs and metadata for display
+function cleanInstagramContentForDisplay(content: string): string {
   return content
     // Remove new-format tags
     .replace(/\[media:[^\]]+\]/g, '')
@@ -184,6 +184,16 @@ function cleanContentForDisplay(content: string): string {
     // Remove header lines (already rendered in card UI)
     .replace(/^Instagram Post(?:\s+by\s+@\w+)?\s*\n?/i, '')
     .replace(/^Posted on\s+.+?\n\n/i, '')
+    // Clean up extra whitespace and newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Clean Twitter content by removing internal metadata tags
+function cleanTwitterContentForDisplay(content: string): string {
+  return content
+    // Remove tweet ID tag
+    .replace(/\[tweet_id:[^\]]+\]/g, '')
     // Clean up extra whitespace and newlines
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -248,11 +258,21 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
     memory.content.toLowerCase().startsWith('instagram') ||
     memory.content.toLowerCase().includes('instagram post');
   
+  // Check if this is a Twitter memory
+  const isTwitterMemory = 
+    memory.tag?.toLowerCase() === 'twitter' || 
+    memory.content.toLowerCase().startsWith('twitter') ||
+    memory.content.toLowerCase().includes('twitter/x post');
+  
   // Get display image - prioritizes LIAM-stored base64 over URL parsing
   const displayImage = isInstagramMemory ? getDisplayImage(memory) : null;
+  
+  // Clean content based on source
   const displayContent = isInstagramMemory 
-    ? cleanContentForDisplay(memory.content) 
-    : memory.content;
+    ? cleanInstagramContentForDisplay(memory.content) 
+    : isTwitterMemory
+      ? cleanTwitterContentForDisplay(memory.content)
+      : memory.content;
 
   const timestamp = (() => {
     try {
