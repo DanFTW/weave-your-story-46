@@ -95,7 +95,7 @@ serve(async (req) => {
       case "get-boards": {
         console.log(`[Trello] Fetching boards for connection: ${connectionId}`);
         
-        const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS", {
+        const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_MEMBERS_BOARDS_BY_ID_MEMBER", {
           method: "POST",
           headers: {
             "x-api-key": COMPOSIO_API_KEY,
@@ -103,7 +103,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             connected_account_id: connectionId,
-            arguments: {},  // Required by Composio v3 API
+            arguments: { idMember: "me" },  // "me" = authenticated user
           }),
         });
 
@@ -114,7 +114,12 @@ serve(async (req) => {
           let errorDetails = "Unknown error";
           try {
             const parsed = JSON.parse(errorText);
-            errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+            // Handle nested error structure: {"error": {"message": "..."}}
+            if (parsed.error && typeof parsed.error === 'object') {
+              errorDetails = parsed.error.message || parsed.error.suggested_fix || JSON.stringify(parsed.error);
+            } else {
+              errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+            }
           } catch {
             errorDetails = errorText || `HTTP ${response.status}`;
           }
@@ -154,7 +159,7 @@ serve(async (req) => {
 
         console.log(`[Trello] Fetching lists for board: ${boardId}`);
         
-        const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_LISTS_BY_ID_BOARD", {
+        const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD", {
           method: "POST",
           headers: {
             "x-api-key": COMPOSIO_API_KEY,
@@ -173,7 +178,12 @@ serve(async (req) => {
           let errorDetails = "Unknown error";
           try {
             const parsed = JSON.parse(errorText);
-            errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+            // Handle nested error structure: {"error": {"message": "..."}}
+            if (parsed.error && typeof parsed.error === 'object') {
+              errorDetails = parsed.error.message || parsed.error.suggested_fix || JSON.stringify(parsed.error);
+            } else {
+              errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+            }
           } catch {
             errorDetails = errorText || `HTTP ${response.status}`;
           }
