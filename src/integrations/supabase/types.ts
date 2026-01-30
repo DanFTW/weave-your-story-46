@@ -521,6 +521,39 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_alpha_posts: {
+        Row: {
+          author_display_name: string | null
+          author_username: string
+          id: string
+          processed_at: string | null
+          tweet_created_at: string
+          tweet_id: string
+          tweet_text: string
+          user_id: string
+        }
+        Insert: {
+          author_display_name?: string | null
+          author_username: string
+          id?: string
+          processed_at?: string | null
+          tweet_created_at: string
+          tweet_id: string
+          tweet_text: string
+          user_id: string
+        }
+        Update: {
+          author_display_name?: string | null
+          author_username?: string
+          id?: string
+          processed_at?: string | null
+          tweet_created_at?: string
+          tweet_id?: string
+          tweet_text?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       twitter_alpha_processed_posts: {
         Row: {
           id: string
