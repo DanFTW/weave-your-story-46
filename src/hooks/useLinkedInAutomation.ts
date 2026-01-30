@@ -36,6 +36,8 @@ export function useLinkedInAutomation(): UseLinkedInAutomationReturn {
     connectionsTracked: config?.connectionsTracked ?? 0,
     lastChecked: config?.lastPolledAt ?? null,
     isActive: config?.isActive ?? false,
+    extensionLastEventAt: config?.extensionLastEventAt ?? null,
+    extensionEnabled: config?.extensionEnabled ?? false,
   };
 
   const loadConfig = useCallback(async () => {
@@ -73,6 +75,8 @@ export function useLinkedInAutomation(): UseLinkedInAutomationReturn {
           isActive: configData.is_active,
           lastPolledAt: configData.last_polled_at,
           connectionsTracked: configData.connections_tracked ?? 0,
+          extensionLastEventAt: configData.extension_last_event_at ?? null,
+          extensionEnabled: configData.extension_enabled ?? false,
           createdAt: configData.created_at,
           updatedAt: configData.updated_at,
         });
@@ -102,6 +106,8 @@ export function useLinkedInAutomation(): UseLinkedInAutomationReturn {
           isActive: newConfigData.is_active,
           lastPolledAt: newConfigData.last_polled_at,
           connectionsTracked: newConfigData.connections_tracked ?? 0,
+          extensionLastEventAt: newConfigData.extension_last_event_at ?? null,
+          extensionEnabled: newConfigData.extension_enabled ?? false,
           createdAt: newConfigData.created_at,
           updatedAt: newConfigData.updated_at,
         });
@@ -121,6 +127,7 @@ export function useLinkedInAutomation(): UseLinkedInAutomationReturn {
       const dbUpdates: Record<string, any> = {};
       if (updates.monitorNewConnections !== undefined) dbUpdates.monitor_new_connections = updates.monitorNewConnections;
       if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+      if (updates.extensionEnabled !== undefined) dbUpdates.extension_enabled = updates.extensionEnabled;
 
       const { error } = await supabase
         .from('linkedin_automation_config' as any)
