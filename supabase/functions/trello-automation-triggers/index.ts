@@ -61,6 +61,20 @@ serve(async (req) => {
 
     const connectionId = integration.composio_connection_id;
 
+    // Validate connection ID format (must be ca_* not ac_*)
+    if (!connectionId?.startsWith('ca_')) {
+      console.error('[Trello] Invalid connection ID format:', connectionId);
+      return new Response(JSON.stringify({ 
+        error: "Invalid Trello connection",
+        details: "Connection ID must be a connected_account_id (ca_*). Please reconnect Trello." 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    console.log(`[Trello] Action: ${action}, Connection ID: ${connectionId}`);
+
     // Helper to safely parse JSON responses
     const safeJsonParse = async (response: Response) => {
       const text = await response.text();
@@ -79,6 +93,8 @@ serve(async (req) => {
     // Handle different actions
     switch (action) {
       case "get-boards": {
+        console.log(`[Trello] Fetching boards for connection: ${connectionId}`);
+        
         const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS", {
           method: "POST",
           headers: {
@@ -87,17 +103,33 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             connected_account_id: connectionId,
+            arguments: {},  // Required by Composio v3 API
           }),
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error("Composio API error:", response.status, errorText);
-          throw new Error(`Composio API error: ${response.status}`);
+          console.error(`[Trello] Get boards error ${response.status}:`, errorText);
+          
+          let errorDetails = "Unknown error";
+          try {
+            const parsed = JSON.parse(errorText);
+            errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+          } catch {
+            errorDetails = errorText || `HTTP ${response.status}`;
+          }
+          
+          return new Response(JSON.stringify({ 
+            error: "Failed to load boards",
+            details: errorDetails,
+            boards: [],
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
 
         const data = await safeJsonParse(response);
-        console.log("Get boards response:", JSON.stringify(data));
+        console.log("[Trello] Get boards response:", JSON.stringify(data));
 
         const boards = data?.data?.response_data || data?.data || [];
         
@@ -120,6 +152,8 @@ serve(async (req) => {
           });
         }
 
+        console.log(`[Trello] Fetching lists for board: ${boardId}`);
+        
         const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_LISTS_BY_ID_BOARD", {
           method: "POST",
           headers: {
@@ -134,12 +168,27 @@ serve(async (req) => {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error("Composio API error:", response.status, errorText);
-          throw new Error(`Composio API error: ${response.status}`);
+          console.error(`[Trello] Get lists error ${response.status}:`, errorText);
+          
+          let errorDetails = "Unknown error";
+          try {
+            const parsed = JSON.parse(errorText);
+            errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+          } catch {
+            errorDetails = errorText || `HTTP ${response.status}`;
+          }
+          
+          return new Response(JSON.stringify({ 
+            error: "Failed to load lists",
+            details: errorDetails,
+            lists: [],
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
 
         const data = await safeJsonParse(response);
-        console.log("Get lists response:", JSON.stringify(data));
+        console.log("[Trello] Get lists response:", JSON.stringify(data));
 
         const lists = data?.data?.response_data || data?.data || [];
         

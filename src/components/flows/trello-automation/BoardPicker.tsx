@@ -1,15 +1,16 @@
-import { RefreshCw, Layout } from "lucide-react";
+import { RefreshCw, Layout, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TrelloBoard } from "@/types/trelloAutomation";
 
 interface BoardPickerProps {
   boards: TrelloBoard[];
   isLoading: boolean;
+  hasError?: boolean;
   onSelectBoard: (board: TrelloBoard) => void;
   onRefresh: () => void;
 }
 
-export function BoardPicker({ boards, isLoading, onSelectBoard, onRefresh }: BoardPickerProps) {
+export function BoardPicker({ boards, isLoading, hasError, onSelectBoard, onRefresh }: BoardPickerProps) {
   if (isLoading && boards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -19,6 +20,24 @@ export function BoardPicker({ boards, isLoading, onSelectBoard, onRefresh }: Boa
     );
   }
 
+  // Show error state when loading failed
+  if (!isLoading && boards.length === 0 && hasError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+        <p className="text-foreground font-medium mb-2">Failed to load boards</p>
+        <p className="text-muted-foreground text-sm text-center mb-4">
+          Could not connect to Trello. This may be a temporary issue.
+        </p>
+        <Button onClick={onRefresh} disabled={isLoading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  // No boards but no error - show empty state
   if (boards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">

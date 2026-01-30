@@ -16,6 +16,7 @@ interface UseTrelloAutomationReturn {
   boards: TrelloBoard[];
   lists: TrelloList[];
   isLoading: boolean;
+  hasLoadError: boolean;
   stats: TrelloAutomationStats;
   fetchBoards: () => Promise<void>;
   fetchLists: (boardId: string) => Promise<void>;
@@ -36,6 +37,7 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
   const [boards, setBoards] = useState<TrelloBoard[]>([]);
   const [lists, setLists] = useState<TrelloList[]>([]);
   const [isLoading, setIsLoading] = useState(true); // Start as true to prevent flash
+  const [hasLoadError, setHasLoadError] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
 
   const stats: TrelloAutomationStats = {
@@ -102,12 +104,27 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
   // Fetch user's Trello boards
   const fetchBoards = useCallback(async () => {
     setIsLoading(true);
+    setHasLoadError(false);
     try {
       const { data, error } = await supabase.functions.invoke('trello-automation-triggers', {
         body: { action: 'get-boards' },
       });
 
       if (error) throw error;
+      
+      // Check for error in response body (structured error format)
+      if (data.error) {
+        console.error('Board loading error:', data.details);
+        toast({
+          title: "Failed to load boards",
+          description: data.details || data.error,
+          variant: "destructive",
+        });
+        setBoards([]);
+        setHasLoadError(true);
+        return;
+      }
+      
       setBoards(data.boards || []);
     } catch (error) {
       console.error('Failed to fetch boards:', error);
@@ -116,6 +133,8 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
         description: "Could not load your Trello boards. Please try again.",
         variant: "destructive",
       });
+      setBoards([]);
+      setHasLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -130,6 +149,19 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
       });
 
       if (error) throw error;
+      
+      // Check for error in response body
+      if (data.error) {
+        console.error('List loading error:', data.details);
+        toast({
+          title: "Failed to load lists",
+          description: data.details || data.error,
+          variant: "destructive",
+        });
+        setLists([]);
+        return;
+      }
+      
       setLists((data.lists || []).filter((list: TrelloList) => !list.closed));
     } catch (error) {
       console.error('Failed to fetch lists:', error);
@@ -138,6 +170,7 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
         description: "Could not load board lists. Please try again.",
         variant: "destructive",
       });
+      setLists([]);
     } finally {
       setIsLoading(false);
     }
@@ -397,6 +430,7 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
     boards,
     lists,
     isLoading,
+    hasLoadError,
     stats,
     fetchBoards,
     fetchLists,
