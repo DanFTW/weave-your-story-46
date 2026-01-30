@@ -312,6 +312,8 @@ export type Database = {
         Row: {
           connections_tracked: number | null
           created_at: string
+          extension_enabled: boolean | null
+          extension_last_event_at: string | null
           id: string
           is_active: boolean | null
           last_polled_at: string | null
@@ -322,6 +324,8 @@ export type Database = {
         Insert: {
           connections_tracked?: number | null
           created_at?: string
+          extension_enabled?: boolean | null
+          extension_last_event_at?: string | null
           id?: string
           is_active?: boolean | null
           last_polled_at?: string | null
@@ -332,11 +336,61 @@ export type Database = {
         Update: {
           connections_tracked?: number | null
           created_at?: string
+          extension_enabled?: boolean | null
+          extension_last_event_at?: string | null
           id?: string
           is_active?: boolean | null
           last_polled_at?: string | null
           monitor_new_connections?: boolean | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      linkedin_extension_events: {
+        Row: {
+          avatar_url: string | null
+          company: string | null
+          created_at: string | null
+          error_message: string | null
+          full_name: string | null
+          headline: string | null
+          id: string
+          location: string | null
+          occurred_at: string | null
+          profile_url: string
+          public_identifier: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          full_name?: string | null
+          headline?: string | null
+          id?: string
+          location?: string | null
+          occurred_at?: string | null
+          profile_url: string
+          public_identifier?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          full_name?: string | null
+          headline?: string | null
+          id?: string
+          location?: string | null
+          occurred_at?: string | null
+          profile_url?: string
+          public_identifier?: string | null
+          status?: string | null
           user_id?: string
         }
         Relationships: []

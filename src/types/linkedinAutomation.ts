@@ -11,6 +11,8 @@ export interface LinkedInAutomationConfig {
   isActive: boolean;
   lastPolledAt: string | null;
   connectionsTracked: number;
+  extensionLastEventAt: string | null;
+  extensionEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -19,9 +21,12 @@ export interface LinkedInConnectionStats {
   connectionsTracked: number;
   lastChecked: string | null;
   isActive: boolean;
+  extensionLastEventAt: string | null;
+  extensionEnabled: boolean;
 }
 
 export interface LinkedInAutomationUpdatePayload {
   monitorNewConnections?: boolean;
   isActive?: boolean;
+  extensionEnabled?: boolean;
 }
