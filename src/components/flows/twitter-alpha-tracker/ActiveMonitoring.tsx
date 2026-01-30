@@ -61,6 +61,23 @@ export function ActiveMonitoring({
 
       {/* Content */}
       <div className="px-5 pt-6 space-y-6">
+        {/* Stale Sync Warning Banner */}
+        {stats.totalPostsTracked > 50 && stats.lastChecked && (
+          <div className="p-4 rounded-xl border border-amber-500/50 bg-amber-500/10">
+            <p className="text-sm text-amber-700 dark:text-amber-400 mb-2">
+              <strong>Sync Update Available</strong>
+            </p>
+            <p className="text-xs text-muted-foreground mb-3">
+              We've improved how Twitter posts are saved as memories. 
+              Click below to re-sync your tracked posts with the new format.
+            </p>
+            <Button onClick={onResetSync} size="sm" variant="outline" className="w-full">
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset & Re-sync All Posts
+            </Button>
+          </div>
+        )}
+
         {/* Status Card */}
         <div className="p-4 rounded-xl border border-border bg-card">
           <div className="flex items-center justify-between mb-2">
