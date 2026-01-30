@@ -420,29 +420,53 @@ async function processTrackedUsers(
 
     for (let i = 0; i < tweetsToProcess.length; i++) {
       const tweet = tweetsToProcess[i];
+      
+      // STEP 1: Store tweet locally for reliable 1:1 retrieval (source of truth)
+      const { error: insertError } = await supabase
+        .from('twitter_alpha_posts')
+        .upsert({
+          user_id: userId,
+          tweet_id: tweet.id,
+          author_username: tweet.authorUsername,
+          author_display_name: null, // Can be enhanced later
+          tweet_text: tweet.text,
+          tweet_created_at: tweet.createdAt,
+        }, {
+          onConflict: 'user_id,tweet_id',
+        });
+
+      if (insertError) {
+        console.error(`[Storage] Failed to store tweet ${tweet.id}:`, insertError);
+        continue; // Skip this tweet if storage fails
+      }
+      
+      console.log(`[Storage] Tweet ${tweet.id} stored locally`);
+
+      // STEP 2: Send to LIAM API for semantic search (fire-and-forget, don't block on failure)
       const memory = formatTweetAsMemory(tweet);
-      const success = await createMemory(apiKeys, memory);
+      const memorySuccess = await createMemory(apiKeys, memory);
+      
+      if (!memorySuccess) {
+        console.log(`[Memory] LIAM API failed for tweet ${tweet.id} - post is still stored locally`);
+      }
 
-      if (success) {
-        // Record as processed only if memory creation succeeded
-        await supabase
-          .from('twitter_alpha_processed_posts')
-          .insert({
-            user_id: userId,
-            tweet_id: tweet.id,
-          });
+      // STEP 3: Mark as processed (we have local storage, so always mark as processed)
+      await supabase
+        .from('twitter_alpha_processed_posts')
+        .upsert({
+          user_id: userId,
+          tweet_id: tweet.id,
+        }, {
+          onConflict: 'user_id,tweet_id',
+        });
 
-        newPosts++;
-        postsByAuthor[tweet.authorUsername] = (postsByAuthor[tweet.authorUsername] || 0) + 1;
-        
-        // Add delay between memory creations to avoid rate limiting
-        if (i < tweetsToProcess.length - 1) {
-          console.log(`[RateLimit] Waiting ${MEMORY_CREATION_DELAY_MS}ms before next memory creation...`);
-          await delay(MEMORY_CREATION_DELAY_MS);
-        }
-      } else {
-        // Log failure but don't mark as processed - will retry on next poll
-        console.error(`[Memory] Failed to create memory for tweet ${tweet.id}, will retry on next poll`);
+      newPosts++;
+      postsByAuthor[tweet.authorUsername] = (postsByAuthor[tweet.authorUsername] || 0) + 1;
+      
+      // Add delay between memory creations to avoid rate limiting
+      if (i < tweetsToProcess.length - 1) {
+        console.log(`[RateLimit] Waiting ${MEMORY_CREATION_DELAY_MS}ms before next tweet...`);
+        await delay(MEMORY_CREATION_DELAY_MS);
       }
     }
 
@@ -772,22 +796,55 @@ serve(async (req) => {
       });
     }
 
-    // Reset sync - clears all processed posts to allow re-sync
+    // List locally stored Twitter posts
+    if (action === 'list-posts') {
+      const { data: posts, error: listError } = await supabase
+        .from('twitter_alpha_posts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('tweet_created_at', { ascending: false })
+        .limit(200);
+
+      if (listError) {
+        console.error('Error listing posts:', listError);
+        return new Response(JSON.stringify({ error: 'Failed to fetch posts' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ posts: posts || [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Reset sync - clears all processed posts AND local storage to allow re-sync
     if (action === 'reset-sync') {
       console.log(`Reset sync requested for user ${userId}`);
       
       // Clear all processed posts for this user
-      const { error: deleteError } = await supabase
+      const { error: deleteProcessedError } = await supabase
         .from('twitter_alpha_processed_posts')
         .delete()
         .eq('user_id', userId);
       
-      if (deleteError) {
-        console.error('Error clearing processed posts:', deleteError);
+      if (deleteProcessedError) {
+        console.error('Error clearing processed posts:', deleteProcessedError);
         return new Response(JSON.stringify({ error: 'Failed to clear processed posts' }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+
+      // Clear locally stored posts
+      const { error: deleteLocalError } = await supabase
+        .from('twitter_alpha_posts')
+        .delete()
+        .eq('user_id', userId);
+      
+      if (deleteLocalError) {
+        console.error('Error clearing local posts:', deleteLocalError);
+        // Continue anyway - processed posts are the critical ones
       }
       
       // Reset stats in config
@@ -809,7 +866,7 @@ serve(async (req) => {
         })
         .eq('user_id', userId);
 
-      console.log('Sync history cleared successfully');
+      console.log('Sync history and local storage cleared successfully');
       return new Response(JSON.stringify({ 
         success: true, 
         message: 'Sync history cleared. Next poll will re-process all tweets.' 
