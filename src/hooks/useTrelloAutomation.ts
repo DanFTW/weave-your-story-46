@@ -115,9 +115,20 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
       // Check for error in response body (structured error format)
       if (data.error) {
         console.error('Board loading error:', data.details);
+        // Extract string message from error details (may be object or string)
+        let errorMessage = data.error;
+        if (data.details) {
+          if (typeof data.details === 'string') {
+            errorMessage = data.details;
+          } else if (data.details.message) {
+            errorMessage = data.details.message;
+          } else if (data.details.suggested_fix) {
+            errorMessage = data.details.suggested_fix;
+          }
+        }
         toast({
           title: "Failed to load boards",
-          description: data.details || data.error,
+          description: errorMessage,
           variant: "destructive",
         });
         setBoards([]);
@@ -153,9 +164,20 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
       // Check for error in response body
       if (data.error) {
         console.error('List loading error:', data.details);
+        // Extract string message from error details (may be object or string)
+        let errorMessage = data.error;
+        if (data.details) {
+          if (typeof data.details === 'string') {
+            errorMessage = data.details;
+          } else if (data.details.message) {
+            errorMessage = data.details.message;
+          } else if (data.details.suggested_fix) {
+            errorMessage = data.details.suggested_fix;
+          }
+        }
         toast({
           title: "Failed to load lists",
-          description: data.details || data.error,
+          description: errorMessage,
           variant: "destructive",
         });
         setLists([]);
