@@ -419,9 +419,18 @@ async function processUserInstagram(
   }
 
   let newItems = 0;
-  let postsTracked = config.posts_tracked || 0;
   let commentsTracked = config.comments_tracked || 0;
   let likesTracked = config.likes_tracked || 0;
+
+  // UNIFIED DEDUPLICATION: Pre-fetch existing posts from instagram_synced_post_content
+  // This is the single source of truth for what's been captured (shared with instagram-sync)
+  const { data: existingStoredPosts } = await supabase
+    .from("instagram_synced_post_content")
+    .select("instagram_post_id")
+    .eq("user_id", userId);
+
+  const existingPostIds = new Set(existingStoredPosts?.map((p: any) => p.instagram_post_id) || []);
+  console.log(`[Dedup] User ${userId} has ${existingPostIds.size} posts already stored`);
 
   // Fetch recent posts
   if (config.monitor_new_posts || config.monitor_comments || config.monitor_likes) {
@@ -438,19 +447,13 @@ async function processUserInstagram(
     for (let i = 0; i < postsToProcess.length; i++) {
       const post = postsToProcess[i];
       
-      // Check if post already processed
-      const { data: existingPost } = await supabase
-        .from("instagram_processed_engagement")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("engagement_type", "post")
-        .eq("instagram_item_id", post.id)
-        .maybeSingle();
+      // UNIFIED DEDUPLICATION CHECK: Use instagram_synced_post_content as single source of truth
+      const alreadyStored = existingPostIds.has(post.id);
 
-      if (!existingPost && config.monitor_new_posts) {
+      if (!alreadyStored && config.monitor_new_posts) {
         const mediaUrl = post.media_url || post.thumbnail_url || "";
         
-        // STEP 1: Store post locally for reliable 1:1 retrieval
+        // STEP 1: Store post locally for reliable 1:1 retrieval (also serves as deduplication)
         await storePostLocally(supabase, userId, post, mediaUrl);
 
         // STEP 2: Create memory via LIAM API for semantic search
@@ -461,16 +464,18 @@ async function processUserInstagram(
           console.log(`[Memory] LIAM API failed for post ${post.id} - post is still stored locally`);
         }
 
-        // STEP 3: Mark as processed (we have local storage, so always mark as processed)
+        // STEP 3: Also insert into instagram_processed_engagement for backward compatibility
         await supabase
           .from("instagram_processed_engagement")
-          .insert({
+          .upsert({
             user_id: userId,
             engagement_type: "post",
             instagram_item_id: post.id,
+          }, { onConflict: "user_id,instagram_item_id,engagement_type" })
+          .then(({ error }: any) => {
+            if (error) console.log(`[Engagement] Insert note: ${error.message}`);
           });
         
-        postsTracked++;
         newItems++;
 
         // Rate limiting delay
@@ -520,8 +525,20 @@ async function processUserInstagram(
     }
   }
 
-  // Update stats
-  await supabase
+  // FIX: Calculate stats from actual data instead of incrementing (prevents silent failures)
+  const { count: actualPostsCount, error: countError } = await supabase
+    .from("instagram_synced_post_content")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (countError) {
+    console.error(`[Stats] Error counting posts for user ${userId}:`, countError);
+  }
+
+  const postsTracked = actualPostsCount || 0;
+
+  // Update stats with error handling
+  const { error: updateError } = await supabase
     .from("instagram_automation_config")
     .update({
       last_polled_at: new Date().toISOString(),
@@ -530,6 +547,12 @@ async function processUserInstagram(
       likes_tracked: likesTracked,
     })
     .eq("user_id", userId);
+
+  if (updateError) {
+    console.error(`[Stats] Failed to update config for user ${userId}:`, updateError);
+  } else {
+    console.log(`[Stats] Updated for user ${userId}: posts=${postsTracked}, comments=${commentsTracked}, likes=${likesTracked}`);
+  }
 
   return { newItems, postsTracked, commentsTracked, likesTracked };
 }
