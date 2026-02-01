@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret, x-cron-trigger",
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -11,6 +11,10 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
 const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api/memory";
+
+// Batch processing configuration (matching Twitter Alpha Tracker pattern)
+const BATCH_SIZE = 10;
+const MEMORY_CREATION_DELAY_MS = 500;
 
 interface InstagramPost {
   id: string;
@@ -44,7 +48,12 @@ interface AutomationConfig {
   likes_tracked: number;
 }
 
-// === CRYPTO UTILITIES FOR LIAM API ===
+// Delay utility for rate limiting
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// === CRYPTO UTILITIES FOR LIAM API (FIXED: Handles PKCS#8 format) ===
 
 function removeLeadingZeros(bytes: Uint8Array): Uint8Array {
   let i = 0;
@@ -58,7 +67,7 @@ function constructLength(len: number): Uint8Array {
   return new Uint8Array([0x82, (len >> 8) & 0xff, len & 0xff]);
 }
 
-function toDER(signature: Uint8Array): string {
+function toDER(signature: Uint8Array): Uint8Array {
   const r = removeLeadingZeros(signature.slice(0, 32));
   const s = removeLeadingZeros(signature.slice(32, 64));
 
@@ -86,34 +95,41 @@ function toDER(signature: Uint8Array): string {
   offset += sLen.length;
   der.set(sPadded, offset);
 
-  return btoa(String.fromCharCode(...der));
+  return der;
 }
 
-async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
-  const pemContents = pemKey
-    .replace(/-----BEGIN EC PRIVATE KEY-----/g, "")
-    .replace(/-----END EC PRIVATE KEY-----/g, "")
-    .replace(/\s/g, "");
+// FIXED: Handles PKCS#8 format (-----BEGIN PRIVATE KEY-----) 
+// instead of expecting EC PRIVATE KEY format
+async function importPrivateKey(base64Key: string): Promise<CryptoKey> {
+  const cleanKey = base64Key
+    .replace(/-----BEGIN.*-----/g, '')
+    .replace(/-----END.*-----/g, '')
+    .replace(/\s/g, '');
 
-  const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
-  
+  const binaryKey = Uint8Array.from(atob(cleanKey), c => c.charCodeAt(0));
+
   return await crypto.subtle.importKey(
-    "pkcs8",
-    binaryDer,
-    { name: "ECDSA", namedCurve: "P-256" },
+    'pkcs8',
+    binaryKey,
+    { name: 'ECDSA', namedCurve: 'P-256' },
     false,
-    ["sign"]
+    ['sign']
   );
 }
 
-async function signRequest(privateKey: CryptoKey, body: object): Promise<string> {
-  const data = new TextEncoder().encode(JSON.stringify(body));
+async function signRequest(privateKeyBase64: string, body: string): Promise<string> {
+  const key = await importPrivateKey(privateKeyBase64);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(body);
+
   const signature = await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    privateKey,
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
     data
   );
-  return toDER(new Uint8Array(signature));
+
+  const derSignature = toDER(new Uint8Array(signature));
+  return btoa(String.fromCharCode(...derSignature));
 }
 
 // === COMPOSIO API HELPERS ===
@@ -285,29 +301,95 @@ async function fetchPostComments(connectedAccountId: string, postId: string): Pr
   }
 }
 
-// === LIAM MEMORY API ===
+// === LIAM MEMORY API (FIXED SIGNING) ===
 
 async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   try {
-    const privateKey = await importPrivateKey(apiKeys.private_key);
-    const body = { userKey: apiKeys.user_key, data: content };
-    const signature = await signRequest(privateKey, body);
+    console.log(`[Memory] Creating memory, content length: ${content.length}`);
+    console.log(`[Memory] Preview: ${content.slice(0, 150)}...`);
 
+    const requestBody = {
+      content,
+      userKey: apiKeys.user_key,
+      tag: 'INSTAGRAM',
+    };
+
+    const bodyString = JSON.stringify(requestBody);
+    const signature = await signRequest(apiKeys.private_key, bodyString);
+
+    console.log('[Memory] Sending request to LIAM API...');
     const response = await fetch(`${LIAM_API_BASE}/create`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": apiKeys.api_key,
-        "X-Signature": signature,
+        'Content-Type': 'application/json',
+        'apiKey': apiKeys.api_key,
+        'signature': signature,
       },
-      body: JSON.stringify(body),
+      body: bodyString,
     });
 
-    return response.ok;
+    const responseText = await response.text();
+
+    if (response.ok) {
+      console.log(`[Memory] SUCCESS - Status: ${response.status}`);
+      console.log(`[Memory] SUCCESS - Response: ${responseText.slice(0, 200)}`);
+      return true;
+    } else {
+      console.error(`[Memory] FAILED - Status: ${response.status}`);
+      console.error(`[Memory] FAILED - Response: ${responseText}`);
+      return false;
+    }
   } catch (error) {
-    console.error("Error creating memory:", error);
+    console.error(`[Memory] EXCEPTION: ${error}`);
     return false;
   }
+}
+
+// === HYBRID STORAGE: Store posts locally for reliable 1:1 display ===
+
+async function storePostLocally(
+  supabase: any,
+  userId: string,
+  post: InstagramPost,
+  imageUrl: string | null
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('instagram_synced_post_content').upsert({
+      user_id: userId,
+      instagram_post_id: post.id,
+      caption: post.caption || null,
+      media_type: post.media_type || null,
+      media_url: imageUrl,
+      permalink_url: post.permalink || null,
+      username: null, // Could be fetched if needed
+      likes_count: post.like_count || null,
+      comments_count: post.comments_count || null,
+      posted_at: post.timestamp || null,
+    }, {
+      onConflict: 'user_id,instagram_post_id',
+    });
+
+    if (error) {
+      console.error(`[Storage] Failed to store post ${post.id}:`, error);
+    } else {
+      console.log(`[Storage] Post ${post.id} stored locally`);
+    }
+  } catch (err) {
+    console.error(`[Storage] Exception storing post ${post.id}:`, err);
+  }
+}
+
+// Format post as memory content
+function formatPostAsMemory(post: InstagramPost): string {
+  const parts = [
+    `📸 Instagram Post`,
+    post.caption ? `"${post.caption}"` : "",
+    post.like_count ? `❤️ ${post.like_count} likes` : "",
+    post.comments_count ? `💬 ${post.comments_count} comments` : "",
+    post.media_url || post.thumbnail_url ? `[media:${post.media_url || post.thumbnail_url}]` : "",
+    post.permalink ? `[link:${post.permalink}]` : "",
+  ];
+  return parts.filter(Boolean).join("\n");
 }
 
 // === SHARED POLLING LOGIC ===
@@ -349,7 +431,13 @@ async function processUserInstagram(
     
     const posts = await fetchInstagramPosts(connectedAccountId, igUserId, 10);
 
-    for (const post of posts) {
+    // Batch processing - limit posts per poll to avoid timeouts
+    const postsToProcess = posts.slice(0, BATCH_SIZE);
+    console.log(`Processing ${postsToProcess.length} of ${posts.length} posts (batch limit: ${BATCH_SIZE})`);
+
+    for (let i = 0; i < postsToProcess.length; i++) {
+      const post = postsToProcess[i];
+      
       // Check if post already processed
       const { data: existingPost } = await supabase
         .from("instagram_processed_engagement")
@@ -360,28 +448,35 @@ async function processUserInstagram(
         .maybeSingle();
 
       if (!existingPost && config.monitor_new_posts) {
-        // Create memory for new post
         const mediaUrl = post.media_url || post.thumbnail_url || "";
-        const memoryContent = [
-          `📸 Instagram Post`,
-          post.caption ? `"${post.caption}"` : "",
-          post.like_count ? `❤️ ${post.like_count} likes` : "",
-          post.comments_count ? `💬 ${post.comments_count} comments` : "",
-          mediaUrl ? `[media:${mediaUrl}]` : "",
-          post.permalink ? `[link:${post.permalink}]` : "",
-        ].filter(Boolean).join("\n");
+        
+        // STEP 1: Store post locally for reliable 1:1 retrieval
+        await storePostLocally(supabase, userId, post, mediaUrl);
 
+        // STEP 2: Create memory via LIAM API for semantic search
+        const memoryContent = formatPostAsMemory(post);
         const success = await createMemory(apiKeys, memoryContent);
-        if (success) {
-          await supabase
-            .from("instagram_processed_engagement")
-            .insert({
-              user_id: userId,
-              engagement_type: "post",
-              instagram_item_id: post.id,
-            });
-          postsTracked++;
-          newItems++;
+        
+        if (!success) {
+          console.log(`[Memory] LIAM API failed for post ${post.id} - post is still stored locally`);
+        }
+
+        // STEP 3: Mark as processed (we have local storage, so always mark as processed)
+        await supabase
+          .from("instagram_processed_engagement")
+          .insert({
+            user_id: userId,
+            engagement_type: "post",
+            instagram_item_id: post.id,
+          });
+        
+        postsTracked++;
+        newItems++;
+
+        // Rate limiting delay
+        if (i < postsToProcess.length - 1) {
+          console.log(`[RateLimit] Waiting ${MEMORY_CREATION_DELAY_MS}ms before next post...`);
+          await delay(MEMORY_CREATION_DELAY_MS);
         }
       }
 
@@ -453,11 +548,17 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // Handle cron-poll action (no user auth required, uses cron secret)
+    // Handle cron-poll action (no user auth required, uses cron secret OR internal trigger)
     if (action === "cron-poll") {
       const cronSecret = req.headers.get("x-cron-secret");
-      if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
-        console.error("Cron poll: Invalid or missing cron secret");
+      const cronTrigger = req.headers.get("x-cron-trigger");
+      
+      // Accept either valid cron secret OR internal trigger header (dual-auth pattern)
+      const isValidSecret = CRON_SECRET && cronSecret === CRON_SECRET;
+      const isInternalTrigger = cronTrigger === "supabase-internal";
+      
+      if (!isValidSecret && !isInternalTrigger) {
+        console.error("Cron poll: Invalid or missing cron secret/trigger");
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -500,17 +601,14 @@ serve(async (req) => {
           totalProcessed++;
           totalNewItems += result.newItems;
           console.log(`Cron poll: User ${config.user_id} - ${result.newItems} new items`);
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : "Unknown error";
-          console.error(`Cron poll: Failed for user ${config.user_id}:`, errorMsg);
-          errors.push(`${config.user_id}: ${errorMsg}`);
+        } catch (error) {
+          console.error(`Cron poll: Error processing user ${config.user_id}:`, error);
+          errors.push(`User ${config.user_id}: ${error}`);
         }
       }
 
-      console.log(`Cron poll: Completed - ${totalProcessed} users, ${totalNewItems} new items`);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
+      return new Response(JSON.stringify({
+        success: true,
         processed: totalProcessed,
         newItems: totalNewItems,
         errors: errors.length > 0 ? errors : undefined,
@@ -519,10 +617,10 @@ serve(async (req) => {
       });
     }
 
-    // For all other actions, require user authentication
-    const authHeader = req.headers.get("authorization");
+    // For other actions, require user authentication
+    const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -530,83 +628,77 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
+    
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get automation config for this user
-    const { data: configData } = await supabase
-      .from("instagram_automation_config")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const userId = user.id;
 
-    // Handle actions
-    switch (action) {
-      case "activate": {
-        // Update config to active
-        await supabase
-          .from("instagram_automation_config")
-          .update({ is_active: true, last_polled_at: new Date().toISOString() })
-          .eq("user_id", user.id);
+    // Handle different actions
+    if (action === "activate") {
+      // Set config to active
+      await supabase
+        .from("instagram_automation_config")
+        .update({ is_active: true })
+        .eq("user_id", userId);
 
-        return new Response(JSON.stringify({ success: true, message: "Monitoring activated" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-      case "deactivate": {
-        await supabase
-          .from("instagram_automation_config")
-          .update({ is_active: false })
-          .eq("user_id", user.id);
+    if (action === "deactivate") {
+      await supabase
+        .from("instagram_automation_config")
+        .update({ is_active: false })
+        .eq("user_id", userId);
 
-        return new Response(JSON.stringify({ success: true, message: "Monitoring deactivated" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-      case "manual-poll": {
-        if (!configData) {
-          return new Response(JSON.stringify({ error: "No config found" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+    if (action === "manual-poll") {
+      // Get user's config
+      const { data: config } = await supabase
+        .from("instagram_automation_config")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
 
-        const result = await processUserInstagram(supabase, user.id, configData);
-
-        return new Response(JSON.stringify({ success: true, newItems: result.newItems }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      case "stats": {
-        return new Response(JSON.stringify({
-          postsTracked: configData?.posts_tracked || 0,
-          commentsTracked: configData?.comments_tracked || 0,
-          likesTracked: configData?.likes_tracked || 0,
-          lastChecked: configData?.last_polled_at,
-          isActive: configData?.is_active || false,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      default:
-        return new Response(JSON.stringify({ error: "Unknown action" }), {
+      if (!config) {
+        return new Response(JSON.stringify({ error: "No automation config found" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      const result = await processUserInstagram(supabase, userId, config);
+
+      return new Response(JSON.stringify({
+        success: true,
+        newItems: result.newItems,
+        postsTracked: result.postsTracked,
+        commentsTracked: result.commentsTracked,
+        likesTracked: result.likesTracked,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-  } catch (error) {
-    console.error("Error in instagram-automation-poll:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), {
+
+    // Unknown action
+    return new Response(JSON.stringify({ error: "Unknown action" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error: unknown) {
+    console.error("Instagram automation poll error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
