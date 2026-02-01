@@ -1,237 +1,223 @@
 
+# Fix Instagram Sync Consistency with Local Storage
 
-# Enhanced Threads Page with Filtering
+## Root Cause Analysis
 
-## Overview
+The Instagram sync logs show 11 posts successfully synced and 11 "Memory created successfully" messages. However, the LIAM Memory API is a **semantic search engine** that tokenizes and consolidates content into searchable facts rather than storing raw documents:
 
-Redesign the `/threads` page to provide richer thread cards with descriptions, integration icons, and type/trigger badges, plus add filtering capabilities.
+| What we sent | What LIAM stored |
+|--------------|------------------|
+| Full Instagram post with caption, likes, media URL | "Instagram post has a image and a link" |
+| | "Instagram post has hashtag cac" |
+| | "Price of terminal galaxy rainbow is $650 OBO" |
+| | "Post received 12 likes and 2 comments" |
 
-## Key Requirements
+Multiple semantic facts share the same transaction ID prefix, meaning LIAM extracted multiple "facts" from each post, but the original complete content is lost for display purposes.
 
-| Requirement | Implementation |
-|-------------|----------------|
-| Description for each thread | Display `thread.description` in card |
-| Integration icons | Map thread ID to integration icons (e.g., twitter-sync → Twitter icon) |
-| Thread vs Dump pill | Badge showing "Thread" (automatic) or "Dump" (manual) |
-| Automatic vs Manual pill | Badge showing trigger type |
-| Filter tabs | Pill-style filter bar for category and trigger type |
+**This is identical to the Twitter Alpha Tracker issue we just solved.**
 
-## Thread/Dump Classification Logic
+## Solution: Hybrid Local Storage (Proven Pattern)
 
-Based on user definitions:
-- **Thread**: Flows with **automatic** trigger executions (background polling, webhooks)
-- **Dump**: Flows with **manual** trigger executions (sync now button)
+Store complete Instagram post data in a local database table for reliable 1:1 display, while continuing to send to LIAM for semantic search capabilities.
 
-```typescript
-// Thread (Automatic) examples:
-'email-automation', 'instagram-live', 'twitter-live', 'linkedin-live', 
-'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker'
+---
 
-// Dump (Manual) examples:
-'twitter-sync', 'instagram-sync', 'youtube-sync', 'google-photos-sync',
-'email-dump', 'llm-import', 'receipts', 'family', 'food-preferences', 'interests'
+## Implementation Plan
+
+### 1. Database Migration: Create `instagram_synced_post_content` Table
+
+A new table to store the full content of each synced post:
+
+```sql
+CREATE TABLE instagram_synced_post_content (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  instagram_post_id TEXT NOT NULL,
+  caption TEXT,
+  media_type TEXT,
+  media_url TEXT,
+  permalink_url TEXT,
+  username TEXT,
+  likes_count INTEGER,
+  comments_count INTEGER,
+  posted_at TIMESTAMPTZ,
+  synced_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, instagram_post_id)
+);
+
+CREATE INDEX idx_instagram_content_user_synced 
+  ON instagram_synced_post_content(user_id, synced_at DESC);
+
+ALTER TABLE instagram_synced_post_content ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own Instagram posts"
+  ON instagram_synced_post_content FOR SELECT
+  USING (auth.uid() = user_id);
 ```
 
-## Data Model Changes
+### 2. Update Edge Function: `supabase/functions/instagram-sync/index.ts`
 
-### Update `Thread` Type
+Modify the sync logic to:
+- Store complete post data in `instagram_synced_post_content` during sync
+- Continue sending to LIAM API for semantic search (fire-and-forget)
+- Add a `list-synced-posts` action to retrieve stored posts
+
+Key changes:
+```typescript
+// After successful memory creation, store locally
+await supabase.from('instagram_synced_post_content').upsert({
+  user_id: userId,
+  instagram_post_id: post.id,
+  caption: post.caption,
+  media_type: post.mediaType,
+  media_url: imageUrl,
+  permalink_url: post.permalinkUrl,
+  username: post.username,
+  likes_count: post.likesCount,
+  comments_count: post.commentsCount,
+  posted_at: post.timestamp,
+});
+```
+
+Add new action handler:
+```typescript
+case 'list-synced-posts': {
+  const { data: posts } = await supabase
+    .from('instagram_synced_post_content')
+    .select('*')
+    .eq('user_id', userId)
+    .order('posted_at', { ascending: false })
+    .limit(100);
+    
+  return new Response(JSON.stringify({ posts }), { ... });
+}
+```
+
+### 3. Create New Type: `InstagramStoredPost`
+
+Add to `src/types/instagramSync.ts`:
 
 ```typescript
-// src/types/threads.ts
-export type TriggerType = "automatic" | "manual";
-export type FlowMode = "thread" | "dump";
-
-export interface Thread {
+export interface InstagramStoredPost {
   id: string;
-  title: string;
-  description?: string;
-  icon: LucideIcon;
-  gradient: ThreadGradient;
-  status: ThreadStatus;
-  type: ThreadType; // existing: "automation" | "flow"
-  category?: string;
-  integrations?: string[];  // NEW: array of integration icon IDs
-  triggerType: TriggerType; // NEW: "automatic" | "manual"
-  flowMode: FlowMode;       // NEW: "thread" | "dump"
+  user_id: string;
+  instagram_post_id: string;
+  caption: string | null;
+  media_type: string | null;
+  media_url: string | null;
+  permalink_url: string | null;
+  username: string | null;
+  likes_count: number | null;
+  comments_count: number | null;
+  posted_at: string;
+  synced_at: string;
 }
 ```
 
-### Update Thread Data
+### 4. Create Hook: `src/hooks/useInstagramPosts.ts`
+
+New hook to fetch locally stored Instagram posts:
 
 ```typescript
-// src/data/threads.ts - Example updates
-{
-  id: "twitter-alpha-tracker",
-  title: "Twitter Alpha Tracker",
-  description: "Track posts from any Twitter account as memories",
-  icon: Target,
-  gradient: "blue",
-  status: "active",
-  type: "automation",
-  category: "social",
-  integrations: ["twitter"],      // NEW
-  triggerType: "automatic",       // NEW
-  flowMode: "thread",             // NEW
-},
-{
-  id: "twitter-sync",
-  title: "Twitter Dump",
-  description: "Save your tweets, retweets, and likes as memories",
-  icon: Twitter,
-  gradient: "blue",
-  status: "active",
-  type: "automation",
-  category: "social",
-  integrations: ["twitter"],      // NEW
-  triggerType: "manual",          // NEW
-  flowMode: "dump",               // NEW
-},
-```
+export function useInstagramPosts() {
+  const [posts, setPosts] = useState<InstagramStoredPost[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-## UI Components
+  const fetchPosts = useCallback(async () => {
+    setIsLoading(true);
+    const { data } = await supabase.functions.invoke('instagram-sync', {
+      body: { action: 'list-synced-posts' },
+    });
+    if (data?.posts) setPosts(data.posts);
+    setIsLoading(false);
+  }, []);
 
-### 1. ThreadCard Redesign
-
-Expand the card height to accommodate new elements:
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  ┌────┐                                                  │
-│  │Icon│  Twitter Alpha Tracker           ┌─────────────┐ │
-│  └────┘                                  │   View   ▸  │ │
-│         Track posts from any Twitter...  └─────────────┘ │
-│                                                          │
-│  ┌────────┐  ┌──────┐  ┌───────────┐  ┌───────────────┐  │
-│  │ 𝕏 icon │  │Thread│  │ Automatic │  │               │  │
-│  └────────┘  └──────┘  └───────────┘  │               │  │
-└──────────────────────────────────────────────────────────┘
-```
-
-Changes to `ThreadCard.tsx`:
-- Increase card height from `h-32` to `h-40`
-- Add description text below title
-- Add footer row with integration icons and pill badges
-- Use small integration icons (w-6 h-6)
-- Style pills to match existing design system
-
-### 2. Thread Filter Pills
-
-Create a filter bar component similar to `MemoryFilterBar`:
-
-```typescript
-// New component: src/components/threads/ThreadFilterBar.tsx
-interface ThreadFilterBarProps {
-  flowModeFilter: "all" | "thread" | "dump";
-  triggerFilter: "all" | "automatic" | "manual";
-  onFlowModeChange: (mode: "all" | "thread" | "dump") => void;
-  onTriggerChange: (trigger: "all" | "automatic" | "manual") => void;
+  return { posts, isLoading, fetchPosts };
 }
 ```
 
-Visual layout:
-```
-┌─────────────────────────────────────────────────────────┐
-│ ┌─────┐ ┌────────┐ ┌──────┐   │   ┌─────┐ ┌───────────┐ │
-│ │ All │ │ Thread │ │ Dump │   │   │ All │ │ Automatic │ │
-│ └─────┘ └────────┘ └──────┘   │   └─────┘ └───────────┘ │
-│    Flow Mode                  │      Trigger Type       │
-└─────────────────────────────────────────────────────────┘
-```
+### 5. Update Memories Page: `src/pages/Memories.tsx`
 
-### 3. Pill Badge Component
-
-Create reusable pill badges for thread/dump and automatic/manual:
+Merge locally stored Instagram posts with LIAM memories (same pattern as Twitter):
 
 ```typescript
-// New component: src/components/threads/ThreadTypeBadge.tsx
-interface ThreadTypeBadgeProps {
-  flowMode: FlowMode;
-  triggerType: TriggerType;
+// Import the new hook
+import { useInstagramPosts } from "@/hooks/useInstagramPosts";
+
+// Fetch Instagram posts
+const { posts: instagramPosts, fetchPosts: fetchInstagramPosts } = useInstagramPosts();
+
+// Convert to Memory format
+const instagramAsMemories = useMemo((): Memory[] => {
+  return instagramPosts.map(post => ({
+    id: `instagram-local-${post.instagram_post_id}`,
+    content: formatInstagramMemory(post),
+    tag: 'INSTAGRAM',
+    createdAt: post.posted_at,
+    imageDataBase64: null,
+    // Store media_url for display
+  }));
+}, [instagramPosts]);
+
+// Merge with existing memories
+const allMemories = useMemo((): Memory[] => {
+  const combined = [...memories, ...twitterAsMemories, ...instagramAsMemories];
+  // Deduplicate and sort...
+}, [memories, twitterAsMemories, instagramAsMemories]);
+```
+
+### 6. Update `force-reset-sync` Action
+
+Ensure the reset action also clears the new content table:
+
+```typescript
+case 'force-reset-sync': {
+  // Clear content table
+  await supabase
+    .from('instagram_synced_post_content')
+    .delete()
+    .eq('user_id', userId);
+    
+  // Clear deduplication table (existing)
+  await supabase
+    .from('instagram_synced_posts')
+    .delete()
+    .eq('user_id', userId);
+    
+  // Reset config (existing)
+  // ...
 }
-
-// Styling:
-// Thread → Blue outline pill (e.g., border-blue-500/30 bg-blue-500/10 text-white)
-// Dump → Teal outline pill
-// Automatic → Green/emerald accent
-// Manual → Orange accent
 ```
 
-## Integration Icon Mapping
-
-Create a mapping from thread ID to integration icons:
-
-```typescript
-// src/data/threads.ts
-const threadIntegrations: Record<string, string[]> = {
-  "twitter-alpha-tracker": ["twitter"],
-  "twitter-live": ["twitter"],
-  "twitter-sync": ["twitter"],
-  "instagram-live": ["instagram"],
-  "instagram-sync": ["instagram"],
-  "youtube-sync": ["youtube"],
-  "google-photos-sync": ["googlephotos"],
-  "linkedin-live": ["linkedin"],
-  "email-automation": ["gmail"],
-  "email-dump": ["gmail"],
-  "hubspot-tracker": ["hubspot"],
-  "trello-tracker": ["trello"],
-  "llm-import": [],  // No external integration
-  "receipts": ["camera"],
-  "family": [],
-  "food-preferences": [],
-  "interests": [],
-};
-```
+---
 
 ## Files to Create/Modify
 
-| File | Action | Description |
-|------|--------|-------------|
-| `src/types/threads.ts` | Modify | Add `TriggerType`, `FlowMode`, update `Thread` interface |
-| `src/data/threads.ts` | Modify | Add `integrations`, `triggerType`, `flowMode` to all threads |
-| `src/components/ThreadCard.tsx` | Modify | Expand card, add description, icons, pills |
-| `src/components/threads/ThreadFilterBar.tsx` | Create | Filter bar with flow mode and trigger type pills |
-| `src/components/threads/ThreadTypeBadge.tsx` | Create | Pill badges for thread/dump and auto/manual |
-| `src/pages/Threads.tsx` | Modify | Add filter state and filtering logic |
+| File | Action | Purpose |
+|------|--------|---------|
+| Database migration | Create | New `instagram_synced_post_content` table |
+| `supabase/functions/instagram-sync/index.ts` | Modify | Store posts locally + add `list-synced-posts` action |
+| `src/types/instagramSync.ts` | Modify | Add `InstagramStoredPost` interface |
+| `src/hooks/useInstagramPosts.ts` | Create | Hook to fetch stored Instagram posts |
+| `src/pages/Memories.tsx` | Modify | Merge Instagram posts with LIAM memories |
 
-## Styling Approach
+---
 
-Following existing design patterns:
-- Use `motion` from framer-motion for animations (matching `MemoryFilterBar`)
-- Use existing color system from CSS variables
-- Pills use semi-transparent backgrounds with subtle borders
-- Integration icons use existing `IntegrationIcon` component with reduced size
-- Maintain gradient backgrounds on cards
-- Ensure proper contrast for text on gradient backgrounds
+## Migration for Existing Data
 
-## Thread Data Complete Mapping
+Since 11 posts are already synced but content wasn't stored locally:
 
-| Thread ID | Flow Mode | Trigger Type | Integrations |
-|-----------|-----------|--------------|--------------|
-| `twitter-alpha-tracker` | thread | automatic | twitter |
-| `hubspot-tracker` | thread | automatic | hubspot |
-| `trello-tracker` | thread | automatic | trello |
-| `linkedin-live` | thread | automatic | linkedin |
-| `twitter-live` | thread | automatic | twitter |
-| `instagram-live` | thread | automatic | instagram |
-| `email-automation` | thread | automatic | gmail |
-| `youtube-sync` | dump | manual | youtube |
-| `twitter-sync` | dump | manual | twitter |
-| `instagram-sync` | dump | manual | instagram |
-| `google-photos-sync` | dump | manual | googlephotos |
-| `llm-import` | dump | manual | - |
-| `interests` | dump | manual | - |
-| `receipts` | dump | manual | camera |
-| `email-dump` | dump | manual | gmail |
-| `family` | dump | manual | - |
-| `food-preferences` | dump | manual | - |
+1. Click **"Reset & Re-sync All Posts"** in the Instagram Dump flow
+2. Next sync will store complete post data in `instagram_synced_post_content`
+3. Each post will appear as its own memory entry in the Memories page
+
+---
 
 ## Expected Outcome
 
 After implementation:
-1. Each thread card displays its description, integration icons, and two pill badges
-2. Filter bar at top allows filtering by flow mode (Thread/Dump) and trigger type (Automatic/Manual)
-3. Cards animate smoothly when filters change
-4. Design is consistent with existing app styling patterns
-5. All 17 threads have correct classifications and integration mappings
-
+- Every synced Instagram post is stored with full content locally
+- Posts display individually with caption, media, and engagement metrics
+- LIAM API continues to provide semantic search for Instagram content
+- True 1:1 storage guarantees no content loss
+- Consistent with the proven Twitter Alpha Tracker pattern
