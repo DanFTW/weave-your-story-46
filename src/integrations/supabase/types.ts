@@ -284,6 +284,51 @@ export type Database = {
         }
         Relationships: []
       }
+      instagram_synced_post_content: {
+        Row: {
+          caption: string | null
+          comments_count: number | null
+          id: string
+          instagram_post_id: string
+          likes_count: number | null
+          media_type: string | null
+          media_url: string | null
+          permalink_url: string | null
+          posted_at: string | null
+          synced_at: string | null
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          caption?: string | null
+          comments_count?: number | null
+          id?: string
+          instagram_post_id: string
+          likes_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          permalink_url?: string | null
+          posted_at?: string | null
+          synced_at?: string | null
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          caption?: string | null
+          comments_count?: number | null
+          id?: string
+          instagram_post_id?: string
+          likes_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          permalink_url?: string | null
+          posted_at?: string | null
+          synced_at?: string | null
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       instagram_synced_posts: {
         Row: {
           id: string
