@@ -145,10 +145,21 @@ serve(async (req) => {
       }
 
       case 'force-reset-sync': {
-        // Force reset: Clear BOTH config AND deduplication table to allow full re-sync
+        // Force reset: Clear ALL tables to allow full re-sync
         console.log('Force reset sync for user:', user.id);
         
-        // First, clear the deduplication table
+        // Clear the content storage table (new hybrid storage)
+        const { error: contentDeleteError } = await supabase
+          .from('instagram_synced_post_content')
+          .delete()
+          .eq('user_id', user.id);
+        
+        if (contentDeleteError) {
+          console.error('Error clearing post content:', contentDeleteError);
+          // Continue anyway - table might not exist yet
+        }
+        
+        // Clear the deduplication table
         const { error: deleteError } = await supabase
           .from('instagram_synced_posts')
           .delete()
@@ -185,6 +196,30 @@ serve(async (req) => {
         console.log('Force reset complete - all posts can be re-synced for user:', user.id);
         return new Response(
           JSON.stringify({ success: true, message: 'Full reset complete. All posts will be re-synced as new memories.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'list-synced-posts': {
+        // Return locally stored Instagram posts for reliable 1:1 display
+        const { data: posts, error: listError } = await supabase
+          .from('instagram_synced_post_content')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('posted_at', { ascending: false })
+          .limit(100);
+
+        if (listError) {
+          console.error('Error listing synced posts:', listError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to fetch synced posts', posts: [] }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Returning ${posts?.length || 0} locally stored Instagram posts`);
+        return new Response(
+          JSON.stringify({ posts: posts || [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -553,6 +588,30 @@ async function syncInstagramContent(
         const success = await createMemory(apiKeys, memoryContent, imageBase64);
 
         if (success) {
+          // Store complete post content locally for reliable 1:1 display
+          // (LIAM API tokenizes into semantic fragments, so we need local storage)
+          const { error: contentError } = await supabase
+            .from('instagram_synced_post_content')
+            .upsert({
+              user_id: userId,
+              instagram_post_id: post.id,
+              caption: post.caption || null,
+              media_type: post.mediaType || null,
+              media_url: imageUrl || null,
+              permalink_url: post.permalinkUrl || null,
+              username: post.username || null,
+              likes_count: post.likesCount ?? null,
+              comments_count: post.commentsCount ?? null,
+              posted_at: post.timestamp || null,
+              synced_at: new Date().toISOString(),
+            }, {
+              onConflict: 'user_id,instagram_post_id',
+            });
+
+          if (contentError) {
+            console.log(`Post ${post.id} content storage error:`, contentError.message);
+          }
+
           // Record this post as synced to prevent future duplicates
           const { error: insertError } = await supabase
             .from('instagram_synced_posts')

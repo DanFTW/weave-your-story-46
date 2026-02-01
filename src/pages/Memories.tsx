@@ -4,10 +4,46 @@ import { MemoryList } from "@/components/memories/MemoryList";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { useTwitterAlphaPosts } from "@/hooks/useTwitterAlphaPosts";
+import { useInstagramPosts } from "@/hooks/useInstagramPosts";
 import { Memory } from "@/types/memory";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+
+// Format Instagram post for display
+function formatInstagramMemory(post: {
+  caption: string | null;
+  username: string | null;
+  likes_count: number | null;
+  comments_count: number | null;
+  permalink_url: string | null;
+}): string {
+  let content = '';
+  
+  if (post.username) {
+    content += `@${post.username}: `;
+  }
+  
+  if (post.caption) {
+    content += post.caption;
+  } else {
+    content += '(no caption)';
+  }
+  
+  // Add engagement info
+  const engagement = [];
+  if (post.likes_count !== null) {
+    engagement.push(`${post.likes_count} like${post.likes_count !== 1 ? 's' : ''}`);
+  }
+  if (post.comments_count !== null) {
+    engagement.push(`${post.comments_count} comment${post.comments_count !== 1 ? 's' : ''}`);
+  }
+  if (engagement.length > 0) {
+    content += ` • ${engagement.join(', ')}`;
+  }
+  
+  return content;
+}
 
 export default function Memories() {
   const [activeFilter, setActiveFilter] = useState("all");
@@ -17,6 +53,7 @@ export default function Memories() {
   const { listMemories, isListing } = useLiamMemory();
   const { filterDeleted, clearAll, deletedIds } = useDeletedMemories();
   const { posts: twitterPosts, fetchPosts: fetchTwitterPosts, isLoading: isLoadingTwitter } = useTwitterAlphaPosts();
+  const { posts: instagramPosts, fetchPosts: fetchInstagramPosts, isLoading: isLoadingInstagram } = useInstagramPosts();
 
   const fetchMemories = useCallback(async () => {
     const result = await listMemories();
@@ -42,19 +79,37 @@ export default function Memories() {
     }));
   }, [twitterPosts]);
 
-  // Merge LIAM memories with locally stored Twitter posts
+  // Convert locally stored Instagram posts to Memory format
+  const instagramAsMemories = useMemo((): Memory[] => {
+    return instagramPosts.map(post => ({
+      id: `instagram-local-${post.instagram_post_id}`,
+      content: formatInstagramMemory(post),
+      tag: 'INSTAGRAM',
+      createdAt: post.posted_at || post.synced_at,
+      // Store media_url for potential image display
+      imageDataBase64: null,
+    }));
+  }, [instagramPosts]);
+
+  // Merge LIAM memories with locally stored Twitter & Instagram posts
   const allMemories = useMemo((): Memory[] => {
-    // Combine both sources
-    const combined = [...memories, ...twitterAsMemories];
+    // Combine all sources
+    const combined = [...memories, ...twitterAsMemories, ...instagramAsMemories];
     
-    // Deduplicate by tweet_id (in case LIAM also stored some)
+    // Deduplicate by source ID (in case LIAM also stored some)
     const seen = new Set<string>();
     const deduped = combined.filter(m => {
       // For twitter-local entries, extract tweet_id
       if (m.id.startsWith('twitter-local-')) {
         const tweetId = m.id.replace('twitter-local-', '');
-        if (seen.has(tweetId)) return false;
-        seen.add(tweetId);
+        if (seen.has(`twitter-${tweetId}`)) return false;
+        seen.add(`twitter-${tweetId}`);
+      }
+      // For instagram-local entries, extract post_id
+      if (m.id.startsWith('instagram-local-')) {
+        const postId = m.id.replace('instagram-local-', '');
+        if (seen.has(`instagram-${postId}`)) return false;
+        seen.add(`instagram-${postId}`);
       }
       return true;
     });
@@ -63,12 +118,13 @@ export default function Memories() {
     return deduped.sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [memories, twitterAsMemories]);
+  }, [memories, twitterAsMemories, instagramAsMemories]);
 
   // Initial fetch on mount
   useEffect(() => {
     fetchMemories();
     fetchTwitterPosts();
+    fetchInstagramPosts();
   }, []); // Only run on mount
 
   // Refetch when filterDeleted changes (after localStorage loads)
@@ -80,11 +136,11 @@ export default function Memories() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([fetchMemories(), fetchTwitterPosts()]);
+    await Promise.all([fetchMemories(), fetchTwitterPosts(), fetchInstagramPosts()]);
     setIsRefreshing(false);
   };
 
-  const isLoading = isListing || isLoadingTwitter;
+  const isLoading = isListing || isLoadingTwitter || isLoadingInstagram;
 
   return (
     <div className="pb-nav">
@@ -123,7 +179,15 @@ export default function Memories() {
             </div>
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
-            All your saved memories {twitterAsMemories.length > 0 ? `(${twitterAsMemories.length} from Twitter)` : ''}
+            All your saved memories
+            {(twitterAsMemories.length > 0 || instagramAsMemories.length > 0) && (
+              <span className="ml-1">
+                ({[
+                  twitterAsMemories.length > 0 && `${twitterAsMemories.length} Twitter`,
+                  instagramAsMemories.length > 0 && `${instagramAsMemories.length} Instagram`,
+                ].filter(Boolean).join(', ')})
+              </span>
+            )}
           </p>
         </motion.header>
         
