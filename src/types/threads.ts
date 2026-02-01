@@ -6,6 +6,10 @@ export type ThreadStatus = "setup" | "active" | "try";
 
 export type ThreadType = "automation" | "flow";
 
+export type TriggerType = "automatic" | "manual";
+
+export type FlowMode = "thread" | "dump";
+
 export interface Thread {
   id: string;
   title: string;
@@ -15,6 +19,9 @@ export interface Thread {
   status: ThreadStatus;
   type: ThreadType;
   category?: string;
+  integrations?: string[];
+  triggerType: TriggerType;
+  flowMode: FlowMode;
 }
 
 export interface ThreadCategory {
