@@ -1,141 +1,237 @@
 
 
-# Store Twitter Posts Locally for Reliable Display
+# Enhanced Threads Page with Filtering
 
-## Root Cause Confirmed
+## Overview
 
-After analyzing the edge function logs and LIAM API responses, the issue is now clear:
+Redesign the `/threads` page to provide richer thread cards with descriptions, integration icons, and type/trigger badges, plus add filtering capabilities.
 
-| Evidence | Finding |
-|----------|---------|
-| 97 tweets processed | All marked as processed in `twitter_alpha_processed_posts` |
-| All API calls succeed | Every memory creation returns 200 OK with "Your memory has been recorded successfully" |
-| Only 1 Twitter memory in LIAM | API response shows single entry: `"Twitter Post from @Shieldmetax on 20260129"` |
-| Keys are correct | The `userkey` in API response matches the database exactly |
+## Key Requirements
 
-**The LIAM Memory API is a semantic search engine, not a document store.** It intentionally consolidates similar content into summarized "facts" for efficient retrieval. This is the expected behavior - all 97 tweets were merged into a single searchable fact.
+| Requirement | Implementation |
+|-------------|----------------|
+| Description for each thread | Display `thread.description` in card |
+| Integration icons | Map thread ID to integration icons (e.g., twitter-sync → Twitter icon) |
+| Thread vs Dump pill | Badge showing "Thread" (automatic) or "Dump" (manual) |
+| Automatic vs Manual pill | Badge showing trigger type |
+| Filter tabs | Pill-style filter bar for category and trigger type |
 
-Compare to Instagram which extracts multiple distinct facts per post (likes, hashtags, prices) because each post contains unique structured data that LIAM can tokenize separately.
+## Thread/Dump Classification Logic
 
-## Solution: Hybrid Local Storage
-
-Store tweets in a **local database table** while still sending to LIAM for semantic search capabilities.
-
-### 1. Create New Table: `twitter_alpha_posts`
-
-Stores the full content of each tracked tweet for reliable 1:1 retrieval:
-
-```sql
-CREATE TABLE twitter_alpha_posts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  tweet_id TEXT NOT NULL,
-  author_username TEXT NOT NULL,
-  author_display_name TEXT,
-  tweet_text TEXT NOT NULL,
-  tweet_created_at TIMESTAMPTZ NOT NULL,
-  processed_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, tweet_id)
-);
-
-ALTER TABLE twitter_alpha_posts ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can read own twitter posts" ON twitter_alpha_posts
-  FOR SELECT USING (auth.uid() = user_id);
-```
-
-### 2. Update Edge Function to Store Locally
-
-Modify `supabase/functions/twitter-alpha-tracker/index.ts` to:
-- Insert tweets into `twitter_alpha_posts` with full content
-- Continue sending to LIAM API for semantic search (fire-and-forget)
-- Use the local table as the source of truth
-
-### 3. Add `list-posts` Action
-
-Add a new endpoint to retrieve stored tweets:
+Based on user definitions:
+- **Thread**: Flows with **automatic** trigger executions (background polling, webhooks)
+- **Dump**: Flows with **manual** trigger executions (sync now button)
 
 ```typescript
-case 'list-posts': {
-  const { data: posts, error } = await supabase
-    .from('twitter_alpha_posts')
-    .select('*')
-    .eq('user_id', userId)
-    .order('tweet_created_at', { ascending: false })
-    .limit(100);
+// Thread (Automatic) examples:
+'email-automation', 'instagram-live', 'twitter-live', 'linkedin-live', 
+'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker'
 
-  return new Response(JSON.stringify({ posts }), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
+// Dump (Manual) examples:
+'twitter-sync', 'instagram-sync', 'youtube-sync', 'google-photos-sync',
+'email-dump', 'llm-import', 'receipts', 'family', 'food-preferences', 'interests'
+```
+
+## Data Model Changes
+
+### Update `Thread` Type
+
+```typescript
+// src/types/threads.ts
+export type TriggerType = "automatic" | "manual";
+export type FlowMode = "thread" | "dump";
+
+export interface Thread {
+  id: string;
+  title: string;
+  description?: string;
+  icon: LucideIcon;
+  gradient: ThreadGradient;
+  status: ThreadStatus;
+  type: ThreadType; // existing: "automation" | "flow"
+  category?: string;
+  integrations?: string[];  // NEW: array of integration icon IDs
+  triggerType: TriggerType; // NEW: "automatic" | "manual"
+  flowMode: FlowMode;       // NEW: "thread" | "dump"
 }
 ```
 
-### 4. Create `useTwitterAlphaPosts` Hook
-
-New frontend hook to fetch locally stored tweets:
+### Update Thread Data
 
 ```typescript
-export function useTwitterAlphaPosts() {
-  const [posts, setPosts] = useState<TwitterPost[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+// src/data/threads.ts - Example updates
+{
+  id: "twitter-alpha-tracker",
+  title: "Twitter Alpha Tracker",
+  description: "Track posts from any Twitter account as memories",
+  icon: Target,
+  gradient: "blue",
+  status: "active",
+  type: "automation",
+  category: "social",
+  integrations: ["twitter"],      // NEW
+  triggerType: "automatic",       // NEW
+  flowMode: "thread",             // NEW
+},
+{
+  id: "twitter-sync",
+  title: "Twitter Dump",
+  description: "Save your tweets, retweets, and likes as memories",
+  icon: Twitter,
+  gradient: "blue",
+  status: "active",
+  type: "automation",
+  category: "social",
+  integrations: ["twitter"],      // NEW
+  triggerType: "manual",          // NEW
+  flowMode: "dump",               // NEW
+},
+```
 
-  const fetchPosts = useCallback(async () => {
-    setIsLoading(true);
-    const { data } = await supabase.functions.invoke('twitter-alpha-tracker', {
-      body: { action: 'list-posts' },
-    });
-    if (data?.posts) setPosts(data.posts);
-    setIsLoading(false);
-  }, []);
+## UI Components
 
-  return { posts, isLoading, fetchPosts };
+### 1. ThreadCard Redesign
+
+Expand the card height to accommodate new elements:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  ┌────┐                                                  │
+│  │Icon│  Twitter Alpha Tracker           ┌─────────────┐ │
+│  └────┘                                  │   View   ▸  │ │
+│         Track posts from any Twitter...  └─────────────┘ │
+│                                                          │
+│  ┌────────┐  ┌──────┐  ┌───────────┐  ┌───────────────┐  │
+│  │ 𝕏 icon │  │Thread│  │ Automatic │  │               │  │
+│  └────────┘  └──────┘  └───────────┘  │               │  │
+└──────────────────────────────────────────────────────────┘
+```
+
+Changes to `ThreadCard.tsx`:
+- Increase card height from `h-32` to `h-40`
+- Add description text below title
+- Add footer row with integration icons and pill badges
+- Use small integration icons (w-6 h-6)
+- Style pills to match existing design system
+
+### 2. Thread Filter Pills
+
+Create a filter bar component similar to `MemoryFilterBar`:
+
+```typescript
+// New component: src/components/threads/ThreadFilterBar.tsx
+interface ThreadFilterBarProps {
+  flowModeFilter: "all" | "thread" | "dump";
+  triggerFilter: "all" | "automatic" | "manual";
+  onFlowModeChange: (mode: "all" | "thread" | "dump") => void;
+  onTriggerChange: (trigger: "all" | "automatic" | "manual") => void;
 }
 ```
 
-### 5. Merge Twitter Posts into Memories Page
+Visual layout:
+```
+┌─────────────────────────────────────────────────────────┐
+│ ┌─────┐ ┌────────┐ ┌──────┐   │   ┌─────┐ ┌───────────┐ │
+│ │ All │ │ Thread │ │ Dump │   │   │ All │ │ Automatic │ │
+│ └─────┘ └────────┘ └──────┘   │   └─────┘ └───────────┘ │
+│    Flow Mode                  │      Trigger Type       │
+└─────────────────────────────────────────────────────────┘
+```
 
-Update `src/pages/Memories.tsx` to combine locally stored Twitter posts with LIAM memories:
+### 3. Pill Badge Component
+
+Create reusable pill badges for thread/dump and automatic/manual:
 
 ```typescript
-// Convert Twitter posts to Memory format
-const twitterAsMemories: Memory[] = twitterPosts.map(post => ({
-  id: `twitter-${post.tweet_id}`,
-  content: `@${post.author_username}: ${post.tweet_text}`,
-  tag: 'TWITTER',
-  createdAt: post.tweet_created_at,
-}));
+// New component: src/components/threads/ThreadTypeBadge.tsx
+interface ThreadTypeBadgeProps {
+  flowMode: FlowMode;
+  triggerType: TriggerType;
+}
 
-// Merge with LIAM memories, deduplicate, and sort
-const allMemories = [...memories, ...twitterAsMemories]
-  .filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i)
-  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+// Styling:
+// Thread → Blue outline pill (e.g., border-blue-500/30 bg-blue-500/10 text-white)
+// Dump → Teal outline pill
+// Automatic → Green/emerald accent
+// Manual → Orange accent
+```
+
+## Integration Icon Mapping
+
+Create a mapping from thread ID to integration icons:
+
+```typescript
+// src/data/threads.ts
+const threadIntegrations: Record<string, string[]> = {
+  "twitter-alpha-tracker": ["twitter"],
+  "twitter-live": ["twitter"],
+  "twitter-sync": ["twitter"],
+  "instagram-live": ["instagram"],
+  "instagram-sync": ["instagram"],
+  "youtube-sync": ["youtube"],
+  "google-photos-sync": ["googlephotos"],
+  "linkedin-live": ["linkedin"],
+  "email-automation": ["gmail"],
+  "email-dump": ["gmail"],
+  "hubspot-tracker": ["hubspot"],
+  "trello-tracker": ["trello"],
+  "llm-import": [],  // No external integration
+  "receipts": ["camera"],
+  "family": [],
+  "food-preferences": [],
+  "interests": [],
+};
 ```
 
 ## Files to Create/Modify
 
-| File | Action | Purpose |
-|------|--------|---------|
-| Database migration | Create | New `twitter_alpha_posts` table |
-| `supabase/functions/twitter-alpha-tracker/index.ts` | Modify | Store tweets locally + add `list-posts` action |
-| `src/hooks/useTwitterAlphaPosts.ts` | Create | Hook to fetch stored Twitter posts |
-| `src/pages/Memories.tsx` | Modify | Merge Twitter posts with LIAM memories |
-| `src/types/twitterAlphaTracker.ts` | Modify | Add `TwitterPost` interface |
+| File | Action | Description |
+|------|--------|-------------|
+| `src/types/threads.ts` | Modify | Add `TriggerType`, `FlowMode`, update `Thread` interface |
+| `src/data/threads.ts` | Modify | Add `integrations`, `triggerType`, `flowMode` to all threads |
+| `src/components/ThreadCard.tsx` | Modify | Expand card, add description, icons, pills |
+| `src/components/threads/ThreadFilterBar.tsx` | Create | Filter bar with flow mode and trigger type pills |
+| `src/components/threads/ThreadTypeBadge.tsx` | Create | Pill badges for thread/dump and auto/manual |
+| `src/pages/Threads.tsx` | Modify | Add filter state and filtering logic |
 
-## Migration for Existing Data
+## Styling Approach
 
-Since 97 tweets are already processed but their content wasn't stored:
+Following existing design patterns:
+- Use `motion` from framer-motion for animations (matching `MemoryFilterBar`)
+- Use existing color system from CSS variables
+- Pills use semi-transparent backgrounds with subtle borders
+- Integration icons use existing `IntegrationIcon` component with reduced size
+- Maintain gradient backgrounds on cards
+- Ensure proper contrast for text on gradient backgrounds
 
-1. Reset sync history (using existing "Reset Sync History" button)
-2. Next poll will re-fetch tweets from Twitter API
-3. New tweets will be stored locally in `twitter_alpha_posts`
-4. Each tweet appears as its own memory entry
+## Thread Data Complete Mapping
+
+| Thread ID | Flow Mode | Trigger Type | Integrations |
+|-----------|-----------|--------------|--------------|
+| `twitter-alpha-tracker` | thread | automatic | twitter |
+| `hubspot-tracker` | thread | automatic | hubspot |
+| `trello-tracker` | thread | automatic | trello |
+| `linkedin-live` | thread | automatic | linkedin |
+| `twitter-live` | thread | automatic | twitter |
+| `instagram-live` | thread | automatic | instagram |
+| `email-automation` | thread | automatic | gmail |
+| `youtube-sync` | dump | manual | youtube |
+| `twitter-sync` | dump | manual | twitter |
+| `instagram-sync` | dump | manual | instagram |
+| `google-photos-sync` | dump | manual | googlephotos |
+| `llm-import` | dump | manual | - |
+| `interests` | dump | manual | - |
+| `receipts` | dump | manual | camera |
+| `email-dump` | dump | manual | gmail |
+| `family` | dump | manual | - |
+| `food-preferences` | dump | manual | - |
 
 ## Expected Outcome
 
 After implementation:
-- Every tracked tweet is stored with full content in `twitter_alpha_posts`
-- Tweets display individually in `/memories` page with author and content
-- LIAM API continues to provide semantic search for tweets
-- True 1:1 storage guarantees no content loss
-- User's "wrong key" concern is addressed - keys are verified working, the issue was LIAM's consolidation behavior
+1. Each thread card displays its description, integration icons, and two pill badges
+2. Filter bar at top allows filtering by flow mode (Thread/Dump) and trigger type (Automatic/Manual)
+3. Cards animate smoothly when filters change
+4. Design is consistent with existing app styling patterns
+5. All 17 threads have correct classifications and integration mappings
 
