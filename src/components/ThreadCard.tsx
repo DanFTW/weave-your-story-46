@@ -62,14 +62,14 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
       <div className="mt-auto pt-4 flex items-center gap-2 flex-wrap">
         {/* Integration Icons */}
         {hasIntegrations && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {thread.integrations!.map((integration) => (
-              <IntegrationIcon
+              <div
                 key={integration}
-                icon={integration}
-                className="w-7 h-7"
-                useComplementaryBg
-              />
+                className="w-6 h-6 rounded-md bg-white/20 backdrop-blur-sm flex items-center justify-center overflow-hidden"
+              >
+                <IntegrationIcon icon={integration} className="w-4 h-4" />
+              </div>
             ))}
           </div>
         )}

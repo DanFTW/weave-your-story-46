@@ -1,32 +1,36 @@
 import { motion } from "framer-motion";
-import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 
-type FlowModeFilter = "all" | "thread" | "flow" | "dump";
+type FlowModeFilter = "all" | "thread" | "dump";
+type TriggerFilter = "all" | "automatic" | "manual";
 
 interface ThreadFilterBarProps {
   flowModeFilter: FlowModeFilter;
-  searchQuery: string;
+  triggerFilter: TriggerFilter;
   onFlowModeChange: (mode: FlowModeFilter) => void;
-  onSearchChange: (query: string) => void;
+  onTriggerChange: (trigger: TriggerFilter) => void;
 }
 
 const flowModeOptions: { id: FlowModeFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "thread", label: "Threads" },
-  { id: "flow", label: "Flows" },
   { id: "dump", label: "Dumps" },
+];
+
+const triggerOptions: { id: TriggerFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "automatic", label: "Auto" },
+  { id: "manual", label: "Manual" },
 ];
 
 export function ThreadFilterBar({
   flowModeFilter,
-  searchQuery,
+  triggerFilter,
   onFlowModeChange,
-  onSearchChange,
+  onTriggerChange,
 }: ThreadFilterBarProps) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex items-center gap-2 flex-wrap">
       {/* Flow Mode Filter Group */}
       <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl">
         {flowModeOptions.map((option) => {
@@ -57,23 +61,37 @@ export function ThreadFilterBar({
         })}
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-        <Input
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search threads..."
-          className="pl-10 pr-10 h-11 rounded-xl text-sm bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-ring"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => onSearchChange("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-secondary transition-colors"
-          >
-            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-          </button>
-        )}
+      {/* Divider */}
+      <div className="h-6 w-px bg-border/50" />
+
+      {/* Trigger Type Filter Group */}
+      <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl">
+        {triggerOptions.map((option) => {
+          const isActive = triggerFilter === option.id;
+          return (
+            <motion.button
+              key={option.id}
+              onClick={() => onTriggerChange(option.id)}
+              whileTap={{ scale: 0.95 }}
+              className={cn(
+                "relative px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200",
+                isActive
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="triggerActive"
+                  className="absolute inset-0 bg-background rounded-lg shadow-sm"
+                  initial={false}
+                  transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className="relative z-10">{option.label}</span>
+            </motion.button>
+          );
+        })}
       </div>
     </div>
   );

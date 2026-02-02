@@ -17,33 +17,29 @@ const flowEnabledThreads = [
   'linkedin-live', 'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker'
 ];
 
-type FlowModeFilter = "all" | "thread" | "flow" | "dump";
+type FlowModeFilter = "all" | "thread" | "dump";
+type TriggerFilter = "all" | "automatic" | "manual";
 
 export default function Threads() {
   const navigate = useNavigate();
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [flowModeFilter, setFlowModeFilter] = useState<FlowModeFilter>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>("all");
 
   const filteredThreads = useMemo(() => {
     return sampleThreads.filter((thread) => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesTitle = thread.title.toLowerCase().includes(query);
-        const matchesDescription = thread.description?.toLowerCase().includes(query);
-        if (!matchesTitle && !matchesDescription) {
-          return false;
-        }
-      }
       // Flow mode filter
       if (flowModeFilter !== "all" && thread.flowMode !== flowModeFilter) {
         return false;
       }
+      // Trigger type filter
+      if (triggerFilter !== "all" && thread.triggerType !== triggerFilter) {
+        return false;
+      }
       return true;
     });
-  }, [flowModeFilter, searchQuery]);
+  }, [flowModeFilter, triggerFilter]);
 
   const handleThreadClick = (thread: Thread) => {
     // For flow-enabled threads, go directly to overview
@@ -77,9 +73,9 @@ export default function Threads() {
         <div className="mt-4 mb-6">
           <ThreadFilterBar
             flowModeFilter={flowModeFilter}
-            searchQuery={searchQuery}
+            triggerFilter={triggerFilter}
             onFlowModeChange={setFlowModeFilter}
-            onSearchChange={setSearchQuery}
+            onTriggerChange={setTriggerFilter}
           />
         </div>
 

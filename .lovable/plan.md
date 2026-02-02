@@ -1,113 +1,135 @@
 
-# Threads Page UI Enhancements
+# Fix Instagram Live Monitoring - Complete Root Cause Analysis
 
-## Overview
-This plan implements three key improvements to the `/threads` page:
-1. Larger integration icons without transparent frames, using complementary color glows
-2. Replace auto/manual filter with a unified type filter (Threads, Flows, Dumps)
-3. Add a search bar positioned **below** the filter buttons
+## Executive Summary
 
----
+The Instagram automation IS working - posts are being stored locally and memories are being created. However, the stats counters (`posts_tracked`, etc.) are not incrementing correctly, giving the false impression that nothing is being tracked.
 
-## 1. Layout: Filter Buttons Above Search Bar
+## Detailed Root Cause Analysis
 
-### Visual Design
+### Evidence Summary
+
+| Metric | Expected | Actual | Verdict |
+|--------|----------|--------|---------|
+| Cron job exists | Yes | Yes | OK |
+| Posts stored in `instagram_synced_post_content` | 10+ | 11 | OK |
+| Posts tracked in `instagram_processed_engagement` | 10+ | 10 | OK |
+| Memories created via LIAM | Yes | Yes (logs confirm SUCCESS) | OK |
+| `last_polled_at` updated | 20:35:14 | 20:35:14 | OK |
+| `posts_tracked` counter | 10 | 0 | BUG |
+
+### The Bug: Stats Not Incrementing
+
+Looking at the code flow:
+
 ```text
-┌────┬─────────┬───────┬───────┐
-│ All│ Threads │ Flows │ Dumps │    ← Filter pills (animated, existing pattern)
-└────┴─────────┴───────┴───────┘
-┌─────────────────────────────────────────────┐
-│ 🔍  Search threads...                    ✕  │    ← Search bar below
-└─────────────────────────────────────────────┘
+Line 422: let postsTracked = config.posts_tracked || 0;  // Reads 0 from DB
+Line 450: if (!existingPost && config.monitor_new_posts) {
+Line 473:   postsTracked++;  // Should increment to 1, 2, 3...10
+Line 524-532: await supabase.update({ posts_tracked: postsTracked })
 ```
 
-### Rationale
-- Filter buttons remain visually prominent at the top
-- Search dropdown/results won't obscure the filter controls
-- Follows mobile-first design where primary actions are most accessible
-- Consistent with the hierarchy: filter → refine → browse
+The log shows `Cron poll: User X - 10 new items`, proving 10 posts were processed. The `last_polled_at` IS being updated, so the update query runs. But `posts_tracked` stays at 0.
 
----
+**Root Cause Identified**: The variable `postsTracked` only increments when a post is NOT already in `instagram_processed_engagement`. But looking more carefully at the timeline:
 
-## 2. Integration Icons Enhancement
+- 20:35:05-13: Each post inserted into `instagram_processed_engagement` 
+- The FIRST cron run should process all 10 posts (none exist yet)
+- `postsTracked` should be 10
 
-### Current State
-- Icons wrapped in `w-6 h-6` container with `bg-white/20 backdrop-blur-sm`
-- Icon size is `w-4 h-4` (16px)
+But the counter shows 0! This means:
+1. The increment IS happening (logs show "10 new items")
+2. The update IS running (last_polled_at changes)
+3. But `posts_tracked` specifically isn't persisting
 
-### Changes
-- Remove the wrapper container entirely
-- Increase icon size to `w-7 h-7` (28px) for better visibility
-- Add subtle complementary color glow around each icon
+**Likely Cause**: The `config` passed to `processUserInstagram` may have `posts_tracked` as `null` instead of `0`, and the `|| 0` handles this. But when updating, if there's a type mismatch or the column expects an integer and receives something else, it might fail silently.
 
-### Complementary Color Mapping
-Using color theory (180° on color wheel):
+Actually - re-examining the update logic, I notice there's NO error handling on the update:
 
-| Integration | Primary Color | Complementary Glow |
-|-------------|---------------|-------------------|
-| Gmail | #EA4335 (Red) | #16BC9A (Teal) |
-| Instagram | #E1306C (Pink) | #1ECF93 (Mint) |
-| Twitter | #000000 (Black) | #FFFFFF (White) |
-| YouTube | #FF0000 (Red) | #00FFFF (Cyan) |
-| LinkedIn | #0A66C2 (Blue) | #F5993D (Orange) |
-| HubSpot | #FF7A59 (Orange) | #0085A6 (Teal-Blue) |
-| Trello | #0052CC (Blue) | #CCAD00 (Gold) |
-| Google Photos | #4285F4 (Blue) | #BC7A0B (Amber) |
-
----
-
-## 3. Filter Restructure
-
-### Type Changes (`src/types/threads.ts`)
-Add "flow" to the `FlowMode` type:
 ```typescript
-export type FlowMode = "thread" | "flow" | "dump";
+await supabase.from("instagram_automation_config").update({...});
+// No .then() or error check!
 ```
 
-### Data Recategorization (`src/data/threads.ts`)
-- **Threads**: Automatic background polling/webhooks
-- **Flows**: Manual multi-step wizards (interests, family, receipts, llm-import, food-preferences)
-- **Dumps**: Bulk sync imports (instagram-sync, twitter-sync, etc.)
+### Additional Issue: Deduplication Table Mismatch
 
-### Thread Data Updates
-| Thread ID | Current flowMode | New flowMode |
-|-----------|-----------------|--------------|
-| interests | dump | flow |
-| receipts | dump | flow |
-| family | dump | flow |
-| food-preferences | dump | flow |
-| llm-import | dump | flow |
-| email-dump | dump | flow |
+Two separate deduplication systems:
+- `instagram-sync` uses `instagram_synced_posts` table
+- `instagram-automation-poll` uses `instagram_processed_engagement` table
+
+This means posts synced manually will be re-processed by automation, potentially creating duplicate memories.
 
 ---
 
-## 4. ThreadTypeBadge Updates
+## Solution Plan
 
-Add support for the new "flow" mode with a distinct color:
+### Fix 1: Add Error Logging to Stats Update
 
-| Flow Mode | Background | Text | Border |
-|-----------|-----------|------|--------|
-| Thread | `bg-blue-500/20` | `text-blue-100` | `border-blue-400/30` |
-| Flow | `bg-purple-500/20` | `text-purple-100` | `border-purple-400/30` |
-| Dump | `bg-teal-500/20` | `text-teal-100` | `border-teal-400/30` |
+Add proper error handling to debug and prevent silent failures:
 
----
+```typescript
+// Update stats with error handling
+const { error: updateError } = await supabase
+  .from("instagram_automation_config")
+  .update({
+    last_polled_at: new Date().toISOString(),
+    posts_tracked: postsTracked,
+    comments_tracked: commentsTracked,
+    likes_tracked: likesTracked,
+  })
+  .eq("user_id", userId);
 
-## 5. Search Implementation
+if (updateError) {
+  console.error(`[Stats] Failed to update config for user ${userId}:`, updateError);
+} else {
+  console.log(`[Stats] Updated: posts=${postsTracked}, comments=${commentsTracked}, likes=${likesTracked}`);
+}
+```
 
-### Search Bar Component (within `ThreadFilterBar.tsx`)
-Following the established pattern from `ContactSearch.tsx`:
+### Fix 2: Use Unified Deduplication Table
 
-- Rounded corners (`rounded-xl`)
-- Muted background (`bg-secondary/50`)
-- No border (`border-0`)
-- Search icon on left, clear X on right
-- Consistent padding and height
+Consolidate deduplication to use `instagram_synced_post_content` as the single source of truth:
 
-### Filtering Logic (`Threads.tsx`)
-Case-insensitive search matching against:
-- Thread title
-- Thread description
+```typescript
+// Check if post already in local storage (unified deduplication)
+const { data: existingPost } = await supabase
+  .from("instagram_synced_post_content")
+  .select("id")
+  .eq("user_id", userId)
+  .eq("instagram_post_id", post.id)
+  .maybeSingle();
+
+if (!existingPost && config.monitor_new_posts) {
+  // Process new post...
+}
+```
+
+This ensures:
+- Posts synced via `instagram-sync` won't be re-processed by automation
+- Single source of truth for what's been captured
+- No duplicate memories
+
+### Fix 3: Calculate Stats from Actual Data
+
+Instead of relying on incrementing counters, calculate stats from actual table counts:
+
+```typescript
+// Get accurate counts from actual data
+const { count: postsCount } = await supabase
+  .from("instagram_synced_post_content")
+  .select("*", { count: "exact", head: true })
+  .eq("user_id", userId);
+
+await supabase
+  .from("instagram_automation_config")
+  .update({
+    last_polled_at: new Date().toISOString(),
+    posts_tracked: postsCount || 0,
+  })
+  .eq("user_id", userId);
+```
+
+This ensures the counter always reflects reality.
 
 ---
 
@@ -115,104 +137,68 @@ Case-insensitive search matching against:
 
 | File | Changes |
 |------|---------|
-| `src/types/threads.ts` | Add "flow" to `FlowMode` type |
-| `src/data/threads.ts` | Update `flowMode` for wizard-type threads |
-| `src/components/integrations/IntegrationIcon.tsx` | Add `useComplementaryBg` prop with color mapping |
-| `src/components/ThreadCard.tsx` | Remove icon wrapper, use larger icons with complementary glow |
-| `src/components/threads/ThreadTypeBadge.tsx` | Add "flow" styling |
-| `src/components/threads/ThreadFilterBar.tsx` | Remove trigger filter, add "Flows" option, add search bar below pills |
-| `src/pages/Threads.tsx` | Add search state, update filtering logic, remove trigger filter state |
+| `supabase/functions/instagram-automation-poll/index.ts` | Add error logging, unify deduplication, fix stats calculation |
 
 ---
 
-## Technical Details
+## Technical Implementation Details
 
-### ThreadFilterBar.tsx - New Structure
-```tsx
-interface ThreadFilterBarProps {
-  flowModeFilter: FlowModeFilter;
-  searchQuery: string;
-  onFlowModeChange: (mode: FlowModeFilter) => void;
-  onSearchChange: (query: string) => void;
+### Changes to `processUserInstagram` function:
+
+1. **Replace deduplication check** - Use `instagram_synced_post_content` instead of `instagram_processed_engagement`
+
+2. **Add logging for stats update** - Capture and log any errors from the update query
+
+3. **Calculate stats from actual data** - Query the count of posts in `instagram_synced_post_content` for accurate stats
+
+4. **Remove redundant `instagram_processed_engagement` inserts** - Since we're using `instagram_synced_post_content` for deduplication, we can skip the separate engagement table for posts (keep it for comments if needed)
+
+### Sample Code Changes:
+
+```typescript
+// Before processing loop
+const { data: existingPosts } = await supabase
+  .from("instagram_synced_post_content")
+  .select("instagram_post_id")
+  .eq("user_id", userId);
+
+const existingPostIds = new Set(existingPosts?.map(p => p.instagram_post_id) || []);
+
+// In the loop
+if (!existingPostIds.has(post.id) && config.monitor_new_posts) {
+  // Store post locally (this is the deduplication)
+  await storePostLocally(supabase, userId, post, mediaUrl);
+  // ... create memory ...
+  newItems++;
 }
 
-// Render order:
-// 1. Filter pills (horizontal, with framer-motion animations)
-// 2. Search bar (full width, below filters)
+// After processing - get accurate count
+const { count: totalPosts } = await supabase
+  .from("instagram_synced_post_content")
+  .select("*", { count: "exact", head: true })
+  .eq("user_id", userId);
 
-return (
-  <div className="flex flex-col gap-3">
-    {/* Filter Pills - existing animated buttons */}
-    <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl">
-      {flowModeOptions.map(...)}
-    </div>
-    
-    {/* Search Bar - positioned below */}
-    <div className="relative">
-      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-      <Input
-        value={searchQuery}
-        onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search threads..."
-        className="pl-10 pr-10 h-11 rounded-xl text-sm bg-secondary/50 border-0"
-      />
-      {searchQuery && (
-        <button onClick={() => onSearchChange("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-          <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-        </button>
-      )}
-    </div>
-  </div>
-);
-```
+// Update with actual count
+const { error: updateError } = await supabase
+  .from("instagram_automation_config")
+  .update({
+    last_polled_at: new Date().toISOString(),
+    posts_tracked: totalPosts || 0,
+  })
+  .eq("user_id", userId);
 
-### IntegrationIcon.tsx - Complementary Glow
-```tsx
-const integrationColors: Record<string, { complementary: string }> = {
-  gmail: { complementary: "#16BC9A" },
-  instagram: { complementary: "#1ECF93" },
-  twitter: { complementary: "#FFFFFF" },
-  youtube: { complementary: "#00FFFF" },
-  linkedin: { complementary: "#F5993D" },
-  hubspot: { complementary: "#0085A6" },
-  trello: { complementary: "#CCAD00" },
-  googlephotos: { complementary: "#BC7A0B" },
-  // ... etc
-};
-
-// When useComplementaryBg is true:
-<div 
-  className="relative"
-  style={{ 
-    filter: `drop-shadow(0 0 6px ${integrationColors[icon]?.complementary || 'rgba(255,255,255,0.3)'})` 
-  }}
->
-  <img src={iconSrc} ... />
-</div>
-```
-
-### ThreadCard.tsx - Simplified Icon Rendering
-```tsx
-{hasIntegrations && (
-  <div className="flex items-center gap-2">
-    {thread.integrations!.map((integration) => (
-      <IntegrationIcon
-        key={integration}
-        icon={integration}
-        className="w-7 h-7"
-        useComplementaryBg
-      />
-    ))}
-  </div>
-)}
+if (updateError) {
+  console.error(`[Stats] Update failed:`, updateError);
+}
 ```
 
 ---
 
-## Accessibility & UX Considerations
+## Expected Outcomes
 
-- Search input includes a visible clear button for easy reset
-- Filter buttons maintain existing spring animations for satisfying tactile feedback
-- Icon glow effects are subtle (drop-shadow) to enhance without distracting
-- Search is positioned for thumb-friendly mobile interaction
-- Empty state messaging updated to reflect search + filter combinations
+After implementation:
+1. Stats counters will accurately reflect the number of stored posts
+2. No duplicate processing between manual sync and automation
+3. Clear error logging for any database update failures
+4. Single source of truth for Instagram content (`instagram_synced_post_content`)
+5. UI will display accurate "Posts Tracked" count

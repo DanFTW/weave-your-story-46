@@ -8,7 +8,7 @@ export type ThreadType = "automation" | "flow";
 
 export type TriggerType = "automatic" | "manual";
 
-export type FlowMode = "thread" | "flow" | "dump";
+export type FlowMode = "thread" | "dump";
 
 export interface Thread {
   id: string;

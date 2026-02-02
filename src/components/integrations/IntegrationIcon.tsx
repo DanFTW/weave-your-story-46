@@ -51,32 +51,7 @@ import googlesuperIcon from "@/assets/integrations/googlesuper.svg";
 interface IntegrationIconProps {
   icon: string;
   className?: string;
-  useComplementaryBg?: boolean;
 }
-
-// Complementary color mapping for integration icons (180° on color wheel)
-const integrationGlowColors: Record<string, string> = {
-  gmail: "#16BC9A",       // Red → Teal
-  instagram: "#1ECF93",   // Pink → Mint
-  twitter: "#FFFFFF",     // Black → White
-  youtube: "#00FFFF",     // Red → Cyan
-  linkedin: "#F5993D",    // Blue → Orange
-  hubspot: "#0085A6",     // Orange → Teal-Blue
-  trello: "#CCAD00",      // Blue → Gold
-  googlephotos: "#BC7A0B", // Blue → Amber
-  camera: "#00D4AA",      // Default → Teal
-  spotify: "#00FFB3",     // Green → Pink-ish (complementary)
-  discord: "#FFB347",     // Purple → Orange
-  github: "#FFFFFF",      // Black → White
-  notion: "#FFFFFF",      // Black → White
-  zoom: "#FF5A5F",        // Blue → Coral
-  slack: "#FF69B4",       // Multi → Pink accent
-  figma: "#00CED1",       // Multi → Dark Cyan
-  reddit: "#00BFFF",      // Orange → Deep Sky Blue
-  facebook: "#FFD700",    // Blue → Gold
-  whatsapp: "#FF6B6B",    // Green → Coral
-  perplexity: "#FFFFFF",  // Black → White
-};
 
 // Map icon names to imported images
 const iconImages: Record<string, string> = {
@@ -127,21 +102,15 @@ const iconImages: Record<string, string> = {
   googlesuper: googlesuperIcon,
 };
 
-export function IntegrationIcon({ icon, className, useComplementaryBg }: IntegrationIconProps) {
+export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
   const iconSrc = iconImages[icon];
 
   if (iconSrc) {
     // Icons that need to be inverted for visibility on dark backgrounds
     const needsInvert = icon === 'twitter' || icon === 'github' || icon === 'notion' || icon === 'perplexity';
-    const glowColor = integrationGlowColors[icon] || 'rgba(255,255,255,0.3)';
     
     return (
-      <div 
-        className={cn("flex-shrink-0", className)}
-        style={useComplementaryBg ? { 
-          filter: `drop-shadow(0 0 6px ${glowColor})` 
-        } : undefined}
-      >
+      <div className={cn("w-11 h-11 flex-shrink-0", className)}>
         <img 
           src={iconSrc} 
           alt={`${icon} icon`}
@@ -156,7 +125,7 @@ export function IntegrationIcon({ icon, className, useComplementaryBg }: Integra
 
   // Fallback
   return (
-    <div className={cn("rounded-xl bg-muted flex items-center justify-center flex-shrink-0", className)}>
+    <div className={cn("w-11 h-11 rounded-xl bg-muted flex items-center justify-center flex-shrink-0", className)}>
       <span className="text-muted-foreground text-xs font-medium">{icon[0].toUpperCase()}</span>
     </div>
   );
