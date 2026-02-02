@@ -18,9 +18,17 @@ const gradientClasses: Record<ThreadGradient, string> = {
   pink: "thread-gradient-pink",
 };
 
+// Filler icons that represent device capabilities, not external services
+const fillerIntegrations = ["camera", "location"];
+
 export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
   const Icon = thread.icon;
-  const hasIntegrations = thread.integrations && thread.integrations.length > 0;
+  
+  // Filter out filler integrations (device capabilities, not services)
+  const serviceIntegrations = thread.integrations?.filter(
+    (integration) => !fillerIntegrations.includes(integration)
+  );
+  const hasIntegrations = serviceIntegrations && serviceIntegrations.length > 0;
 
   return (
     <button
@@ -58,12 +66,12 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
         </div>
       </div>
 
-      {/* Bottom Row: Integrations + Badge */}
+      {/* Bottom Row: Integrations + Badges */}
       <div className="mt-auto pt-4 flex items-center gap-2 flex-wrap">
-        {/* Integration Icons */}
+        {/* Integration Icons (filtered) */}
         {hasIntegrations && (
           <div className="flex items-center gap-2">
-            {thread.integrations!.map((integration) => (
+            {serviceIntegrations!.map((integration) => (
               <IntegrationIcon
                 key={integration}
                 icon={integration}
@@ -76,8 +84,11 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Badge */}
-        <ThreadTypeBadge variant="flowMode" flowMode={thread.flowMode} />
+        {/* Badges - Auto/Manual + Flow Mode */}
+        <div className="flex items-center gap-1.5">
+          <ThreadTypeBadge variant="triggerType" triggerType={thread.triggerType} />
+          <ThreadTypeBadge variant="flowMode" flowMode={thread.flowMode} />
+        </div>
       </div>
 
       {/* Subtle gradient overlay for depth */}
