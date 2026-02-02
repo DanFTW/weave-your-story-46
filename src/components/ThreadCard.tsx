@@ -65,7 +65,7 @@ export function ThreadCard({ thread, onClick, className, fixedHeight = false }: 
       <div className="flex items-start gap-3">
         {/* Title and Description - takes full width */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-white leading-tight">
+          <h3 className="text-lg font-semibold text-white leading-tight truncate">
             {thread.title}
           </h3>
           {thread.description && (
