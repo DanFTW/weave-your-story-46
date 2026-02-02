@@ -18,17 +18,34 @@ const gradientClasses: Record<ThreadGradient, string> = {
   pink: "thread-gradient-pink",
 };
 
+// Integration complementary color gradients
+// Based on color wheel theory - complementary colors to brand colors
+const integrationGradients: Record<string, string> = {
+  twitter: "linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)",
+  instagram: "linear-gradient(135deg, #1ECF93 0%, #15A676 100%)",
+  gmail: "linear-gradient(135deg, #16BC9A 0%, #0F9A7D 100%)",
+  youtube: "linear-gradient(135deg, #00D4D4 0%, #00A3A3 100%)",
+  linkedin: "linear-gradient(135deg, #F5993D 0%, #D97B1F 100%)",
+  hubspot: "linear-gradient(135deg, #0085A6 0%, #006680 100%)",
+  trello: "linear-gradient(135deg, #CCAD00 0%, #A68C00 100%)",
+  googlephotos: "linear-gradient(135deg, #BC7A0B 0%, #956208 100%)",
+};
+
 // Filler icons that represent device capabilities, not external services
 const fillerIntegrations = ["camera", "location"];
 
 export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
-  const Icon = thread.icon;
-  
   // Filter out filler integrations (device capabilities, not services)
   const serviceIntegrations = thread.integrations?.filter(
     (integration) => !fillerIntegrations.includes(integration)
   );
   const hasIntegrations = serviceIntegrations && serviceIntegrations.length > 0;
+  
+  // Get the primary integration for dynamic gradient
+  const primaryIntegration = serviceIntegrations?.[0];
+  const dynamicGradient = primaryIntegration 
+    ? integrationGradients[primaryIntegration] 
+    : undefined;
 
   return (
     <button
@@ -37,18 +54,14 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
         "w-full relative overflow-hidden rounded-2xl p-5 text-left",
         "min-h-[140px] flex flex-col",
         "shadow-lg shadow-black/5 active:scale-[0.98] transition-transform",
-        gradientClasses[thread.gradient],
+        !dynamicGradient && gradientClasses[thread.gradient],
         className
       )}
+      style={dynamicGradient ? { background: dynamicGradient } : undefined}
     >
-      {/* Top Row: Icon, Title, Arrow */}
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-          <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />
-        </div>
-
-        {/* Title and Description */}
+      {/* Top Row: Title + Arrow */}
+      <div className="flex items-start gap-3">
+        {/* Title and Description - takes full width */}
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-semibold text-white leading-tight">
             {thread.title}
