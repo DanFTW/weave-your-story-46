@@ -8,6 +8,7 @@ interface ThreadCardProps {
   thread: Thread;
   onClick?: () => void;
   className?: string;
+  fixedHeight?: boolean;
 }
 
 const gradientClasses: Record<ThreadGradient, string> = {
@@ -34,7 +35,7 @@ const integrationGradients: Record<string, string> = {
 // Filler icons that represent device capabilities, not external services
 const fillerIntegrations = ["camera", "location"];
 
-export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
+export function ThreadCard({ thread, onClick, className, fixedHeight = false }: ThreadCardProps) {
   // Filter out filler integrations (device capabilities, not services)
   const serviceIntegrations = thread.integrations?.filter(
     (integration) => !fillerIntegrations.includes(integration)
@@ -52,7 +53,8 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
       onClick={onClick}
       className={cn(
         "w-full relative overflow-hidden rounded-2xl p-5 text-left",
-        "min-h-[140px] flex flex-col",
+        fixedHeight ? "h-[140px]" : "min-h-[140px]",
+        "flex flex-col",
         "shadow-lg shadow-black/5 active:scale-[0.98] transition-transform",
         !dynamicGradient && gradientClasses[thread.gradient],
         className
