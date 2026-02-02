@@ -1,114 +1,96 @@
 
-# Thread Card Consistent Height on Home Page
+
+# Single-Line Title Truncation for Thread Cards
 
 ## Summary
-Ensure all thread cards in the Home page carousel have the same fixed height for a consistent, polished carousel experience.
+Truncate thread card titles to a single line with ellipsis (...) instead of allowing them to wrap. This ensures consistent card heights without needing to adjust card dimensions or flex layouts.
 
 ---
 
-## Problem Analysis
+## Problem
 
-**Current Behavior:**
-- The `ThreadCard` component uses `min-h-[140px]` which only sets a minimum height
-- Cards with longer descriptions expand taller than cards with shorter descriptions
-- This creates an uneven visual appearance in the carousel
+Currently, long titles like "HubSpot Contact Tracker" can wrap to 2 lines, pushing the description and footer down, causing overflow or inconsistent card heights.
 
-**On `/threads` page:**
-- Cards stacked vertically look fine with variable heights
-- Natural content flow where each card size matches its content
-
-**On Home page (`/`):**
-- Horizontal carousel where inconsistent heights look jarring
-- Cards should align perfectly for smooth swiping experience
+**Current behavior:**
+```text
+┌─────────────────────────────────────┐
+│ HubSpot Contact          [→]       │
+│ Tracker                             │  ← Title wraps to 2 lines
+│ Automatically save new CRM...       │
+│                                     │
+│ 🔶              [Auto] [Thread]     │  ← Footer gets pushed down
+└─────────────────────────────────────┘
+```
 
 ---
 
 ## Solution
 
-Add an optional `fixedHeight` prop to `ThreadCard` that enforces a consistent height when used in carousel contexts like the Home page.
+Apply `truncate` class to the title `<h3>` element, which adds:
+- `overflow: hidden`
+- `text-overflow: ellipsis`
+- `white-space: nowrap`
+
+**After fix:**
+```text
+┌─────────────────────────────────────┐
+│ HubSpot Contact Tracker...   [→]   │  ← Single line, truncated
+│ Automatically save new CRM...       │
+│                                     │
+│ 🔶              [Auto] [Thread]     │  ← Footer stays in place
+└─────────────────────────────────────┘
+```
 
 ---
 
-## Files to Modify
+## File Changes
 
-| File | Changes |
-|------|---------|
-| `src/components/ThreadCard.tsx` | Add optional `fixedHeight` prop |
-| `src/pages/Home.tsx` | Pass `fixedHeight` prop to ThreadCard |
+### `src/components/ThreadCard.tsx`
+
+**Line 68** - Add `truncate` class to title:
+
+```tsx
+// Before
+<h3 className="text-lg font-semibold text-white leading-tight">
+  {thread.title}
+</h3>
+
+// After
+<h3 className="text-lg font-semibold text-white leading-tight truncate">
+  {thread.title}
+</h3>
+```
 
 ---
 
-## Code Changes
+## Technical Details
 
-### 1. ThreadCard.tsx - Add `fixedHeight` prop
+| Property | Value | Effect |
+|----------|-------|--------|
+| `truncate` | Tailwind utility | Combines `overflow-hidden`, `text-overflow: ellipsis`, `white-space: nowrap` |
+| Parent `min-w-0` | Already present | Allows flex child to shrink below content size (required for truncation to work) |
 
-```tsx
-interface ThreadCardProps {
-  thread: Thread;
-  onClick?: () => void;
-  className?: string;
-  fixedHeight?: boolean;  // NEW: When true, use fixed height instead of min-height
-}
-
-export function ThreadCard({ thread, onClick, className, fixedHeight = false }: ThreadCardProps) {
-  // ... existing code ...
-
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "w-full relative overflow-hidden rounded-2xl p-5 text-left",
-        fixedHeight ? "h-[140px]" : "min-h-[140px]",  // Fixed vs minimum height
-        "flex flex-col",
-        "shadow-lg shadow-black/5 active:scale-[0.98] transition-transform",
-        !dynamicGradient && gradientClasses[thread.gradient],
-        className
-      )}
-      // ... rest unchanged
-    >
-```
-
-### 2. Home.tsx - Use fixed height for carousel cards
-
-```tsx
-<ThreadCard
-  thread={thread}
-  onClick={() => navigate(`/thread/${thread.id}`)}
-  fixedHeight  // Ensures consistent height in carousel
-/>
-```
+The parent `<div className="flex-1 min-w-0">` already has `min-w-0` which is required for text truncation to work properly in flexbox contexts.
 
 ---
 
 ## Visual Comparison
 
-### Before (inconsistent heights)
+### Before
 ```text
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│ Short title     │  │ Long title      │  │ Medium title    │
-│ Brief desc      │  │ Very long desc  │  │ Two line        │
-│                 │  │ that spans      │  │ description     │
-│ [Auto] [Thread] │  │ multiple lines  │  │                 │
-└─────────────────┘  │ with extra text │  │ [Auto] [Flow]   │
-                     │ [Manual] [Dump] │  └─────────────────┘
-                     └─────────────────┘
+Twitter Alpha          [→]
+Tracker
+Track posts from any...
 ```
 
-### After (consistent fixed heights)
+### After
 ```text
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│ Short title     │  │ Long title      │  │ Medium title    │
-│ Brief desc      │  │ Very long de... │  │ Two line        │
-│                 │  │                 │  │ description     │
-│ [Auto] [Thread] │  │ [Manual] [Dump] │  │ [Auto] [Flow]   │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
+Twitter Alpha Tracker...  [→]
+Track posts from any...
 ```
 
----
+All cards will now have consistent vertical rhythm with:
+- 1 line for title (truncated if needed)
+- Up to 2 lines for description (already has `line-clamp-2`)
+- Fixed footer row with icons and badges
 
-## Technical Notes
-
-- Default behavior (`fixedHeight = false`) maintains backward compatibility
-- The `/threads` page continues to use variable heights for natural content flow
-- Description truncation via `line-clamp-2` already prevents overflow
-- Uses Tailwind's `h-[140px]` for fixed height vs `min-h-[140px]` for minimum
