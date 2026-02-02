@@ -10,18 +10,27 @@ interface ThreadTypeBadgeProps {
 
 export function ThreadTypeBadge({ flowMode, triggerType, variant, className }: ThreadTypeBadgeProps) {
   if (variant === "flowMode" && flowMode) {
-    const isThread = flowMode === "thread";
+    const colorClasses = {
+      thread: "bg-blue-500/20 text-blue-100 border border-blue-400/30",
+      flow: "bg-purple-500/20 text-purple-100 border border-purple-400/30",
+      dump: "bg-teal-500/20 text-teal-100 border border-teal-400/30",
+    };
+
+    const labels = {
+      thread: "Thread",
+      flow: "Flow",
+      dump: "Dump",
+    };
+
     return (
       <span
         className={cn(
           "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide",
-          isThread
-            ? "bg-blue-500/20 text-blue-100 border border-blue-400/30"
-            : "bg-teal-500/20 text-teal-100 border border-teal-400/30",
+          colorClasses[flowMode],
           className
         )}
       >
-        {isThread ? "Thread" : "Dump"}
+        {labels[flowMode]}
       </span>
     );
   }

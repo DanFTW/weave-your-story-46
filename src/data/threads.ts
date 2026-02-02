@@ -156,7 +156,7 @@ export const sampleThreads: Thread[] = [
     category: "import",
     integrations: [],
     triggerType: "manual",
-    flowMode: "dump",
+    flowMode: "flow",
   },
   {
     id: "interests",
@@ -169,7 +169,7 @@ export const sampleThreads: Thread[] = [
     category: "personal",
     integrations: [],
     triggerType: "manual",
-    flowMode: "dump",
+    flowMode: "flow",
   },
   {
     id: "receipts",
@@ -182,7 +182,7 @@ export const sampleThreads: Thread[] = [
     category: "purchases",
     integrations: ["camera"],
     triggerType: "manual",
-    flowMode: "dump",
+    flowMode: "flow",
   },
   {
     id: "email-dump",
@@ -208,7 +208,7 @@ export const sampleThreads: Thread[] = [
     category: "people",
     integrations: [],
     triggerType: "manual",
-    flowMode: "dump",
+    flowMode: "flow",
   },
   {
     id: "food-preferences",
@@ -221,6 +221,6 @@ export const sampleThreads: Thread[] = [
     category: "preferences",
     integrations: [],
     triggerType: "manual",
-    flowMode: "dump",
+    flowMode: "flow",
   },
 ];

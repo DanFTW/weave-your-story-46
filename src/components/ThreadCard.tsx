@@ -58,18 +58,17 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
         </div>
       </div>
 
-      {/* Bottom Row: Integrations + Badges */}
+      {/* Bottom Row: Integrations + Badge */}
       <div className="mt-auto pt-4 flex items-center gap-2 flex-wrap">
         {/* Integration Icons */}
         {hasIntegrations && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {thread.integrations!.map((integration) => (
-              <div
+              <IntegrationIcon
                 key={integration}
-                className="w-6 h-6 rounded-md bg-white/20 backdrop-blur-sm flex items-center justify-center overflow-hidden"
-              >
-                <IntegrationIcon icon={integration} className="w-4 h-4" />
-              </div>
+                icon={integration}
+                className="w-7 h-7"
+              />
             ))}
           </div>
         )}
@@ -77,11 +76,8 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Badges */}
-        <div className="flex items-center gap-1.5">
-          <ThreadTypeBadge variant="flowMode" flowMode={thread.flowMode} />
-          <ThreadTypeBadge variant="triggerType" triggerType={thread.triggerType} />
-        </div>
+        {/* Badge */}
+        <ThreadTypeBadge variant="flowMode" flowMode={thread.flowMode} />
       </div>
 
       {/* Subtle gradient overlay for depth */}
