@@ -61,10 +61,11 @@ async function signRequest(privateKey: CryptoKey, body: object): Promise<string>
   return toDER(new Uint8Array(signature));
 }
 
-async function createMemory(apiKeys: any, content: string): Promise<boolean> {
+async function createMemory(apiKeys: any, content: string, tag?: string): Promise<boolean> {
   try {
     const privateKey = await importPrivateKey(apiKeys.private_key);
-    const body = { userKey: apiKeys.user_key, content };
+    const body: any = { userKey: apiKeys.user_key, content };
+    if (tag) body.tag = tag;
     const signature = await signRequest(privateKey, body);
     const response = await fetch(`${LIAM_API_BASE}/create`, {
       method: "POST",
@@ -95,36 +96,94 @@ function safeJsonParse(text: string): any {
 
 // === FORMAT TRANSCRIPT AS MEMORY ===
 
-function formatTranscriptAsMemory(transcript: any): string {
-  const parts = ["Fireflies Meeting Transcript", ""];
+// Max safe content size per memory chunk (chars). LIAM can handle ~10k comfortably.
+const MAX_MEMORY_CHUNK_SIZE = 8000;
 
+function formatTranscriptAsMemory(transcript: any): string[] {
   const title = transcript?.title || transcript?.meeting_title || transcript?.name || "Untitled Meeting";
-  parts.push(`Title: ${title}`);
 
+  // Build metadata header
+  const header: string[] = ["Fireflies Meeting Transcript", ""];
+  header.push(`Title: ${title}`);
   if (transcript?.date || transcript?.dateString) {
-    parts.push(`Date: ${transcript.date || transcript.dateString}`);
+    header.push(`Date: ${transcript.date || transcript.dateString}`);
   }
-
   if (transcript?.duration) {
     const mins = Math.round(transcript.duration / 60);
-    parts.push(`Duration: ${mins} minutes`);
+    header.push(`Duration: ${mins} minutes`);
   }
-
   if (transcript?.participants && Array.isArray(transcript.participants)) {
-    parts.push(`Participants: ${transcript.participants.join(", ")}`);
+    header.push(`Participants: ${transcript.participants.join(", ")}`);
   } else if (transcript?.organizer_email) {
-    parts.push(`Organizer: ${transcript.organizer_email}`);
+    header.push(`Organizer: ${transcript.organizer_email}`);
   }
 
-  if (transcript?.summary?.overview) {
-    parts.push("");
-    parts.push(`Summary: ${transcript.summary.overview}`);
+  // Summary section
+  if (transcript?.summary) {
+    header.push("");
+    if (transcript.summary.overview) {
+      header.push(`Summary: ${transcript.summary.overview}`);
+    }
+    if (transcript.summary.action_items && Array.isArray(transcript.summary.action_items) && transcript.summary.action_items.length > 0) {
+      header.push("");
+      header.push("Action Items:");
+      for (const item of transcript.summary.action_items) {
+        header.push(`• ${item}`);
+      }
+    }
+    if (transcript.summary.keywords && Array.isArray(transcript.summary.keywords) && transcript.summary.keywords.length > 0) {
+      header.push(`Keywords: ${transcript.summary.keywords.join(", ")}`);
+    }
   }
 
-  parts.push("");
-  parts.push("A meeting transcript was automatically saved from Fireflies.ai.");
+  // Full transcript dialogue
+  let dialogueText = "";
+  const sentences = transcript?.sentences || transcript?.transcript?.sentences;
+  if (Array.isArray(sentences) && sentences.length > 0) {
+    header.push("");
+    header.push("--- Transcript ---");
+    header.push("");
+    const lines: string[] = [];
+    for (const s of sentences) {
+      const speaker = s.speaker_name || s.speaker || "Unknown";
+      const text = s.text || s.raw_text || "";
+      if (text.trim()) lines.push(`${speaker}: ${text.trim()}`);
+    }
+    dialogueText = lines.join("\n");
+  }
 
-  return parts.join("\n");
+  const headerText = header.join("\n");
+  const fullContent = dialogueText ? `${headerText}\n${dialogueText}` : headerText;
+
+  // If small enough, return as single chunk
+  if (fullContent.length <= MAX_MEMORY_CHUNK_SIZE) {
+    return [fullContent];
+  }
+
+  // Chunk the dialogue, keeping header in each part
+  const chunks: string[] = [];
+  const availablePerChunk = MAX_MEMORY_CHUNK_SIZE - headerText.length - 50; // 50 for part label
+  const dialogueLines = dialogueText.split("\n");
+  let currentChunk: string[] = [];
+  let currentLen = 0;
+
+  for (const line of dialogueLines) {
+    if (currentLen + line.length + 1 > availablePerChunk && currentChunk.length > 0) {
+      chunks.push(currentChunk.join("\n"));
+      currentChunk = [];
+      currentLen = 0;
+    }
+    currentChunk.push(line);
+    currentLen += line.length + 1;
+  }
+  if (currentChunk.length > 0) chunks.push(currentChunk.join("\n"));
+
+  const totalParts = chunks.length;
+  return chunks.map((chunk, i) => {
+    const partLabel = `(Part ${i + 1}/${totalParts})`;
+    const partHeader = headerText.replace("Fireflies Meeting Transcript", `Fireflies Meeting Transcript ${partLabel}`);
+    return `${partHeader}\n${chunk}`;
+  });
 }
 
 // === WEBHOOK TOKEN GENERATOR ===
@@ -209,7 +268,7 @@ async function syncFirefliesTranscripts(
               "Authorization": `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
-              query: "{ transcripts { id title date duration participants organizer_email summary { overview } } }",
+              query: "{ transcripts { id title date duration participants organizer_email sentences { text speaker_name } summary { overview action_items keywords } } }",
             }),
           });
 
@@ -265,19 +324,25 @@ async function syncFirefliesTranscripts(
 
     // Create memory first, only mark processed on success
     if (apiKeys) {
-      const memoryContent = formatTranscriptAsMemory(transcript);
-      const success = await createMemory(apiKeys, memoryContent);
+      const memoryChunks = formatTranscriptAsMemory(transcript);
+      let allChunksSaved = true;
 
-      if (success) {
-        // Only insert into processed table after successful memory save
+      for (const chunk of memoryChunks) {
+        const success = await createMemory(apiKeys, chunk, "FIREFLIES");
+        if (!success) {
+          allChunksSaved = false;
+          console.warn(`[Fireflies Sync] Memory chunk failed for transcript ${transcriptId}, will retry next sync`);
+          break;
+        }
+      }
+
+      if (allChunksSaved) {
         await supabaseClient.from("fireflies_processed_transcripts").insert({
           user_id: userId,
           fireflies_transcript_id: transcriptId,
         });
         processed++;
-        console.log(`[Fireflies Sync] Memory created for transcript ${transcriptId}`);
-      } else {
-        console.warn(`[Fireflies Sync] Memory failed for transcript ${transcriptId}, will retry next sync`);
+        console.log(`[Fireflies Sync] Memory created (${memoryChunks.length} chunk(s)) for transcript ${transcriptId}`);
       }
     }
 

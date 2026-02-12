@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram, Twitter } from "lucide-react";
+import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram, Twitter, Mic } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -69,18 +69,19 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   interests: { icon: Heart, gradient: "bg-gradient-to-r from-pink-400 to-rose-500", label: "Interests" },
   instagram: { icon: Instagram, gradient: "bg-gradient-to-r from-pink-500 via-purple-500 to-orange-400", label: "Instagram" },
   twitter: { icon: Twitter, gradient: "bg-gradient-to-r from-gray-900 to-black", label: "Twitter" },
+  fireflies: { icon: Mic, gradient: "bg-gradient-to-r from-purple-500 to-pink-500", label: "Fireflies Transcript Tracker" },
 };
 
 export function getCategoryConfig(category?: string, tag?: string, content?: string) {
-  // Normalize and check category first
-  if (category) {
-    const lowerCategory = category.toLowerCase().replace(/\s+/g, '_');
-    if (categoryConfig[lowerCategory]) return categoryConfig[lowerCategory];
-  }
-  // Then check tag
+  // Normalize and check tag first (tag-based mapping takes priority)
   if (tag) {
     const lowerTag = tag.toLowerCase().replace(/\s+/g, '_');
     if (categoryConfig[lowerTag]) return categoryConfig[lowerTag];
+  }
+  // Then check category
+  if (category) {
+    const lowerCategory = category.toLowerCase().replace(/\s+/g, '_');
+    if (categoryConfig[lowerCategory]) return categoryConfig[lowerCategory];
   }
   // Check if category or tag contains known keywords
   const combined = `${category || ''} ${tag || ''}`.toLowerCase();
@@ -103,6 +104,10 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
   if (combined.includes('receipt')) return categoryConfig.receipt;
   if (combined.includes('instagram')) return categoryConfig.instagram;
   if (combined.includes('twitter') || combined.includes('tweet')) return categoryConfig.twitter;
+  if (combined.includes('fireflies')) return categoryConfig.fireflies;
+  
+  // Content-based fallback for fireflies
+  if (content && content.toLowerCase().includes('fireflies')) return categoryConfig.fireflies;
   
   return categoryConfig.default;
 }
@@ -111,7 +116,7 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
 const CATEGORY_TAGS = new Set([
   'twitter', 'instagram', 'email', 'receipt', 'receipts',
   'family', 'work', 'food', 'shopping', 'personal', 'lifestyle',
-  'quick_note', 'interests', 'tweet'
+  'quick_note', 'interests', 'tweet', 'fireflies'
 ]);
 
 function parseTags(memory: Memory): string[] {

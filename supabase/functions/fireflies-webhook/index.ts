@@ -147,41 +147,83 @@ async function fetchTranscriptViaComposio(userId: string, meetingId: string, sup
 
 // === FORMAT TRANSCRIPT AS MEMORY ===
 
-function formatTranscriptAsMemory(transcript: any, meetingId: string): string {
-  const parts = ["Fireflies Meeting Transcript", ""];
+const MAX_MEMORY_CHUNK_SIZE = 8000;
 
+function formatTranscriptAsMemory(transcript: any, meetingId: string): string[] {
   const title = transcript?.title || transcript?.meeting_title || `Meeting ${meetingId}`;
-  parts.push(`Title: ${title}`);
 
+  const header: string[] = ["Fireflies Meeting Transcript", ""];
+  header.push(`Title: ${title}`);
   if (transcript?.date || transcript?.dateString) {
-    parts.push(`Date: ${transcript.date || transcript.dateString}`);
+    header.push(`Date: ${transcript.date || transcript.dateString}`);
   }
-
   if (transcript?.duration) {
     const mins = Math.round(transcript.duration / 60);
-    parts.push(`Duration: ${mins} minutes`);
+    header.push(`Duration: ${mins} minutes`);
   }
-
   if (transcript?.participants && Array.isArray(transcript.participants)) {
-    parts.push(`Participants: ${transcript.participants.join(", ")}`);
+    header.push(`Participants: ${transcript.participants.join(", ")}`);
   } else if (transcript?.organizer_email) {
-    parts.push(`Organizer: ${transcript.organizer_email}`);
+    header.push(`Organizer: ${transcript.organizer_email}`);
   }
 
-  if (transcript?.summary?.overview) {
-    parts.push("");
-    parts.push(`Summary: ${transcript.summary.overview}`);
+  if (transcript?.summary) {
+    header.push("");
+    if (transcript.summary.overview) header.push(`Summary: ${transcript.summary.overview}`);
+    if (Array.isArray(transcript.summary.action_items) && transcript.summary.action_items.length > 0) {
+      header.push(""); header.push("Action Items:");
+      for (const item of transcript.summary.action_items) header.push(`• ${item}`);
+    }
+    if (Array.isArray(transcript.summary.keywords) && transcript.summary.keywords.length > 0) {
+      header.push(`Keywords: ${transcript.summary.keywords.join(", ")}`);
+    }
   }
 
-  parts.push("");
-  parts.push("A meeting transcript was automatically saved from Fireflies.ai.");
+  let dialogueText = "";
+  const sentences = transcript?.sentences || transcript?.transcript?.sentences;
+  if (Array.isArray(sentences) && sentences.length > 0) {
+    header.push(""); header.push("--- Transcript ---"); header.push("");
+    const lines: string[] = [];
+    for (const s of sentences) {
+      const speaker = s.speaker_name || s.speaker || "Unknown";
+      const text = s.text || s.raw_text || "";
+      if (text.trim()) lines.push(`${speaker}: ${text.trim()}`);
+    }
+    dialogueText = lines.join("\n");
+  }
 
-  return parts.join("\n");
+  const headerText = header.join("\n");
+  const fullContent = dialogueText ? `${headerText}\n${dialogueText}` : headerText;
+
+  if (fullContent.length <= MAX_MEMORY_CHUNK_SIZE) return [fullContent];
+
+  const chunks: string[] = [];
+  const availablePerChunk = MAX_MEMORY_CHUNK_SIZE - headerText.length - 50;
+  const dialogueLines = dialogueText.split("\n");
+  let currentChunk: string[] = [];
+  let currentLen = 0;
+
+  for (const line of dialogueLines) {
+    if (currentLen + line.length + 1 > availablePerChunk && currentChunk.length > 0) {
+      chunks.push(currentChunk.join("\n"));
+      currentChunk = []; currentLen = 0;
+    }
+    currentChunk.push(line);
+    currentLen += line.length + 1;
+  }
+  if (currentChunk.length > 0) chunks.push(currentChunk.join("\n"));
+
+  const totalParts = chunks.length;
+  return chunks.map((chunk, i) => {
+    const partLabel = `(Part ${i + 1}/${totalParts})`;
+    const partHeader = headerText.replace("Fireflies Meeting Transcript", `Fireflies Meeting Transcript ${partLabel}`);
+    return `${partHeader}\n${chunk}`;
+  });
 }
 
 // === SAVE MEMORY TO LIAM ===
 
-async function saveMemoryToLiam(supabase: any, userId: string, content: string): Promise<boolean> {
+async function saveMemoryToLiam(supabase: any, userId: string, content: string, tag?: string): Promise<boolean> {
   const { data: apiKeys } = await supabase
     .from("user_api_keys")
     .select("*")
@@ -195,7 +237,8 @@ async function saveMemoryToLiam(supabase: any, userId: string, content: string):
 
   try {
     const privateKey = await importPrivateKey(apiKeys.private_key);
-    const body = { userKey: apiKeys.user_key, content };
+    const body: any = { userKey: apiKeys.user_key, content };
+    if (tag) body.tag = tag;
     const signature = await signRequest(privateKey, body);
     const response = await fetch(`${LIAM_API_BASE}/create`, {
       method: "POST",
@@ -284,11 +327,15 @@ Deno.serve(async (req) => {
     // Fetch transcript details via Composio
     const transcript = await fetchTranscriptViaComposio(config.user_id, String(meetingId), supabase);
 
-    // Format memory
-    const memoryContent = formatTranscriptAsMemory(transcript, String(meetingId));
+    // Format memory (may return multiple chunks for large transcripts)
+    const memoryChunks = formatTranscriptAsMemory(transcript, String(meetingId));
 
-    // Save to LIAM first
-    const saved = await saveMemoryToLiam(supabase, config.user_id, memoryContent);
+    // Save all chunks to LIAM
+    let saved = true;
+    for (const chunk of memoryChunks) {
+      const chunkSaved = await saveMemoryToLiam(supabase, config.user_id, chunk, "FIREFLIES");
+      if (!chunkSaved) { saved = false; break; }
+    }
 
     if (saved) {
       // Only mark as processed after successful memory save (retry-safe)
