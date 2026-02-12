@@ -1,182 +1,134 @@
-# Todoist New Task Tracker (Event-Driven Version)
+# ✅ FINAL APPROVAL PLAN
 
-## Overview
-
-Create a new "Todoist New Task Tracker" thread that automatically saves new Todoist tasks as memories.
-
-Flow:
-
-1. Connect Todoist
-2. Toggle Monitoring On/Off
-
-This follows the HubSpot Contact Tracker UI pattern exactly, but uses a **Composio event trigger (**`TODOIST_NEW_TASK_CREATED`**) instead of polling + cron**, which is the modern 2026 best practice.
+# Fix: Todoist Activation Failure (Polling via Composio Tool)
 
 ---
 
-# Registration Points (UNCHANGED)
+## Root Cause (Confirmed)
 
-No structural changes.
+The Composio `TODOIST_NEW_TASK_CREATED` trigger is broken due to reliance on Todoist’s deprecated Sync API v8. This results in:
 
-1. `src/data/threads.ts`  
-Add `todoist-task-tracker` thread entry
-  - icon: `CheckSquare`
-  - gradient: `"orange"`
-  - flowMode: `"thread"`
-  - triggerType: `"automatic"`
-  - integrations: `["todoist"]`
-2. `src/data/threadConfigs.ts`  
-3 steps:
-  - Connect Todoist
-  - Enable Monitoring (toggle)
-  - Always-On Monitoring (LIVE badge)
-3. `src/data/flowConfigs.ts`  
-Add:
-  ```ts
-  isTodoistAutomationFlow: true
+```
+TriggerInstance_PollingConfigInvalid (1213)
 
-  ```
-4. `src/types/flows.ts`  
-Add:
-  ```ts
-  isTodoistAutomationFlow?: boolean
+```
 
-  ```
-5. `src/pages/Threads.tsx`  
-Add `'todoist-task-tracker'` to `flowEnabledThreads`
-6. `src/pages/ThreadOverview.tsx`  
-Add `'todoist-task-tracker'` to `flowEnabledThreads`
-7. `src/pages/FlowPage.tsx`  
-Add:
-  ```tsx
-  if (config.isTodoistAutomationFlow) {
-    return <TodoistAutomationFlow />;
-  }
+This is a provider-side issue and cannot be fixed within our system.
 
-  ```
+Because users authenticate through Composio’s OAuth app, we cannot register native Todoist webhooks ourselves.
+
+Therefore, webhook-based monitoring is not viable at this time.
 
 ---
 
-# Frontend Components (UNCHANGED UI)
+# ✅ Correct Architectural Solution
 
-Same structure as proposed.
+Switch from trigger-based monitoring to **polling via Composio’s** `TODOIST_GET_ALL_TASKS` **tool**, not via direct Todoist REST API calls.
 
-6. `src/types/todoistAutomation.ts`  
-Types:
-  - `TodoistAutomationPhase`
-  - `TodoistAutomationConfig`
-  - `TodoistTaskStats`
-  - `TodoistAutomationUpdatePayload`
-7. `src/hooks/useTodoistAutomation.ts`  
-Phases:
-  - `auth-check`
-  - `configure`
-  - `activating`
-  - `active`
-  Handles:
-  - Load config
-  - Activate
-  - Deactivate
-  - No manual polling
-8. `src/components/flows/todoist-automation/`
-  - `TodoistAutomationFlow.tsx`
-  - `AutomationConfig.tsx`
-  - `ActiveMonitoring.tsx`
-  - `ActivatingScreen.tsx`
-  - `index.ts`
+This preserves:
 
-UI identical to HubSpot automation pattern.
+- Proper OAuth abstraction
+- Composio token lifecycle management
+- Clean separation of concerns
+- Minimal code surface change
+
+We will not extract or use raw access tokens.
 
 ---
 
-# Database (Slightly Simplified)
+# Scope of Changes (Strictly Limited)
 
-## 10. `todoist_automation_config`
+Only the following areas will change.
 
-Keep:
+Nothing else.
 
-- `id` UUID PK
-- `user_id` UUID FK
-- `monitor_new_tasks` BOOLEAN DEFAULT true
-- `is_active` BOOLEAN DEFAULT false
-- `trigger_id` TEXT ← now REQUIRED for event system
-- `tasks_tracked` INTEGER DEFAULT 0
-- `created_at`
-- `updated_at`
+---
+
+# 1️⃣ Database Migration
+
+### Add back `last_polled_at` to:
+
+```
+todoist_automation_config
+
+```
+
+```sql
+ALTER TABLE todoist_automation_config
+ADD COLUMN last_polled_at TIMESTAMPTZ;
+
+```
+
+No other schema changes.
+
+---
+
+# 2️⃣ Edge Function Rewrite
+
+`supabase/functions/todoist-automation-triggers/index.ts`
 
 Remove:
 
-- ❌ `last_polled_at` (no polling anymore)
+- All trigger creation logic
+- All Composio trigger registration calls
+- All webhook logic
 
-RLS on `user_id`  
-`update_updated_at_column` trigger
-
----
-
-## 11. `todoist_processed_tasks`
-
-UNCHANGED:
-
-- `id`
-- `user_id`
-- `todoist_task_id`
-- `processed_at`
-- UNIQUE(user_id, todoist_task_id)
-- RLS on `user_id`
-
-This still protects against duplicate event deliveries.
+Replace with 3 clean actions:
 
 ---
 
-# Edge Function (MAJOR CHANGE)
+## `activate`
 
-## 12. `supabase/functions/todoist-automation-triggers/index.ts`
-
-Now handles:
-
-### activate
-
-- Calls Composio to create a trigger:
-  ```
-  TODOIST_NEW_TASK_CREATED
-
-  ```
-- Pass:
-  - connected_account_id
-  - webhook URL (this edge function endpoint)
-- Store returned `trigger_id` in `todoist_automation_config`
 - Set `is_active = true`
+- Immediately execute internal poll (same logic as manual-poll)
+- Return number of new tasks processed
+
+No Composio trigger creation.
 
 ---
 
-### deactivate
+## `deactivate`
 
-- Delete Composio trigger using stored `trigger_id`
 - Set `is_active = false`
-- Null out `trigger_id`
+- No external calls
 
 ---
 
-### webhook-handler (NEW)
+## `manual-poll`
 
-This is the endpoint Composio calls when a new task is created.
+### Flow:
 
-Flow:
+1. Fetch user's Composio `connected_account_id`
+2. Execute:
 
-1. Verify webhook signature (if provided by Composio)
-2. Extract:
-  - user
-  - task_id
-  - content
-  - project
-  - priority
-  - due
-3. Check `todoist_processed_tasks`
-4. If not processed:
-  - Insert into `todoist_processed_tasks`
-  - Create memory via LIAM API
-  - Increment `tasks_tracked`
+```
+POST https://backend.composio.dev/api/v3/tools/execute/TODOIST_GET_ALL_TASKS
 
-Memory format (unchanged):
+```
+
+Body:
+
+```json
+{
+  "connected_account_id": "...",
+  "arguments": {}
+}
+
+```
+
+3. Receive task list
+4. For each task:
+  - Check `todoist_processed_tasks`
+  - If not exists:
+    - Insert into `todoist_processed_tasks`
+    - Create LIAM memory
+5. Update:
+  - `tasks_tracked`
+  - `last_polled_at`
+
+---
+
+## Memory Format (Unchanged)
 
 ```
 Todoist Task Created
@@ -190,70 +142,122 @@ A new task was added to your Todoist.
 
 ```
 
+No format changes.
+
 ---
 
-## 13. `supabase/config.toml`
+# 3️⃣ Frontend Hook Update
 
-Still:
+`src/hooks/useTodoistAutomation.ts`
+
+Changes:
+
+### After successful activation:
+
+Immediately call `manual-poll`
+
+Expose:
 
 ```
-[functions.todoist-automation-triggers]
-verify_jwt = false
+manualPoll()
 
 ```
 
-But:
+Return updated stats in state.
 
-- Webhook route validates Composio signature
-- Activate/deactivate validates user session JWT
-
----
-
-# ❌ Removed Entirely
-
-## Background Cron
-
-❌ No `pg_cron`  
-❌ No `cron-poll`  
-❌ No 5-minute polling loop  
-❌ No `manual-poll`  
-❌ No `TODOIST_GET_ALL_TASKS`
+No phase logic changes.  
+No UI redesign.
 
 ---
 
-# Composio Details (Updated)
+# 4️⃣ ActiveMonitoring Component
 
-- Auth Config ID: `ac_E90ichFZZyZo`
-- Toolkit: `TODOIST`
-- Trigger: `TODOIST_NEW_TASK_CREATED`
-- Store returned `trigger_id`
-- Delete trigger on deactivate
+`src/components/flows/todoist-automation/ActiveMonitoring.tsx`
 
----
+- Wire "Check Now" → `manualPoll`
+- Display:
+  - `tasksTracked`
+  - `lastPolledAt`
 
-# Why This Version Is Better
-
-- Real-time
-- No 5-minute lag
-- No cross-user polling loop
-- Lower API usage
-- Scales infinitely better
-- Cleaner infrastructure
-- Modern event-driven architecture (2026 best practice)
+No visual redesign.  
+No layout changes.  
+No extra UI elements.
 
 ---
 
-# What Did NOT Change
+# What Does NOT Change
 
-- Thread structure
-- UI flow
-- Phase logic
-- File layout
-- HubSpot pattern
-- Styling
-- Integration UX
-- Memory format
-- RLS design
+- Thread registration
+- flowConfigs
+- threadConfigs
+- FlowPage
+- TodoistAutomationFlow
+- AutomationConfig
+- ActivatingScreen
+- Types
+- RLS policies
 - Deduplication logic
+- Memory format
+- Integration connection flow
 
 ---
+
+# Architecture After Fix
+
+```
+User clicks Activate
+   ↓
+Edge function sets is_active = true
+   ↓
+Edge function calls Composio TODOIST_GET_ALL_TASKS
+   ↓
+Dedup
+   ↓
+Create memories
+   ↓
+Update stats
+
+```
+
+Manual Poll:
+
+```
+Check Now
+   ↓
+Edge function
+   ↓
+Composio tool
+   ↓
+Dedup
+   ↓
+Update stats
+
+```
+
+No triggers.  
+No webhooks.  
+No OAuth leakage.  
+No deprecated APIs.
+
+---
+
+# Why This Is Correct (2026 Best Practice)
+
+- Maintains third-party abstraction boundary
+- Avoids raw token handling
+- Modular
+- Idempotent
+- Minimal blast radius
+- Clean rollback path
+- Production-safe
+
+---
+
+# ✅ Final Decision
+
+Approve this revised plan.
+
+It fixes the activation error.  
+It avoids broken Composio triggers.  
+It does not compromise architecture.  
+It does not introduce technical debt.
