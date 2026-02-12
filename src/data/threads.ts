@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "todoist-task-tracker",
+    title: "Todoist New Task Tracker",
+    description: "Automatically save new Todoist tasks as memories in real-time",
+    icon: CheckSquare,
+    gradient: "orange",
+    status: "active",
+    type: "automation",
+    category: "productivity",
+    integrations: ["todoist"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "twitter-alpha-tracker",
     title: "Twitter Alpha Tracker",

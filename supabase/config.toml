@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.linkedin-connection-event]
 verify_jwt = false
+
+[functions.todoist-automation-triggers]
+verify_jwt = false

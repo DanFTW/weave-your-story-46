@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "todoist-task-tracker": {
+    id: "todoist-task-tracker",
+    title: "Todoist Task Tracker",
+    subtitle: "Real-time task monitoring",
+    description: "Automatically save new Todoist tasks as memories.",
+    gradient: "orange",
+    icon: CheckSquare,
+    entryName: "task",
+    entryNamePlural: "tasks",
+    memoryTag: "TODOIST",
+    fields: [],
+    isTodoistAutomationFlow: true,
+  },
   "twitter-alpha-tracker": {
     id: "twitter-alpha-tracker",
     title: "Twitter Alpha Tracker",

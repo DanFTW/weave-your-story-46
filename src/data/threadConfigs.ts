@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "todoist-task-tracker": {
+    id: "todoist-task-tracker",
+    title: "Todoist New Task Tracker",
+    subtitle: "Real-time task memories",
+    description: "Automatically save new Todoist tasks as memories when they're created.",
+    gradient: "orange",
+    icon: CheckSquare,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Todoist",
+        description: "Authorize access to your tasks",
+        iconUrl: "/src/assets/integrations/todoist.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Monitoring",
+        description: "Toggle new task tracking",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Tasks saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "twitter-alpha-tracker": {
     id: "twitter-alpha-tracker",
     title: "Twitter Alpha Tracker",

@@ -65,6 +65,9 @@ import { HubSpotAutomationFlow } from "@/components/flows/hubspot-automation";
 // Twitter Alpha Tracker components
 import { TwitterAlphaTrackerFlow } from "@/components/flows/twitter-alpha-tracker";
 
+// Todoist Automation components
+import { TodoistAutomationFlow } from "@/components/flows/todoist-automation";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -249,6 +252,12 @@ export default function FlowPage() {
   
   if (config.isTwitterAlphaTrackerFlow) {
     return <TwitterAlphaTrackerFlow />;
+  }
+
+  // === TODOIST AUTOMATION FLOW RENDER ===
+  
+  if (config.isTodoistAutomationFlow) {
+    return <TodoistAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===
