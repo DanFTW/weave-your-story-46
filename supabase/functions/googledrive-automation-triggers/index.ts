@@ -218,9 +218,11 @@ async function pollGoogleDriveDocs(
     .in("googledrive_file_id", fileIds);
 
   const existingIds = new Set((existing || []).map((e: any) => e.googledrive_file_id));
-  const newFiles = files.filter((f: any) => !existingIds.has(String(f.id)));
+  const allNewFiles = files.filter((f: any) => !existingIds.has(String(f.id)));
+  const BATCH_LIMIT = 10;
+  const newFiles = allNewFiles.slice(0, BATCH_LIMIT);
 
-  console.log(`[GoogleDrive Poll] ${newFiles.length} new docs to process`);
+  console.log(`[GoogleDrive Poll] ${allNewFiles.length} new docs found, processing batch of ${newFiles.length}`);
 
   // Get user API keys for LIAM
   const { data: apiKeys } = await supabaseClient
