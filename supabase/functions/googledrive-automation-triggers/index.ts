@@ -121,7 +121,7 @@ function formatDocAsMemory(doc: any, content: string): string {
 async function exportDocContent(connectionId: string, fileId: string): Promise<string> {
   try {
     const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/GOOGLEDRIVE_EXPORT_FILE",
+      "https://backend.composio.dev/api/v3/tools/execute/GOOGLEDRIVE_DOWNLOAD_FILE",
       {
         method: "POST",
         headers: {
@@ -130,7 +130,7 @@ async function exportDocContent(connectionId: string, fileId: string): Promise<s
         },
         body: JSON.stringify({
           connected_account_id: connectionId,
-          arguments: { fileId, mimeType: "text/plain" },
+          arguments: { file_id: fileId, mime_type: "text/plain" },
         }),
       }
     );
@@ -160,7 +160,7 @@ async function pollGoogleDriveDocs(
   console.log(`[GoogleDrive Poll] Searching docs for user ${userId}`);
 
   const toolResponse = await fetch(
-    "https://backend.composio.dev/api/v3/tools/execute/GOOGLEDRIVE_SEARCH_FILE",
+    "https://backend.composio.dev/api/v3/tools/execute/GOOGLEDRIVE_FIND_FILE",
     {
       method: "POST",
       headers: {
@@ -170,7 +170,7 @@ async function pollGoogleDriveDocs(
       body: JSON.stringify({
         connected_account_id: connectionId,
         arguments: {
-          query: "mimeType='application/vnd.google-apps.document' and trashed=false",
+          q: "mimeType='application/vnd.google-apps.document' and trashed=false",
         },
       }),
     }

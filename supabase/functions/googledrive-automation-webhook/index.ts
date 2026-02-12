@@ -96,7 +96,7 @@ function safeJsonParse(text: string): any {
 async function exportDocContent(connectionId: string, fileId: string): Promise<string> {
   try {
     const response = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/GOOGLEDRIVE_EXPORT_FILE",
+      "https://backend.composio.dev/api/v3/tools/execute/GOOGLEDRIVE_DOWNLOAD_FILE",
       {
         method: "POST",
         headers: {
@@ -105,7 +105,7 @@ async function exportDocContent(connectionId: string, fileId: string): Promise<s
         },
         body: JSON.stringify({
           connected_account_id: connectionId,
-          arguments: { fileId, mimeType: "text/plain" },
+          arguments: { file_id: fileId, mime_type: "text/plain" },
         }),
       }
     );
