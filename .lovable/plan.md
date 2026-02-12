@@ -1,263 +1,70 @@
-# ✅ FINAL APPROVAL PLAN
 
-# Fix: Todoist Activation Failure (Polling via Composio Tool)
 
----
+# Add Fireflies.ai Integration
 
-## Root Cause (Confirmed)
+## Overview
+Add Fireflies.ai (AI meeting notetaker) to the integrations page, following the exact patterns used by existing integrations. This includes the icon, integration listing, detail page config, OAuth connection via Composio, and profile fetching.
 
-The Composio `TODOIST_NEW_TASK_CREATED` trigger is broken due to reliance on Todoist’s deprecated Sync API v8. This results in:
+## Files to Create
 
+### 1. `src/assets/integrations/fireflies.svg`
+Create an SVG icon reproducing the official Fireflies.ai brand mark -- a geometric "F" composed of colored blocks in their brand colors (purple #6C3AED, pink/magenta #DB2777, and lighter pink #F472B6). The icon uses a `0 0 24 24` viewBox consistent with all other integration icons. The design is 4 quadrants forming an abstract "F" shape.
+
+## Files to Modify
+
+### 2. `src/data/integrations.ts`
+- Add `fireflies` entry to the "Apps" section in `integrationSections` array (status: `"unconfigured"`)
+- Add `fireflies` entry to `integrationDetails` with:
+  - Description about meeting transcription and AI notetaking
+  - Capabilities: "Transcribe meetings", "View transcripts", "Access summaries", "Search conversations"
+  - Gradient colors: primary `#6C3AED` (purple), secondary `#DB2777` (pink), tertiary `#7C3AED`
+
+### 3. `src/components/integrations/IntegrationIcon.tsx`
+- Import `firefliesIcon` from the new SVG asset
+- Add `fireflies` entry to `iconImages` map
+
+### 4. `src/components/integrations/IntegrationLargeIcon.tsx`
+- Import `firefliesIcon` from the new SVG asset
+- Add `fireflies` entry to `iconImages` map
+
+### 5. `supabase/functions/composio-connect/index.ts`
+- Add `fireflies: "ac_67tCzpRn7AdZ"` to `AUTH_CONFIGS` map
+- Add `"fireflies"` to `VALID_TOOLKITS` array
+
+### 6. `supabase/functions/composio-callback/index.ts`
+Three additions:
+
+**a) APP_TO_TOOLKIT mapping** -- Add entries:
 ```
-TriggerInstance_PollingConfigInvalid (1213)
-
-```
-
-This is a provider-side issue and cannot be fixed within our system.
-
-Because users authenticate through Composio’s OAuth app, we cannot register native Todoist webhooks ourselves.
-
-Therefore, webhook-based monitoring is not viable at this time.
-
----
-
-# ✅ Correct Architectural Solution
-
-Switch from trigger-based monitoring to **polling via Composio’s** `TODOIST_GET_ALL_TASKS` **tool**, not via direct Todoist REST API calls.
-
-This preserves:
-
-- Proper OAuth abstraction
-- Composio token lifecycle management
-- Clean separation of concerns
-- Minimal code surface change
-
-We will not extract or use raw access tokens.
-
----
-
-# Scope of Changes (Strictly Limited)
-
-Only the following areas will change.
-
-Nothing else.
-
----
-
-# 1️⃣ Database Migration
-
-### Add back `last_polled_at` to:
-
-```
-todoist_automation_config
-
+"fireflies": "fireflies",
+"fireflies_ai": "fireflies",
+"firefliesai": "fireflies",
 ```
 
-```sql
-ALTER TABLE todoist_automation_config
-ADD COLUMN last_polled_at TIMESTAMPTZ;
+**b) Profile fetch function** -- Add `fetchFirefliesProfile` that:
+1. Gets the `access_token` from Composio connection metadata
+2. Calls the Fireflies GraphQL API (`POST https://api.fireflies.ai/graphql`) with:
+   ```graphql
+   { user { name email user_id } }
+   ```
+   Using `Authorization: Bearer {access_token}`
+3. Returns `name`, `email`, and `null` for avatar (Fireflies API does not expose profile pictures)
+
+**c) Toolkit handler block** -- Add the `if (toolkit === "fireflies")` block to extract access_token from Composio data and call `fetchFirefliesProfile`, following the same pattern as Todoist/Zoom/HubSpot (direct API with access token).
+
+## Technical Details
+
+- Auth Config ID: `ac_67tCzpRn7AdZ`
+- Toolkit name: `FIREFLIES` (Composio)
+- Profile API: GraphQL at `https://api.fireflies.ai/graphql`
+- Profile fields available: `name`, `email`, `user_id`
+- Profile picture: Not available via Fireflies API -- UI will show initials fallback
+- Brand colors: Purple `#6C3AED`, Pink `#DB2777`
+
+## What Does NOT Change
+- No new database tables
+- No new frontend pages or components
+- No new hooks
+- No changes to IntegrationDetail page (it already works generically)
+- No changes to authentication flow (useComposio handles it)
 
-```
-
-No other schema changes.
-
----
-
-# 2️⃣ Edge Function Rewrite
-
-`supabase/functions/todoist-automation-triggers/index.ts`
-
-Remove:
-
-- All trigger creation logic
-- All Composio trigger registration calls
-- All webhook logic
-
-Replace with 3 clean actions:
-
----
-
-## `activate`
-
-- Set `is_active = true`
-- Immediately execute internal poll (same logic as manual-poll)
-- Return number of new tasks processed
-
-No Composio trigger creation.
-
----
-
-## `deactivate`
-
-- Set `is_active = false`
-- No external calls
-
----
-
-## `manual-poll`
-
-### Flow:
-
-1. Fetch user's Composio `connected_account_id`
-2. Execute:
-
-```
-POST https://backend.composio.dev/api/v3/tools/execute/TODOIST_GET_ALL_TASKS
-
-```
-
-Body:
-
-```json
-{
-  "connected_account_id": "...",
-  "arguments": {}
-}
-
-```
-
-3. Receive task list
-4. For each task:
-  - Check `todoist_processed_tasks`
-  - If not exists:
-    - Insert into `todoist_processed_tasks`
-    - Create LIAM memory
-5. Update:
-  - `tasks_tracked`
-  - `last_polled_at`
-
----
-
-## Memory Format (Unchanged)
-
-```
-Todoist Task Created
-
-Task: {content}
-Project: {project}
-Priority: {priority}
-Due: {due_date}
-
-A new task was added to your Todoist.
-
-```
-
-No format changes.
-
----
-
-# 3️⃣ Frontend Hook Update
-
-`src/hooks/useTodoistAutomation.ts`
-
-Changes:
-
-### After successful activation:
-
-Immediately call `manual-poll`
-
-Expose:
-
-```
-manualPoll()
-
-```
-
-Return updated stats in state.
-
-No phase logic changes.  
-No UI redesign.
-
----
-
-# 4️⃣ ActiveMonitoring Component
-
-`src/components/flows/todoist-automation/ActiveMonitoring.tsx`
-
-- Wire "Check Now" → `manualPoll`
-- Display:
-  - `tasksTracked`
-  - `lastPolledAt`
-
-No visual redesign.  
-No layout changes.  
-No extra UI elements.
-
----
-
-# What Does NOT Change
-
-- Thread registration
-- flowConfigs
-- threadConfigs
-- FlowPage
-- TodoistAutomationFlow
-- AutomationConfig
-- ActivatingScreen
-- Types
-- RLS policies
-- Deduplication logic
-- Memory format
-- Integration connection flow
-
----
-
-# Architecture After Fix
-
-```
-User clicks Activate
-   ↓
-Edge function sets is_active = true
-   ↓
-Edge function calls Composio TODOIST_GET_ALL_TASKS
-   ↓
-Dedup
-   ↓
-Create memories
-   ↓
-Update stats
-
-```
-
-Manual Poll:
-
-```
-Check Now
-   ↓
-Edge function
-   ↓
-Composio tool
-   ↓
-Dedup
-   ↓
-Update stats
-
-```
-
-No triggers.  
-No webhooks.  
-No OAuth leakage.  
-No deprecated APIs.
-
----
-
-# Why This Is Correct (2026 Best Practice)
-
-- Maintains third-party abstraction boundary
-- Avoids raw token handling
-- Modular
-- Idempotent
-- Minimal blast radius
-- Clean rollback path
-- Production-safe
-
----
-
-# ✅ Final Decision
-
-Approve this revised plan.
-
-It fixes the activation error.  
-It avoids broken Composio triggers.  
-It does not compromise architecture.  
-It does not introduce technical debt.
