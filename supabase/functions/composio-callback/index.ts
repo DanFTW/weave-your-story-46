@@ -131,6 +131,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "fireflies": "fireflies",
   "fireflies_ai": "fireflies",
   "firefliesai": "fireflies",
+  "googledrive": "googledrive",
+  "google_drive": "googledrive",
+  "gdrive": "googledrive",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -479,7 +482,7 @@ async function fetchExistingGoogleProfile(
       .from("user_integrations")
       .select("integration_id, account_email, account_name, account_avatar_url")
       .eq("user_id", userId)
-      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube"])
+      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube", "googledrive"])
       .eq("status", "connected")
       .not("account_email", "is", null)
       .limit(1)
@@ -3119,6 +3122,32 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Google Super profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Google Drive, fetch profile via Composio connection data (Google OAuth)
+    if (toolkit === "googledrive") {
+      console.log("composio-callback: Fetching Google Drive profile via Composio API...");
+      
+      // First try the standard Google userinfo approach (reuses existing function)
+      let profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      // If that fails, try cross-integration lookup
+      if (!profileInfo.email && !profileInfo.name) {
+        console.log("composio-callback: Google userinfo failed, trying cross-integration lookup...");
+        profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
+      }
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Google Drive profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // For Fireflies.ai, fetch user profile via Fireflies GraphQL API
