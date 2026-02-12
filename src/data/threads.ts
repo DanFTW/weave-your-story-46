@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "googledrive-tracker",
+    title: "Google Drive Document Tracker",
+    description: "Automatically save new Google Docs documents as memories",
+    icon: FileText,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "productivity",
+    integrations: ["googledrive"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "fireflies-tracker",
     title: "Fireflies Transcript Tracker",

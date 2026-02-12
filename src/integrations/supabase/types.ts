@@ -173,6 +173,63 @@ export type Database = {
         }
         Relationships: []
       }
+      googledrive_automation_config: {
+        Row: {
+          created_at: string
+          documents_saved: number
+          id: string
+          is_active: boolean
+          last_sync_at: string | null
+          last_webhook_at: string | null
+          trigger_instance_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          documents_saved?: number
+          id?: string
+          is_active?: boolean
+          last_sync_at?: string | null
+          last_webhook_at?: string | null
+          trigger_instance_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          documents_saved?: number
+          id?: string
+          is_active?: boolean
+          last_sync_at?: string | null
+          last_webhook_at?: string | null
+          trigger_instance_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      googledrive_processed_documents: {
+        Row: {
+          created_at: string
+          googledrive_file_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          googledrive_file_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          googledrive_file_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       hubspot_automation_config: {
         Row: {
           contacts_tracked: number | null
