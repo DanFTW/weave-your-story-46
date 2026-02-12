@@ -1,91 +1,86 @@
-# Fix: Fireflies Transcript Tracker Not Detecting Transcripts
+# Fix: Fireflies Memories Missing Content and Wrong Category
 
-## Problem Analysis
+## Problems Identified
 
-The `fireflies-automation-triggers` edge function currently only generates webhook credentials on activation. Unlike the Todoist tracker (which fetches all existing items on activate and supports manual polling), the Fireflies tracker has **no sync logic at all** -- it cannot detect any transcripts, old or new, unless Fireflies happens to POST to the webhook URL.
+### Problem 1: Generic memory content -- no actual transcript
 
-Three gaps identified:
+The `formatTranscriptAsMemory` function in `fireflies-automation-triggers` only builds a short metadata string (title, date, duration, participants, summary overview) and appends the generic line "A meeting transcript was automatically saved from Fireflies.ai." It never includes the actual transcript text (sentences/dialogue). Additionally, the GraphQL fallback query does not even request the `sentences` field from the Fireflies API.
 
-1. **No initial sync on activation** -- Should fetch all existing transcripts from Fireflies and save them as memories (like Todoist does on activate).
-2. **No manual sync action** -- No way for the user to trigger a "Check Now" to find new transcripts on demand.
-3. **No "Check Now" button in the UI** -- The ActiveMonitoring screen lacks this control (Todoist has it).
-4. **Webhook receiver signature mismatch + unsafe fallback** -- The `fireflies-webhook` edge function reads the wrong signature headers (`x-ff-signature` / `x-fireflies-signature`) and allows requests through when the signature header is missing. Fireflies sends `x-hub-signature` and this should be verified when a secret is configured.
+**Additional gap:** Full transcripts can be very large; without chunking, the LIAM create call can truncate or fail. Full transcript text must be chunked into multiple memories when needed to ensure the entire transcript is saved.
 
-## Solution
+### Problem 2: Memory card shows "Quick Note" instead of "Fireflies Transcript Tracker"
 
-Add a `syncFirefliesTranscripts` function to the triggers edge function (mirroring `pollTodoistTasks` from Todoist) and wire it into both `activate` and a new `manual-poll` action. Add a "Check Now" button to the ActiveMonitoring UI.
+The `createMemory` function sends `{ userKey, content }` to the LIAM API **without a** `tag` **field**. The LIAM API supports an optional `tag` parameter (documented in `docs/LIAM-API.md`). Without it, when the memory is listed later, it has no tag/category, so `getCategoryConfig` in `MemoryCard.tsx` falls through to `categoryConfig.default` which renders "Quick Note" with a blue gradient. There is also no `fireflies` entry in `categoryConfig` at all.
 
-Update the webhook receiver to correctly verify Fireflies signatures and make processing retry-safe by only marking transcripts as processed after a successful memory save (or by deleting the processed row on failure).
-
-The webhook remains as-is for real-time delivery of future transcripts; sync handles the backfill + on-demand check.
+The same issue exists in the `fireflies-webhook` edge function -- it also creates memories without a tag.
 
 ---
 
 ## Changes
 
-### 1. `supabase/functions/fireflies-automation-triggers/index.ts` (major rewrite)
+### 1. `supabase/functions/fireflies-automation-triggers/index.ts`
 
-Add the following to this edge function:
+**a) Update** `createMemory` **to accept and send a tag:**  
+Change signature from `createMemory(apiKeys, content)` to `createMemory(apiKeys, content, tag?)`. When tag is provided, include it in the LIAM API body as `tag: "FIREFLIES"`.
 
-- **LIAM crypto utilities** (copy from the existing webhook function or Todoist triggers -- same `importPrivateKey`, `signRequest`, `toDER` helpers).
-- `syncFirefliesTranscripts(supabaseClient, userId, connectionId)` function that:
-  1. Calls Composio tool `FIREFLIES_LIST_TRANSCRIPTS` (or equivalent) via `https://backend.composio.dev/api/v3/tools/execute/FIREFLIES_LIST_TRANSCRIPTS` with `connected_account_id` and `arguments: {}`.
-  2. Extracts transcript list from the nested Composio response (defensively, like Todoist does).
-  3. Bulk-checks `fireflies_processed_transcripts` to find which are already saved.
-  4. For each new transcript: formats as memory string, saves via LIAM API, then inserts into `fireflies_processed_transcripts` (or deletes the inserted row on LIAM failure to allow retry).
-  5. Updates `fireflies_automation_config` stats (`transcripts_saved` accumulated, `last_received_at`).
-  6. Returns `{ newTranscripts, totalSaved }`.
-- **Modify** `activate` **action**: after generating webhook credentials, also run `syncFirefliesTranscripts()` (initial backfill). Return both webhook info AND sync results.
-- **Add** `manual-poll` **action**: runs `syncFirefliesTranscripts()` and returns results. (Mirrors Todoist's manual-poll.)
-- **Resolve Composio connection**: before sync, look up the user's `composio_connection_id` from `user_integrations` where `integration_id = 'fireflies'` and `status = 'connected'`.
+**b) Update** `formatTranscriptAsMemory` **to include full transcript:**
 
-### 2. `src/hooks/useFirefliesAutomation.ts`
+- Include the actual transcript sentences/dialogue if available (from `transcript.sentences` array, each with `speaker_name` and `text`)
+- Include action items, key points from `transcript.summary` if available
+- Keep the metadata header (title, date, duration, participants) but make the transcript body the primary content
 
-- Add a `manualSync` function that invokes `fireflies-automation-triggers` with `action: 'manual-poll'`.
-- After sync completes, update local `config` state with the returned stats.
-- Expose `manualSync` and `isSyncing` from the hook.
+**Additional requirement:** Implement transcript chunking: when the formatted transcript body exceeds a safe size threshold, split it into multiple parts and create multiple LIAM memories with the same tag, appending “(Part X/N)” to the header/title line in the content so the full transcript is preserved.
 
-### 3. `src/components/flows/fireflies-automation/ActiveMonitoring.tsx`
+**c) Update GraphQL fallback query to request** `sentences`**:**  
+Add `sentences { text speaker_name }` and `summary { overview action_items keywords }` to the GraphQL query string so the fallback path also returns full transcript data.
 
-- Add a "Check Now" button (matching Todoist's pattern) that calls `manualSync`.
-- Show a loading state while syncing.
+**d) Pass tag when calling** `createMemory`**:**  
+Every call site: `createMemory(apiKeys, memoryContent, "FIREFLIES")`
 
-### 4. `src/types/firefliesAutomation.ts`
+### 2. `supabase/functions/fireflies-webhook/index.ts`
 
-- No structural changes needed -- the existing types already cover `transcriptsSaved` and `lastReceivedAt`.
+**a) Update** `saveMemoryToLiam` **to send the** `FIREFLIES` **tag:**  
+Add `tag: "FIREFLIES"` to the LIAM API request body so webhook-delivered transcripts also get tagged properly.
 
-### 5. `supabase/functions/fireflies-webhook/index.ts`
+**b) Update** `formatTranscriptAsMemory` **to include full transcript content:**  
+Same improvement as in the triggers function -- include sentences/dialogue from the transcript data fetched via Composio.
 
-- Read Fireflies signature from `x-hub-signature`.
-- Require signature verification when `webhook_secret` is present; if missing/invalid, return 401.
-- Make processing retry-safe by only inserting into `fireflies_processed_transcripts` after LIAM memory save succeeds (or delete the processed row if LIAM save fails).
+**Additional requirement:** Apply the same transcript chunking behavior here as well so webhook-delivered transcripts are fully preserved.
 
----
+### 3. `src/components/memories/MemoryCard.tsx`
 
-## Technical Detail: Composio Tool Slug
+**Add** `fireflies` **category to** `categoryConfig`**:**
 
-The Composio tool for listing transcripts is likely `FIREFLIES_LIST_TRANSCRIPTS`. If that slug returns a 404, fall back to direct GraphQL via the user's API key (available from their Composio connection params):
-
-```text
-POST https://api.fireflies.ai/graphql
-Authorization: Bearer {api_key}
-Body: { "query": "{ transcripts { id title date duration participants organizer_email summary { overview } } }" }
+```typescript
+fireflies: {
+  icon: Mic,  // from lucide-react
+  gradient: "bg-gradient-to-r from-purple-500 to-pink-500",
+  label: "Fireflies Transcript Tracker"
+},
 
 ```
 
-The edge function should try the Composio tool first, then fall back to direct GraphQL if the tool is not found.
+Also add content-based detection in `getCategoryConfig`:
+
+```typescript
+if (combined.includes('fireflies')) return categoryConfig.fireflies;
+
+```
+
+**Additional requirement:** Prefer tag-based mapping first (case-insensitive) so Fireflies memories consistently render as “Fireflies Transcript Tracker” with the correct purple theme even if the body text varies.
+
+This ensures Fireflies memories display with the thread's purple theme gradient and the correct label.
 
 ---
 
-## Files Modified (Summary)
+## Files Modified
 
 
-| File                                                             | Change                                                                   |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `supabase/functions/fireflies-automation-triggers/index.ts`      | Add sync logic, LIAM crypto, `manual-poll` action, call sync on activate |
-| `src/hooks/useFirefliesAutomation.ts`                            | Add `manualSync` + `isSyncing`                                           |
-| `src/components/flows/fireflies-automation/ActiveMonitoring.tsx` | Add "Check Now" button                                                   |
-| `supabase/functions/fireflies-webhook/index.ts`                  | Fix signature verification + make processing retry-safe                  |
+| File                                                        | Change                                                                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/functions/fireflies-automation-triggers/index.ts` | Add tag to `createMemory`, include full transcript in `formatTranscriptAsMemory`, update GraphQL query, implement transcript chunking |
+| `supabase/functions/fireflies-webhook/index.ts`             | Add tag to `saveMemoryToLiam`, include full transcript in `formatTranscriptAsMemory`, implement transcript chunking                   |
+| `src/components/memories/MemoryCard.tsx`                    | Add `fireflies` category config with purple gradient and Mic icon; prefer tag-based mapping first                                     |
 
 
 No other files are touched.
