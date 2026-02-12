@@ -488,6 +488,60 @@ export type Database = {
         }
         Relationships: []
       }
+      todoist_automation_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          monitor_new_tasks: boolean
+          tasks_tracked: number
+          trigger_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          monitor_new_tasks?: boolean
+          tasks_tracked?: number
+          trigger_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          monitor_new_tasks?: boolean
+          tasks_tracked?: number
+          trigger_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      todoist_processed_tasks: {
+        Row: {
+          id: string
+          processed_at: string
+          todoist_task_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          processed_at?: string
+          todoist_task_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          processed_at?: string
+          todoist_task_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       trello_automation_config: {
         Row: {
           board_id: string | null
