@@ -1,44 +1,41 @@
-# Fix Google Drive Auth Config Lookup
+
+
+# Fix Google Drive "Auth config not found" Error
 
 ## Root Cause
 
-The `getDefaultAuthConfigId` function in `composio-connect/index.ts` uses the wrong query parameter name when calling the Composio API. The code sends `?toolkit=GOOGLE_DRIVE` but the Composio v3 API expects `toolkit_slug` as the parameter name. This causes a 404 response, which the code interprets as "no auth config available."
+The Composio logs show the exact error:
+
+```
+Composio response: {"error":{"message":"Auth config not found","code":302}}
+Composio request body: {"auth_config_id":"ac_7m7XMBKrLI_O",...}
+```
+
+The hardcoded auth config ID `ac_7m7XMBKrLI_O` for Google Drive **no longer exists** in Composio. The code hits the explicit `AUTH_CONFIGS` map first, finds this stale ID, sends it to Composio, and Composio rejects it with a 400.
+
+The dynamic fallback (`getDefaultAuthConfigId`) -- which we already fixed to use the correct `toolkit_slug` parameter -- never gets a chance to run because the hardcoded entry takes priority.
 
 ## Fix
 
 ### File: `supabase/functions/composio-connect/index.ts`
 
-**Change 1** -- Fix the query parameter name in `getDefaultAuthConfigId` (line 25):
+**Single change**: Remove the stale `googledrive` entry from the `AUTH_CONFIGS` map (line 116).
 
-```text
-Before: /api/v3/auth-configs?toolkit=${composioName}&is_composio_managed=true
-After:  /api/v3/auth-configs?toolkit_slug=${composioName}&is_composio_managed=true
+This allows the code to fall through to `getDefaultAuthConfigId("googledrive")`, which will query:
 
 ```
-
-**Change 2** -- Add enhanced logging to capture the actual API response when lookups fail, so future debugging is easier:
-
-```typescript
-const responseText = await response.text();
-console.log(`Auth config API response for ${composioName}: ${responseText}`);
-const data = JSON.parse(responseText);
-
+GET /api/v3/auth-configs?toolkit_slug=GOOGLEDRIVE&is_composio_managed=true
 ```
 
-That is the only change needed. Once deployed, the dynamic lookup will correctly query Composio for Google Drive's managed auth config.
+...and retrieve the current valid auth config ID from Composio automatically.
 
----
+No other files or logic changes are needed.
 
-## Suggestions (only additions)
+## Technical Details
 
-**Change 3** — Ensure the toolkit slug value is correct for Google Drive  
-Your Composio dashboard shows the toolkit slug is `GOOGLEDRIVE` (no underscore). Ensure `composioName` is exactly `GOOGLEDRIVE` for Google Drive lookups (not `GOOGLE_DRIVE`). If you have any normalization code that inserts underscores, add a one-off override for Google Drive so the final `toolkit_slug` sent is `GOOGLEDRIVE`.
+- Line 116 in `supabase/functions/composio-connect/index.ts`: delete `googledrive: "ac_7m7XMBKrLI_O",`
+- The `COMPOSIO_TOOLKIT_NAMES` mapping already has `googledrive -> "GOOGLEDRIVE"` (correct)
+- The `toolkit_slug` query parameter fix is already in place
+- The dynamic fallback will fetch and use the correct Composio-managed default auth config
+- Edge function will be redeployed after the change
 
-**Change 4** — Prefer the explicit `AUTH_CONFIGS` mapping for `googledrive` before dynamic lookup  
-Since you already have an auth config ID (`ac_7m7XMBKrLI_O`), ensure `AUTH_CONFIGS` includes:
-
-- `googledrive: "ac_7m7XMBKrLI_O"`  
-…and make sure the request path that triggers this error is using the integration key `googledrive` (so it hits the mapping). Only fall back to `getDefaultAuthConfigId` if there is no explicit mapping.
-
-**Change 5** — Make the enhanced logging safe (don’t crash on non-JSON)  
-Wrap `JSON.parse(responseText)` in a try/catch (or only parse when the response content-type is JSON). This prevents a secondary failure while trying to log a failed lookup.
