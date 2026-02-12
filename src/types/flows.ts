@@ -45,6 +45,7 @@ export interface FlowConfig {
   isTwitterAlphaTrackerFlow?: boolean; // If true, uses Twitter Alpha Tracker UI
   isTodoistAutomationFlow?: boolean; // If true, uses Todoist automation UI
   isFirefliesAutomationFlow?: boolean; // If true, uses Fireflies automation UI
+  isGoogleDriveAutomationFlow?: boolean; // If true, uses Google Drive automation UI
 }
 
 // Single data entry (e.g., one family member)

@@ -71,3 +71,9 @@ verify_jwt = false
 
 [functions.fireflies-webhook]
 verify_jwt = false
+
+[functions.googledrive-automation-triggers]
+verify_jwt = false
+
+[functions.googledrive-automation-webhook]
+verify_jwt = false
