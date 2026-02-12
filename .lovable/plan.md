@@ -1,5 +1,59 @@
+# Add Google Drive Integration to /integrations Page
+
+## Overview
+
+Add a new "Google Drive" integration card to the Integrations page with full OAuth connection support, profile fetching via Composio API, and the official Google Drive brand logo.
+
+## Important Note on Auth Config ID
+
+You provided auth config ID **ac_7m7XMBKrLl_O**, which is currently assigned to Fireflies in the codebase. The memory context indicates Google Drive uses `ac_7m7XMBKrLI_O`. **The plan will use** `ac_7m7XMBKrLI_O` **(capital I) to avoid the** `LI` **vs** `Ll` **mismatch.**
+
+## Changes
+
+### 1. Download official Google Drive logo
+
+Save the official Google Drive SVG logo (from Simple Icons / official brand assets) as `src/assets/integrations/googledrive.svg` using official brand colors (blue #4285F4, green #0F9D58, yellow #F4B400).
+
+### 2. `src/components/integrations/IntegrationIcon.tsx`
+
+- Import the new `googledrive.svg` asset
+- Add `googledrive` entry to the `iconImages` map
+
+### 3. `src/data/integrations.ts`
+
+- Add `googledrive` entry to the Apps section in `integrationSections` array (status: `unconfigured`)
+- Add `googledrive` entry to `integrationDetails` with:
+  - Description about monitoring Drive files and creating memories
+  - Capabilities: "View files", "Browse folders", "Monitor new documents", "Access shared content"
+  - Gradient colors using Google Drive brand palette (blue/green/yellow)
+
+### 4. `supabase/functions/composio-connect/index.ts`
+
+- Add `googledrive: "ac_7m7XMBKrLI_O"` to `AUTH_CONFIGS` map
+- Add `"googledrive"` to `VALID_TOOLKITS` array
+
+### 5. `supabase/functions/composio-callback/index.ts`
+
+- Add `googledrive` / `google_drive` / `gdrive` mappings to `APP_TO_TOOLKIT`
+- Add a `googledrive` profile-fetching block in the main handler that **fetches profile fields from Composio connected account metadata (via Composio API), not Google userinfo endpoints**, with cross-integration fallback via `fetchExistingGoogleProfile`
+
+### Files Modified
+
+
+| File                                              | Change                                 |
+| ------------------------------------------------- | -------------------------------------- |
+| `src/assets/integrations/googledrive.svg`         | New file -- official Google Drive logo |
+| `src/components/integrations/IntegrationIcon.tsx` | Import and map `googledrive` icon      |
+| `src/data/integrations.ts`                        | Add integration entry + detail config  |
+| `supabase/functions/composio-connect/index.ts`    | Add auth config + valid toolkit        |
+| `supabase/functions/composio-callback/index.ts`   | Add toolkit mapping + profile fetching |
 
 
 
-| Fix: Fireflies Transcripts Not Stored with Full ContentRoot CauseThe `FIREFLIES_LIST_TRANSCRIPTS` Composio tool (and the GraphQL `transcripts` list query) returns only **summary metadata** per transcript: `id`, `title`, `date`, `duration`, `participants`. It does **not** include `sentences` (the actual dialogue) or detailed `summary` data.The current `syncFirefliesTranscripts` function passes these incomplete transcript objects directly to `formatTranscriptAsMemory`, which checks for `transcript.sentences` -- finds nothing -- and produces only a short header like:Fireflies Meeting Transcript Title: Meeting 01KH9PANYXB505KXTET8RJSZ93 This is exactly what's visible in the screenshots.**Secondary issue**: In `MemoryDetail.tsx`, the non-email content renderer (line 281) is missing the `whitespace-pre-wrap` CSS class, so even once full transcripts are saved, newlines in the multi-line content would be collapsed into a single paragraph.Solution1. `supabase/functions/fireflies-automation-triggers/index.ts`After getting the list of transcript IDs from `FIREFLIES_LIST_TRANSCRIPTS`, fetch each new transcript's **full details** individually before formatting and saving.Add a `fetchFullTranscript(connectionId, transcriptId)` function that:- Tries the Composio tool `FIREFLIES_GET_TRANSCRIPT_BY_ID` with `{ id: transcriptId }`.- If that fails, falls back to a direct GraphQL query: ```graphql query Transcript($id: String!) { transcript(id: $id) { id title date duration participants organizer_email sentences { text speaker_name } summary { overview action_items keywords } } } ```- Returns the full transcript object with sentences and summary.Update the processing loop in `syncFirefliesTranscripts` to call `fetchFullTranscript` for each new transcript before passing it to `formatTranscriptAsMemory`. If fetching full details fails, fall back to saving whatever metadata is available (graceful degradation).2. `supabase/functions/fireflies-webhook/index.ts`Apply the same pattern: the webhook receives a `meetingId` and currently fetches transcript via `FIREFLIES_GET_TRANSCRIPT_BY_ID`. Verify that the Composio tool call properly requests sentences and summary, and add the same GraphQL fallback if the Composio tool doesn't return full data.3. `src/pages/MemoryDetail.tsx`Add `whitespace-pre-wrap` to the non-email content `<p>` tag (line 281) so multi-line transcript content renders correctly with preserved line breaks.Files Modified---Suggestions (only additions)A) Prevent “partial saves” from being permanently dedupedIn `syncFirefliesTranscripts`, **only insert into** `fireflies_processed_transcripts` **after** `fetchFullTranscript` succeeds and the LIAM memory call returns success. If `fetchFullTranscript` fails, **do not mark processed**; return a warning so the user can retry.B) Handle very large transcripts safelyIf the full transcript body exceeds a safe size threshold (e.g., 50–100KB), **chunk the transcript** into multiple LIAM memories with the same `tag: "FIREFLIES"` and a consistent title prefix like:- `Fireflies Transcript Tracker (1/3): <Meeting Title>`- `Fireflies Transcript Tracker (2/3): <Meeting Title>`- `Fireflies Transcript Tracker (3/3): <Meeting Title>`No other changes. |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File                                              | Change                                 |
+| ------------------------------------------------- | -------------------------------------- |
+| `src/assets/integrations/googledrive.svg`         | New file -- official Google Drive logo |
+| `src/components/integrations/IntegrationIcon.tsx` | Import and map `googledrive` icon      |
+| `src/data/integrations.ts`                        | Add integration entry + detail config  |
+| `supabase/functions/composio-connect/index.ts`    | Add auth config + valid toolkit        |
+| `supabase/functions/composio-callback/index.ts`   | Add toolkit mapping + profile fetching |
