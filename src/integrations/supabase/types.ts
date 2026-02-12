@@ -74,6 +74,63 @@ export type Database = {
         }
         Relationships: []
       }
+      fireflies_automation_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_received_at: string | null
+          transcripts_saved: number
+          updated_at: string
+          user_id: string
+          webhook_secret: string | null
+          webhook_token: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_received_at?: string | null
+          transcripts_saved?: number
+          updated_at?: string
+          user_id: string
+          webhook_secret?: string | null
+          webhook_token?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_received_at?: string | null
+          transcripts_saved?: number
+          updated_at?: string
+          user_id?: string
+          webhook_secret?: string | null
+          webhook_token?: string | null
+        }
+        Relationships: []
+      }
+      fireflies_processed_transcripts: {
+        Row: {
+          created_at: string
+          fireflies_transcript_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fireflies_transcript_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fireflies_transcript_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       google_photos_sync_config: {
         Row: {
           auto_create_memories: boolean

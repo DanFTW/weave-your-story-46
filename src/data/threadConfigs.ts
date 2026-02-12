@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -717,6 +717,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         description: "Preferences saved to Weave Fabric",
         icon: Wifi,
         badge: "WEAVE FABRIC",
+      },
+    ],
+  },
+  "fireflies-tracker": {
+    id: "fireflies-tracker",
+    title: "Fireflies Transcript Tracker",
+    subtitle: "Automatic transcript memories",
+    description: "Automatically save new Fireflies meeting transcripts as memories when they're completed.",
+    gradient: "purple",
+    icon: Mic,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Fireflies",
+        description: "Authorize access to your transcripts",
+        iconUrl: "/src/assets/integrations/fireflies.png",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Transcript Monitoring",
+        description: "Toggle monitoring on/off",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Transcripts saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
       },
     ],
   },

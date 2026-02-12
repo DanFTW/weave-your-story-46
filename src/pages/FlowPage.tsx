@@ -68,6 +68,9 @@ import { TwitterAlphaTrackerFlow } from "@/components/flows/twitter-alpha-tracke
 // Todoist Automation components
 import { TodoistAutomationFlow } from "@/components/flows/todoist-automation";
 
+// Fireflies Automation components
+import { FirefliesAutomationFlow } from "@/components/flows/fireflies-automation";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -258,6 +261,12 @@ export default function FlowPage() {
   
   if (config.isTodoistAutomationFlow) {
     return <TodoistAutomationFlow />;
+  }
+
+  // === FIREFLIES AUTOMATION FLOW RENDER ===
+  
+  if (config.isFirefliesAutomationFlow) {
+    return <FirefliesAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

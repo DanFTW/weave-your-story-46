@@ -65,3 +65,9 @@ verify_jwt = false
 
 [functions.todoist-automation-triggers]
 verify_jwt = false
+
+[functions.fireflies-automation-triggers]
+verify_jwt = false
+
+[functions.fireflies-webhook]
+verify_jwt = false

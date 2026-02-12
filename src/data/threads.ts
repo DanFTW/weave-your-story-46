@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "fireflies-tracker",
+    title: "Fireflies Transcript Tracker",
+    description: "Automatically save new meeting transcripts as memories",
+    icon: Mic,
+    gradient: "purple",
+    status: "active",
+    type: "automation",
+    category: "productivity",
+    integrations: ["fireflies"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "todoist-task-tracker",
     title: "Todoist New Task Tracker",
