@@ -23,8 +23,8 @@ export function FirefliesAutomationFlow() {
   const { isConnected, checkStatus } = useComposio('FIREFLIES');
 
   const {
-    phase, setPhase, config, stats, isLoading, isActivating,
-    loadConfig, activateMonitoring, deactivateMonitoring,
+    phase, setPhase, config, stats, isLoading, isActivating, isSyncing,
+    loadConfig, activateMonitoring, deactivateMonitoring, manualSync,
   } = useFirefliesAutomation();
 
   useEffect(() => {
@@ -101,6 +101,8 @@ export function FirefliesAutomationFlow() {
           <ActiveMonitoring
             stats={stats}
             onPause={deactivateMonitoring}
+            onCheckNow={manualSync}
+            isSyncing={isSyncing}
           />
         )}
       </div>

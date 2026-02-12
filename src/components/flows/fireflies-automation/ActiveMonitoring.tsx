@@ -1,4 +1,4 @@
-import { Mic, Pause, Copy, Eye, EyeOff } from "lucide-react";
+import { Mic, Pause, Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FirefliesAutomationStats } from "@/types/firefliesAutomation";
 import { formatDistanceToNow } from "date-fns";
@@ -8,9 +8,11 @@ import { useToast } from "@/hooks/use-toast";
 interface ActiveMonitoringProps {
   stats: FirefliesAutomationStats;
   onPause: () => void;
+  onCheckNow: () => void;
+  isSyncing?: boolean;
 }
 
-export function ActiveMonitoring({ stats, onPause }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, onPause, onCheckNow, isSyncing }: ActiveMonitoringProps) {
   const { toast } = useToast();
   const [showSecret, setShowSecret] = useState(false);
 
@@ -31,7 +33,7 @@ export function ActiveMonitoring({ stats, onPause }: ActiveMonitoringProps) {
             <h3 className="font-semibold text-foreground">Monitoring Active</h3>
             <p className="text-sm text-muted-foreground">
               {stats.lastReceivedAt
-                ? `Last transcript ${formatDistanceToNow(new Date(stats.lastReceivedAt), { addSuffix: true })}`
+                ? `Last checked ${formatDistanceToNow(new Date(stats.lastReceivedAt), { addSuffix: true })}`
                 : "Waiting for first transcript"}
             </p>
           </div>
@@ -100,10 +102,16 @@ export function ActiveMonitoring({ stats, onPause }: ActiveMonitoringProps) {
         </div>
       </div>
 
-      <Button variant="outline" onClick={onPause} className="w-full">
-        <Pause className="w-4 h-4 mr-2" />
-        Pause
-      </Button>
+      <div className="flex gap-3">
+        <Button variant="outline" onClick={onCheckNow} disabled={isSyncing} className="flex-1">
+          <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+          {isSyncing ? 'Checking...' : 'Check Now'}
+        </Button>
+        <Button variant="outline" onClick={onPause} className="flex-1">
+          <Pause className="w-4 h-4 mr-2" />
+          Pause
+        </Button>
+      </div>
     </div>
   );
 }
