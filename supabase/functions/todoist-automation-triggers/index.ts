@@ -94,129 +94,6 @@ function formatTaskAsMemory(task: any): string {
   return parts.join("\n");
 }
 
-// === TODOIST API: Get access token from Composio ===
-
-async function getTodoistAccessToken(connectionId: string): Promise<string | null> {
-  try {
-    const response = await fetch(
-      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
-      { method: "GET", headers: { "x-api-key": COMPOSIO_API_KEY } }
-    );
-    if (!response.ok) {
-      console.error("[Todoist] Failed to fetch connected account:", response.status);
-      return null;
-    }
-    const data = await response.json();
-    const token =
-      data?.data?.connection_params?.access_token ||
-      data?.data?.access_token ||
-      data?.connection_params?.access_token ||
-      data?.access_token ||
-      null;
-    if (!token) console.error("[Todoist] No access token found. Keys:", Object.keys(data?.data || data));
-    return token;
-  } catch (error) {
-    console.error("[Todoist] Error fetching access token:", error);
-    return null;
-  }
-}
-
-// === TODOIST API: Fetch tasks ===
-
-async function fetchTodoistTasks(connectionId: string): Promise<any[]> {
-  try {
-    const accessToken = await getTodoistAccessToken(connectionId);
-    if (!accessToken) return [];
-
-    const response = await fetch("https://api.todoist.com/rest/v2/tasks", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("[Todoist] API error:", response.status, errText.slice(0, 500));
-      return [];
-    }
-
-    const tasks = await response.json();
-    console.log(`[Todoist] Fetched ${tasks.length} tasks`);
-    return tasks;
-  } catch (error) {
-    console.error("[Todoist] Error fetching tasks:", error);
-    return [];
-  }
-}
-
-// === POLLING LOGIC ===
-
-async function pollTodoistTasks(
-  supabaseClient: any,
-  userId: string,
-  connectionId: string
-): Promise<{ newTasks: number; error?: string }> {
-  try {
-    console.log(`[Todoist Poll] Processing user ${userId}`);
-
-    const { data: apiKeys } = await supabaseClient
-      .from("user_api_keys")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const tasks = await fetchTodoistTasks(connectionId);
-    if (tasks.length === 0) return { newTasks: 0 };
-
-    const { data: config } = await supabaseClient
-      .from("todoist_automation_config")
-      .select("tasks_tracked")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const currentCount = config?.tasks_tracked || 0;
-    let newTasksCount = 0;
-
-    for (const task of tasks) {
-      const taskId = task.id;
-      if (!taskId) continue;
-
-      const { data: existing } = await supabaseClient
-        .from("todoist_processed_tasks")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("todoist_task_id", String(taskId))
-        .maybeSingle();
-
-      if (existing) continue;
-
-      await supabaseClient.from("todoist_processed_tasks").insert({
-        user_id: userId,
-        todoist_task_id: String(taskId),
-      });
-
-      newTasksCount++;
-      console.log(`[Todoist Poll] New task: ${task.content}`);
-
-      if (apiKeys) {
-        const memoryContent = formatTaskAsMemory(task);
-        const success = await createMemory(apiKeys, memoryContent);
-        console.log(`[Todoist Poll] Memory ${success ? 'created' : 'failed'} for: ${task.content}`);
-      }
-    }
-
-    await supabaseClient
-      .from("todoist_automation_config")
-      .update({ tasks_tracked: currentCount + newTasksCount })
-      .eq("user_id", userId);
-
-    console.log(`[Todoist Poll] Processed ${newTasksCount} new tasks`);
-    return { newTasks: newTasksCount };
-  } catch (err) {
-    console.error("[Todoist Poll] Error:", err);
-    return { newTasks: 0, error: err instanceof Error ? err.message : "Unknown error" };
-  }
-}
-
 // === MAIN HANDLER ===
 
 Deno.serve(async (req) => {
@@ -225,6 +102,111 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const body = await req.json();
+    const { action } = body;
+
+    // === WEBHOOK HANDLER (from Composio trigger) ===
+    if (!action) {
+      console.log("[Todoist Webhook] Received event payload");
+
+      // Extract task data from Composio webhook payload
+      const taskData = body.payload || body.data || body;
+      const taskId = taskData.id || taskData.task_id || taskData.content?.id;
+      
+      if (!taskId) {
+        console.error("[Todoist Webhook] No task ID found in payload:", JSON.stringify(body).slice(0, 500));
+        return new Response(JSON.stringify({ error: "No task ID in payload" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Find the user by looking up the trigger
+      const triggerId = body.trigger_id || body.triggerId;
+      let userId: string | null = null;
+
+      if (triggerId) {
+        const { data: configData } = await supabaseClient
+          .from("todoist_automation_config")
+          .select("user_id")
+          .eq("trigger_id", triggerId)
+          .eq("is_active", true)
+          .maybeSingle();
+        userId = configData?.user_id || null;
+      }
+
+      // Fallback: try connected_account_id
+      if (!userId && (body.connected_account_id || body.connectionId)) {
+        const connId = body.connected_account_id || body.connectionId;
+        const { data: integration } = await supabaseClient
+          .from("user_integrations")
+          .select("user_id")
+          .eq("composio_connection_id", connId)
+          .eq("integration_id", "todoist")
+          .eq("status", "connected")
+          .maybeSingle();
+        userId = integration?.user_id || null;
+      }
+
+      if (!userId) {
+        console.error("[Todoist Webhook] Could not resolve user from trigger/connection");
+        return new Response(JSON.stringify({ error: "User not found" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Deduplication check
+      const { data: existing } = await supabaseClient
+        .from("todoist_processed_tasks")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("todoist_task_id", String(taskId))
+        .maybeSingle();
+
+      if (existing) {
+        console.log("[Todoist Webhook] Task already processed:", taskId);
+        return new Response(JSON.stringify({ success: true, duplicate: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Mark as processed
+      await supabaseClient.from("todoist_processed_tasks").insert({
+        user_id: userId,
+        todoist_task_id: String(taskId),
+      });
+
+      // Get user API keys for LIAM
+      const { data: apiKeys } = await supabaseClient
+        .from("user_api_keys")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (apiKeys) {
+        const memoryContent = formatTaskAsMemory(taskData);
+        const success = await createMemory(apiKeys, memoryContent);
+        console.log(`[Todoist Webhook] Memory creation ${success ? 'succeeded' : 'failed'} for task ${taskId}`);
+      }
+
+      // Increment tasks_tracked
+      const { data: currentConfig } = await supabaseClient
+        .from("todoist_automation_config")
+        .select("tasks_tracked")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      await supabaseClient
+        .from("todoist_automation_config")
+        .update({ tasks_tracked: (currentConfig?.tasks_tracked || 0) + 1 })
+        .eq("user_id", userId);
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === USER ACTIONS (activate/deactivate) - require auth ===
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -232,7 +214,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const supabaseAuth = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -246,7 +227,6 @@ Deno.serve(async (req) => {
     }
 
     const userId = claimsData.user.id;
-    const { action } = await req.json();
     console.log(`[Todoist Triggers] Action: ${action}, User: ${userId}`);
 
     // Get user's Todoist connection
@@ -267,23 +247,76 @@ Deno.serve(async (req) => {
     const connectionId = integration.composio_connection_id;
 
     if (action === "activate") {
-      console.log(`[Todoist Triggers] Activating polling mode for user ${userId}`);
+      const webhookUrl = `${SUPABASE_URL}/functions/v1/todoist-automation-triggers`;
+
+      console.log(`[Todoist Triggers] Creating event trigger TODOIST_NEW_TASK_CREATED`);
+      console.log(`[Todoist Triggers] Connection ID: ${connectionId}`);
+      console.log(`[Todoist Triggers] Webhook URL: ${webhookUrl}`);
+
+      const triggerResponse = await fetch(
+        "https://backend.composio.dev/api/v3/trigger_instances/TODOIST_NEW_TASK_CREATED/upsert",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": COMPOSIO_API_KEY,
+          },
+          body: JSON.stringify({
+            connected_account_id: connectionId,
+            trigger_config: {},
+            webhook_url: webhookUrl,
+          }),
+        }
+      );
+
+      const triggerText = await triggerResponse.text();
+      console.log(`[Todoist Triggers] Composio response: ${triggerResponse.status} ${triggerText}`);
+
+      if (!triggerResponse.ok) {
+        return new Response(
+          JSON.stringify({ error: "Failed to create trigger", details: triggerText }),
+          { status: triggerResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let triggerData;
+      try { triggerData = JSON.parse(triggerText); } catch { triggerData = {}; }
+      const triggerId = triggerData?.trigger_id || triggerData?.id || null;
 
       await supabaseClient
         .from("todoist_automation_config")
-        .update({ is_active: true, trigger_id: null })
+        .update({ is_active: true, trigger_id: triggerId })
         .eq("user_id", userId);
 
-      // Run initial poll
-      const pollResult = await pollTodoistTasks(supabaseClient, userId, connectionId);
-
       return new Response(
-        JSON.stringify({ success: true, mode: "polling", initialPoll: pollResult }),
+        JSON.stringify({ success: true, triggerId }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (action === "deactivate") {
+      // Get trigger ID to delete
+      const { data: config } = await supabaseClient
+        .from("todoist_automation_config")
+        .select("trigger_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (config?.trigger_id) {
+        console.log(`[Todoist Triggers] Deleting trigger: ${config.trigger_id}`);
+        try {
+          await fetch(
+            `https://backend.composio.dev/api/v3/trigger_instances/${config.trigger_id}`,
+            {
+              method: "DELETE",
+              headers: { "x-api-key": COMPOSIO_API_KEY },
+            }
+          );
+        } catch (err) {
+          console.error("[Todoist Triggers] Error deleting trigger:", err);
+        }
+      }
+
       await supabaseClient
         .from("todoist_automation_config")
         .update({ is_active: false, trigger_id: null })
@@ -291,16 +324,6 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (action === "manual-poll") {
-      console.log(`[Todoist Triggers] Manual poll for user ${userId}`);
-      const pollResult = await pollTodoistTasks(supabaseClient, userId, connectionId);
-
-      return new Response(
-        JSON.stringify({ success: true, newItems: pollResult.newTasks, error: pollResult.error }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

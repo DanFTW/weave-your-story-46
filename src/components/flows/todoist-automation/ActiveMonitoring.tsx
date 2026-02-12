@@ -1,15 +1,13 @@
-import { CheckSquare, Pause, RefreshCw } from "lucide-react";
+import { CheckSquare, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TodoistTaskStats } from "@/types/todoistAutomation";
 
 interface ActiveMonitoringProps {
   stats: TodoistTaskStats;
   onPause: () => void;
-  onCheckNow: () => void;
-  isPolling: boolean;
 }
 
-export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, onPause }: ActiveMonitoringProps) {
   return (
     <div className="space-y-6">
       <div className="bg-card rounded-xl p-5 border border-border">
@@ -19,7 +17,7 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
           </div>
           <div>
             <h3 className="font-semibold text-foreground">Monitoring Active</h3>
-            <p className="text-sm text-muted-foreground">Tracking new Todoist tasks</p>
+            <p className="text-sm text-muted-foreground">Tracking new Todoist tasks in real-time</p>
           </div>
         </div>
 
@@ -44,16 +42,10 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
         </div>
       </div>
 
-      <div className="space-y-3">
-        <Button variant="outline" onClick={onCheckNow} disabled={isPolling} className="w-full">
-          <RefreshCw className={`w-4 h-4 mr-2 ${isPolling ? 'animate-spin' : ''}`} />
-          {isPolling ? 'Checking...' : 'Check Now'}
-        </Button>
-        <Button variant="outline" onClick={onPause} className="w-full">
-          <Pause className="w-4 h-4 mr-2" />
-          Pause
-        </Button>
-      </div>
+      <Button variant="outline" onClick={onPause} className="w-full">
+        <Pause className="w-4 h-4 mr-2" />
+        Pause
+      </Button>
     </div>
   );
 }

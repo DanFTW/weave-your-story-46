@@ -23,8 +23,8 @@ export function TodoistAutomationFlow() {
   const { isConnected, checkStatus } = useComposio('TODOIST');
   
   const {
-    phase, setPhase, config, stats, isLoading, isActivating, isPolling,
-    loadConfig, updateConfig, activateMonitoring, deactivateMonitoring, manualPoll,
+    phase, setPhase, config, stats, isLoading, isActivating,
+    loadConfig, updateConfig, activateMonitoring, deactivateMonitoring,
   } = useTodoistAutomation();
 
   useEffect(() => {
@@ -103,8 +103,6 @@ export function TodoistAutomationFlow() {
           <ActiveMonitoring
             stats={stats}
             onPause={deactivateMonitoring}
-            onCheckNow={manualPoll}
-            isPolling={isPolling}
           />
         )}
       </div>
