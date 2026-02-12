@@ -194,6 +194,91 @@ function generateToken(length = 32): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// === FETCH FULL TRANSCRIPT BY ID ===
+
+async function getAccessToken(connectionId: string): Promise<string | null> {
+  try {
+    const connResponse = await fetch(
+      `https://backend.composio.dev/api/v1/connected_accounts/${connectionId}`,
+      { headers: { "x-api-key": COMPOSIO_API_KEY } }
+    );
+    if (!connResponse.ok) return null;
+    const connData = await connResponse.json();
+    return connData?.connectionParams?.access_token ||
+      connData?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
+      null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchFullTranscript(connectionId: string, transcriptId: string): Promise<any | null> {
+  // 1. Try Composio FIREFLIES_GET_TRANSCRIPT_BY_ID
+  try {
+    const response = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/FIREFLIES_GET_TRANSCRIPT_BY_ID",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": COMPOSIO_API_KEY },
+        body: JSON.stringify({ connected_account_id: connectionId, arguments: { id: transcriptId } }),
+      }
+    );
+
+    if (response.ok) {
+      const result = await response.json();
+      const data = result?.data?.response_data?.transcript || result?.data?.response_data || result?.data || result;
+      const sentences = data?.sentences || data?.transcript?.sentences;
+      if (Array.isArray(sentences) && sentences.length > 0) {
+        console.log(`[Fireflies Sync] Got full transcript via Composio for ${transcriptId} (${sentences.length} sentences)`);
+        return data;
+      }
+      console.warn(`[Fireflies Sync] Composio returned no sentences for ${transcriptId}, trying GraphQL fallback`);
+    }
+  } catch (err) {
+    console.warn(`[Fireflies Sync] Composio GET_TRANSCRIPT_BY_ID failed for ${transcriptId}:`, err);
+  }
+
+  // 2. Fallback: direct GraphQL query
+  const accessToken = await getAccessToken(connectionId);
+  if (!accessToken) {
+    console.error(`[Fireflies Sync] No access token available for GraphQL fallback`);
+    return null;
+  }
+
+  try {
+    const gqlResponse = await fetch("https://api.fireflies.ai/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        query: `query Transcript($id: String!) {
+          transcript(id: $id) {
+            id title date duration participants organizer_email
+            sentences { text speaker_name }
+            summary { overview action_items keywords }
+          }
+        }`,
+        variables: { id: transcriptId },
+      }),
+    });
+
+    if (gqlResponse.ok) {
+      const gqlData = await gqlResponse.json();
+      const transcript = gqlData?.data?.transcript;
+      if (transcript) {
+        const sentences = transcript.sentences;
+        console.log(`[Fireflies Sync] Got full transcript via GraphQL for ${transcriptId} (${Array.isArray(sentences) ? sentences.length : 0} sentences)`);
+        return transcript;
+      }
+    } else {
+      console.error(`[Fireflies Sync] GraphQL fallback failed for ${transcriptId}: ${gqlResponse.status}`);
+    }
+  } catch (err) {
+    console.error(`[Fireflies Sync] GraphQL fallback error for ${transcriptId}:`, err);
+  }
+
+  return null;
+}
+
 // === SYNC FIREFLIES TRANSCRIPTS ===
 
 async function syncFirefliesTranscripts(
@@ -249,39 +334,29 @@ async function syncFirefliesTranscripts(
     console.warn("[Fireflies Sync] Composio error:", toolText.slice(0, 500));
 
     // Fallback: get the access token from Composio connection metadata
-    try {
-      const connResponse = await fetch(
-        `https://backend.composio.dev/api/v1/connected_accounts/${connectionId}`,
-        {
-          headers: { "x-api-key": COMPOSIO_API_KEY },
-        }
-      );
-      if (connResponse.ok) {
-        const connData = await connResponse.json();
-        const accessToken = connData?.connectionParams?.access_token || connData?.connectionParams?.headers?.Authorization?.replace("Bearer ", "");
+    const accessToken = await getAccessToken(connectionId);
+    if (accessToken) {
+      try {
+        const gqlResponse = await fetch("https://api.fireflies.ai/graphql", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            query: "{ transcripts { id title date duration participants organizer_email sentences { text speaker_name } summary { overview action_items keywords } } }",
+          }),
+        });
 
-        if (accessToken) {
-          const gqlResponse = await fetch("https://api.fireflies.ai/graphql", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({
-              query: "{ transcripts { id title date duration participants organizer_email sentences { text speaker_name } summary { overview action_items keywords } } }",
-            }),
-          });
-
-          if (gqlResponse.ok) {
-            const gqlData = await gqlResponse.json();
-            transcripts = gqlData?.data?.transcripts || [];
-          } else {
-            console.error("[Fireflies Sync] GraphQL fallback failed:", gqlResponse.status);
-          }
+        if (gqlResponse.ok) {
+          const gqlData = await gqlResponse.json();
+          transcripts = gqlData?.data?.transcripts || [];
+        } else {
+          console.error("[Fireflies Sync] GraphQL fallback failed:", gqlResponse.status);
         }
+      } catch (fallbackErr) {
+        console.error("[Fireflies Sync] Fallback error:", fallbackErr);
       }
-    } catch (fallbackErr) {
-      console.error("[Fireflies Sync] Fallback error:", fallbackErr);
     }
   }
 
@@ -290,7 +365,7 @@ async function syncFirefliesTranscripts(
   if (transcripts.length === 0) {
     await supabaseClient
       .from("fireflies_automation_config")
-      .update({ last_received_at: new Date().toISOString() })
+      .update({ last_sync_at: new Date().toISOString() })
       .eq("user_id", userId);
     return { newTranscripts: 0, totalSaved: 0 };
   }
@@ -322,9 +397,14 @@ async function syncFirefliesTranscripts(
     const transcript = newTranscripts[i];
     const transcriptId = String(transcript.id);
 
+    // Fetch full transcript details (sentences + summary) per-transcript
+    const hasSentences = Array.isArray(transcript.sentences) && transcript.sentences.length > 0;
+    const fullTranscript = hasSentences ? transcript : await fetchFullTranscript(connectionId, transcriptId);
+    const transcriptToFormat = fullTranscript || transcript; // graceful degradation
+
     // Create memory first, only mark processed on success
     if (apiKeys) {
-      const memoryChunks = formatTranscriptAsMemory(transcript);
+      const memoryChunks = formatTranscriptAsMemory(transcriptToFormat);
       let allChunksSaved = true;
 
       for (const chunk of memoryChunks) {

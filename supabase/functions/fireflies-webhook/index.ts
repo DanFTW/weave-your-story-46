@@ -99,7 +99,25 @@ async function getAutomationConfigByToken(supabase: any, token: string) {
   return data;
 }
 
-// === FETCH TRANSCRIPT VIA COMPOSIO ===
+// === GET ACCESS TOKEN ===
+
+async function getAccessToken(connectionId: string): Promise<string | null> {
+  try {
+    const connResponse = await fetch(
+      `https://backend.composio.dev/api/v1/connected_accounts/${connectionId}`,
+      { headers: { "x-api-key": COMPOSIO_API_KEY } }
+    );
+    if (!connResponse.ok) return null;
+    const connData = await connResponse.json();
+    return connData?.connectionParams?.access_token ||
+      connData?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
+      null;
+  } catch {
+    return null;
+  }
+}
+
+// === FETCH TRANSCRIPT VIA COMPOSIO (with GraphQL fallback) ===
 
 async function fetchTranscriptViaComposio(userId: string, meetingId: string, supabase: any) {
   const { data: integration } = await supabase
@@ -115,34 +133,71 @@ async function fetchTranscriptViaComposio(userId: string, meetingId: string, sup
     return null;
   }
 
+  const connectionId = integration.composio_connection_id;
+
+  // 1. Try Composio tool
   try {
     const response = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/FIREFLIES_GET_TRANSCRIPT_BY_ID",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": COMPOSIO_API_KEY,
-        },
-        body: JSON.stringify({
-          connected_account_id: integration.composio_connection_id,
-          arguments: { id: meetingId },
-        }),
+        headers: { "Content-Type": "application/json", "x-api-key": COMPOSIO_API_KEY },
+        body: JSON.stringify({ connected_account_id: connectionId, arguments: { id: meetingId } }),
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Fireflies Webhook] Composio error:", response.status, errorText.slice(0, 500));
-      return null;
+    if (response.ok) {
+      const result = await response.json();
+      const data = result?.data?.response_data?.transcript || result?.data?.response_data || result?.data || result;
+      const sentences = data?.sentences || data?.transcript?.sentences;
+      if (Array.isArray(sentences) && sentences.length > 0) {
+        console.log(`[Fireflies Webhook] Got full transcript via Composio (${sentences.length} sentences)`);
+        return data;
+      }
+      console.warn("[Fireflies Webhook] Composio returned no sentences, trying GraphQL fallback");
     }
-
-    const result = await response.json();
-    return result?.data?.response_data ?? result?.data ?? result?.response_data ?? result;
   } catch (err) {
-    console.error("[Fireflies Webhook] Composio fetch error:", err);
+    console.warn("[Fireflies Webhook] Composio fetch error:", err);
+  }
+
+  // 2. Fallback: direct GraphQL
+  const accessToken = await getAccessToken(connectionId);
+  if (!accessToken) {
+    console.error("[Fireflies Webhook] No access token for GraphQL fallback");
     return null;
   }
+
+  try {
+    const gqlResponse = await fetch("https://api.fireflies.ai/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        query: `query Transcript($id: String!) {
+          transcript(id: $id) {
+            id title date duration participants organizer_email
+            sentences { text speaker_name }
+            summary { overview action_items keywords }
+          }
+        }`,
+        variables: { id: meetingId },
+      }),
+    });
+
+    if (gqlResponse.ok) {
+      const gqlData = await gqlResponse.json();
+      const transcript = gqlData?.data?.transcript;
+      if (transcript) {
+        console.log(`[Fireflies Webhook] Got full transcript via GraphQL (${Array.isArray(transcript.sentences) ? transcript.sentences.length : 0} sentences)`);
+        return transcript;
+      }
+    } else {
+      console.error("[Fireflies Webhook] GraphQL fallback failed:", gqlResponse.status);
+    }
+  } catch (err) {
+    console.error("[Fireflies Webhook] GraphQL fallback error:", err);
+  }
+
+  return null;
 }
 
 // === FORMAT TRANSCRIPT AS MEMORY ===
