@@ -14,6 +14,7 @@ export function useTodoistAutomation() {
   const [config, setConfig] = useState<TodoistAutomationConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
 
   const stats: TodoistTaskStats = {
     tasksTracked: config?.tasksTracked ?? 0,
@@ -153,13 +154,46 @@ export function useTodoistAutomation() {
     }
   }, [config, updateConfig, toast]);
 
+  const manualPoll = useCallback(async (): Promise<boolean> => {
+    if (!config) return false;
+    setIsPolling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+
+      const { data, error } = await supabase.functions.invoke('todoist-automation-triggers', {
+        body: { action: 'manual-poll' },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Check failed", description: error.message, variant: "destructive" });
+        return false;
+      }
+
+      const newItems = data?.newItems ?? 0;
+      if (newItems > 0) {
+        toast({ title: `Found ${newItems} new task${newItems > 1 ? 's' : ''}`, description: "Memories have been created" });
+        await loadConfig(); // Refresh stats
+      } else {
+        toast({ title: "No new tasks", description: "All tasks are already tracked" });
+      }
+      return true;
+    } catch (err) {
+      console.error('Error polling:', err);
+      return false;
+    } finally {
+      setIsPolling(false);
+    }
+  }, [config, toast, loadConfig]);
+
   const reset = useCallback(() => {
     setPhase('auth-check');
     setConfig(null);
   }, []);
 
   return {
-    phase, setPhase, config, stats, isLoading, isActivating,
-    loadConfig, updateConfig, activateMonitoring, deactivateMonitoring, reset,
+    phase, setPhase, config, stats, isLoading, isActivating, isPolling,
+    loadConfig, updateConfig, activateMonitoring, deactivateMonitoring, manualPoll, reset,
   };
 }
