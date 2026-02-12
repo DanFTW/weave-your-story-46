@@ -278,7 +278,7 @@ export default function MemoryDetail() {
             {memory.category?.toLowerCase() === 'email' || memory.tag?.toLowerCase() === 'email' ? (
               <EmailContent content={memory.content} />
             ) : (
-              <p className="text-base leading-relaxed text-foreground">
+              <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">
                 {memory.content}
               </p>
             )}
