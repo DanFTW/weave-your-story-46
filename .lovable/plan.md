@@ -1,165 +1,215 @@
-# Google Drive Document Tracker Thread
+# Google Drive Document Tracker -- Implementation Plan
 
-## Overview
+## Summary
 
-Create a new automation thread that monitors a connected Google Drive account for new Google Docs documents and automatically saves them as memories. The implementation mirrors the Fireflies Transcript Tracker pattern exactly: Connect -> Toggle Monitoring -> Active Monitoring with Composio webhook triggers (no polling).
+Add a new "Google Drive Document Tracker" automation thread that monitors a connected Google Drive account for new Google Docs documents and automatically saves them as memories. The implementation mirrors the Fireflies Transcript Tracker pattern: Connect Google Drive, toggle monitoring on/off, with Composio webhook triggers for automatic capture and a manual "Check Now" for backfill.
 
-## Files to Create
+## Prerequisites
 
-### 1. Database Tables (SQL migration)
+A new `googledrive` integration must be registered (auth config `ac_7m7XMBKrLI_O`), separate from the existing `googledocs` integration. A Google Drive SVG icon asset is also needed.
 
-Two new tables following the Fireflies pattern:
+---
 
-`googledocs_automation_config`
+## Step 1: Database Migration
 
-- `id` (uuid, PK)
-- `user_id` (uuid, FK, unique)
-- `is_active` (boolean, default false)
-- `trigger_instance_id` (text, nullable)
-- `documents_saved` (integer, default 0)
-- `last_sync_at` (timestamptz, nullable)
-- `last_webhook_at` (timestamptz, nullable)
-- `created_at` / `updated_at` (timestamptz)
+Create two tables with RLS policies:
 
-`googledocs_processed_documents`
+`googledrive_automation_config`
 
-- `id` (uuid, PK)
-- `user_id` (uuid, FK)
-- `googledocs_document_id` (text, not null)
-- `created_at` (timestamptz)
-- Unique constraint on `(user_id, googledocs_document_id)`
 
-### 2. Type Definition
+| Column              | Type        | Notes                                |
+| ------------------- | ----------- | ------------------------------------ |
+| id                  | uuid        | PK, default gen_random_uuid()        |
+| user_id             | uuid        | FK, unique, not null                 |
+| is_active           | boolean     | default false                        |
+| trigger_instance_id | text        | nullable, stores Composio trigger ID |
+| documents_saved     | integer     | default 0                            |
+| last_sync_at        | timestamptz | nullable                             |
+| last_webhook_at     | timestamptz | nullable                             |
+| created_at          | timestamptz | default now()                        |
+| updated_at          | timestamptz | default now()                        |
 
-`src/types/googledocsAutomation.ts`
 
-- `GoogleDocsAutomationPhase`: `'auth-check' | 'configure' | 'activating' | 'active'`
-- `GoogleDocsAutomationConfig` and `GoogleDocsAutomationStats` interfaces (mirrors Fireflies types)
+RLS policies: Users can SELECT, INSERT, UPDATE their own rows (auth.uid() = user_id). Auto-update `updated_at` via trigger.
 
-### 3. Custom Hook
+`googledrive_processed_documents`
 
-`src/hooks/useGoogleDocsAutomation.ts`
 
-- Same structure as `useFirefliesAutomation.ts`
-- Manages phase, config, stats, loading states
-- `loadConfig` reads/creates `googledocs_automation_config` row
-- `activateMonitoring` calls edge function with `action: 'activate'`
-- `deactivateMonitoring` calls with `action: 'deactivate'`
-- `manualSync` calls with `action: 'manual-poll'`
+| Column              | Type        | Notes                         |
+| ------------------- | ----------- | ----------------------------- |
+| id                  | uuid        | PK, default gen_random_uuid() |
+| user_id             | uuid        | FK, not null                  |
+| googledrive_file_id | text        | not null                      |
+| created_at          | timestamptz | default now()                 |
 
-### 4. Edge Function
 
-`supabase/functions/googledocs-automation-triggers/index.ts`
+Unique constraint on (user_id, googledrive_file_id). RLS: Users can SELECT and INSERT their own rows.
 
-- Same architecture as `fireflies-automation-triggers`
-- Creates a Composio Trigger Instance for Google Drive **“New File Matching Query”** with query:
-  - `mimeType='application/vnd.google-apps.document' and trashed=false`
-- Stores Composio `trigger_instance_id` into `googledocs_automation_config`
-- For initial backfill and the optional "Check Now" action, uses Composio tool `GOOGLEDRIVE_LIST_FILES` (or Google Drive API fallback via access token) to list documents
-- For each new document, fetches full content via Google Docs export (`https://docs.google.com/document/d/{id}/export?mimeType=text/plain`)
-- Deduplicates via `googledocs_processed_documents` table
-- Creates LIAM memories with `tag: "GOOGLEDOCS"`, includes document title and full text content
-- Supports chunking for large documents (same `MAX_MEMORY_CHUNK_SIZE = 8000` pattern)
-- Three actions: `activate`, `deactivate`, `manual-poll`
+---
 
-### 5. Webhook Edge Function
+## Step 2: Register Google Drive Integration
 
-`supabase/functions/googledocs-webhook/index.ts`
+`supabase/functions/composio-connect/index.ts`
 
-- Public webhook receiver for Composio trigger deliveries
-- Validates the event, extracts `fileId`, dedupes via `googledocs_processed_documents`
-- Fetches full document content via export endpoint
-- Creates LIAM memories with `tag: "GOOGLEDOCS"` and updates `googledocs_automation_config` (`documents_saved`, `last_webhook_at`)
+- Add `googledrive: "ac_7m7XMBKrLI_O"` to AUTH_CONFIGS map
+- Add `"googledrive"` to supported integrations array
 
-### 6. Flow UI Components
+`src/data/integrations.ts`
 
-`src/components/flows/googledocs-automation/GoogleDocsAutomationFlow.tsx`
+- Add `googledrive` entry to integrationSections (Apps list)
+- Add `googledrive` integration detail with name "Google Drive", description, capabilities, and gradient colors (blue themed)
 
-- Auth gate pattern: checks Google Drive connection via `useComposio('GOOGLEDRIVE')`
+`src/assets/integrations/googledrive.svg`
+
+- Add official Google Drive triangle logo SVG
+
+---
+
+## Step 3: New Files -- Types and Hook
+
+`src/types/googledriveAutomation.ts`
+
+- `GoogleDriveAutomationPhase`: `'auth-check' | 'configure' | 'activating' | 'active'`
+- `GoogleDriveAutomationConfig`: id, userId, isActive, triggerInstanceId, documentsSaved, lastSyncAt, lastWebhookAt, createdAt, updatedAt
+- `GoogleDriveAutomationStats`: documentsSaved, isActive, lastSyncAt
+
+`src/hooks/useGoogleDriveAutomation.ts`
+
+- Mirrors `useFirefliesAutomation.ts` structure exactly
+- Reads/creates `googledrive_automation_config` row
+- `activateMonitoring` invokes `googledrive-automation-triggers` with `action: 'activate'`
+- `deactivateMonitoring` invokes with `action: 'deactivate'`
+- `manualSync` invokes with `action: 'manual-poll'`
+- No webhook URL/secret display (unlike Fireflies, Google Drive uses Composio triggers not user-pasted webhooks)
+
+---
+
+## Step 4: Edge Functions
+
+`supabase/functions/googledrive-automation-triggers/index.ts`
+
+Three actions: `activate`, `deactivate`, `manual-poll`
+
+- **activate**: Creates a Composio trigger instance for Google Drive **"New File Matching Query"** event filtered to Google Docs mimeType using the query `mimeType='application/vnd.google-apps.document' and trashed=false`. Stores `trigger_instance_id` in config. Runs initial backfill sync.
+- **deactivate**: Disables/deletes the Composio trigger instance, sets `is_active = false`.
+- **manual-poll**: Lists recent Google Drive files via Composio `GOOGLEDRIVE_LIST_FILES` (filtered to `mimeType='application/vnd.google-apps.document' and trashed=false`), deduplicates against `googledrive_processed_documents`, fetches full document text via Google Docs export endpoint, creates LIAM memories with `tag: "GOOGLEDRIVE"`.
+
+Includes: LIAM crypto utilities (copied from Fireflies pattern), chunking for large documents (MAX_MEMORY_CHUNK_SIZE = 8000), rate limiting between API calls.
+
+`supabase/functions/googledrive-webhook/index.ts`
+
+Public webhook receiver for Composio trigger deliveries:
+
+- Extracts `fileId` from event payload
+- Validates it's a Google Docs document
+- Deduplicates via `googledrive_processed_documents`
+- Fetches full text content via export endpoint
+- Creates LIAM memory with `tag: "GOOGLEDRIVE"`
+- Updates `googledrive_automation_config` stats
+
+`supabase/config.toml`
+
+- Add `[functions.googledrive-automation-triggers]` with `verify_jwt = false`
+- Add `[functions.googledrive-webhook]` with `verify_jwt = false`
+
+---
+
+## Step 5: Flow UI Components
+
+All under `src/components/flows/googledrive-automation/`:
+
+`GoogleDriveAutomationFlow.tsx`
+
+- Auth gate: checks connection via `useComposio('GOOGLEDRIVE')`
 - Redirects to `/integration/googledrive` if not connected
 - Renders `AutomationConfig` or `ActiveMonitoring` based on phase
-- Uses blue gradient (matching Google Docs brand)
+- Blue gradient header (matching Google Drive brand)
 
-`src/components/flows/googledocs-automation/AutomationConfig.tsx`
+`AutomationConfig.tsx`
 
-- Single card explaining document monitoring
-- "Activate Monitoring" button (blue themed)
+- Card with `FileText` icon explaining document monitoring
+- "Activate Monitoring" button (blue: `#4285F4`)
 
-`src/components/flows/googledocs-automation/ActiveMonitoring.tsx`
+`ActiveMonitoring.tsx`
 
 - Green pulse status indicator
 - Documents saved count
 - "Check Now" and "Pause" buttons
+- No webhook URL section (unlike Fireflies -- Composio handles this automatically)
 
-`src/components/flows/googledocs-automation/ActivatingScreen.tsx`
+`ActivatingScreen.tsx`
 
-- Loading spinner during activation
+- Loading spinner during activation (blue themed)
 
-`src/components/flows/googledocs-automation/index.ts`
+`index.ts`
 
 - Barrel export
 
-## Files to Modify
+---
 
-### 7. Thread Registration
+## Step 6: Registry Updates
 
 `src/data/threads.ts`
 
-- Add `googledocs-tracker` entry at the top of the array (with other automation threads):
-  - `icon: FileText` (from lucide-react)
-  - `gradient: "blue"`
-  - `integrations: ["googledrive"]`
-  - `flowMode: "thread"`, `triggerType: "automatic"`
-
-### 8. Thread Config
+- Add `googledrive-tracker` entry with: `icon: FileText`, `gradient: "blue"`, `integrations: ["googledrive"]`, `flowMode: "thread"`, `triggerType: "automatic"`
 
 `src/data/threadConfigs.ts`
 
-- Add `googledocs-tracker` config with 2 steps: Connect Google Drive, Document Monitoring toggle
-
-### 9. Flow Config
+- Add `googledrive-tracker` config with 3 steps: Connect Google Drive, Document Monitoring toggle, Always-On Monitoring
 
 `src/data/flowConfigs.ts`
 
-- Add `googledocs-tracker` entry with `isGoogleDocsAutomationFlow: true`, `memoryTag: "GOOGLEDOCS"`
-
-### 10. Flow Type
+- Add `googledrive-tracker` entry with `isGoogleDriveAutomationFlow: true`, `memoryTag: "GOOGLEDRIVE"`
 
 `src/types/flows.ts`
 
-- Add `isGoogleDocsAutomationFlow?: boolean` to `FlowConfig` interface
-
-### 11. Flow Page Routing
+- Add `isGoogleDriveAutomationFlow?: boolean` to `FlowConfig` interface
 
 `src/pages/FlowPage.tsx`
 
-- Import `GoogleDocsAutomationFlow`
-- Add render branch: `if (config.isGoogleDocsAutomationFlow) return <GoogleDocsAutomationFlow />`
-
-### 12. Thread Navigation Arrays
+- Import `GoogleDriveAutomationFlow`
+- Add render branch: `if (config.isGoogleDriveAutomationFlow) return <GoogleDriveAutomationFlow />`
 
 `src/pages/Threads.tsx` and `src/pages/ThreadOverview.tsx`
 
-- Add `'googledocs-tracker'` to `flowEnabledThreads` arrays
-
-### 13. Memory Card Branding
+- Add `'googledrive-tracker'` to both `flowEnabledThreads` arrays
 
 `src/components/memories/MemoryCard.tsx`
 
-- Add `googledocs` entry to `categoryConfig`: `{ icon: FileText, gradient: "bg-gradient-to-r from-blue-500 to-blue-600", label: "Google Drive Document Tracker" }`
-- Add `'googledocs'` to `CATEGORY_TAGS` set
+- Add `googledrive` to `categoryConfig`: `{ icon: FileText, gradient: "bg-gradient-to-r from-blue-500 to-blue-600", label: "Google Drive Document Tracker" }`
+- Add `'googledrive'` to `CATEGORY_TAGS` set
 
-### 14. Edge Function Config
+---
 
-`supabase/config.toml`
+## Files Summary
 
-- Add `[functions.googledocs-automation-triggers]` with `verify_jwt = false`
-- Add `[functions.googledocs-webhook]` with `verify_jwt = false`
+**New files (10)**:
 
-## Technical Notes
+- `src/types/googledriveAutomation.ts`
+- `src/hooks/useGoogleDriveAutomation.ts`
+- `src/components/flows/googledrive-automation/GoogleDriveAutomationFlow.tsx`
+- `src/components/flows/googledrive-automation/AutomationConfig.tsx`
+- `src/components/flows/googledrive-automation/ActiveMonitoring.tsx`
+- `src/components/flows/googledrive-automation/ActivatingScreen.tsx`
+- `src/components/flows/googledrive-automation/index.ts`
+- `src/assets/integrations/googledrive.svg`
+- `supabase/functions/googledrive-automation-triggers/index.ts`
+- `supabase/functions/googledrive-webhook/index.ts`
 
-- Google Drive Composio Auth Config ID: `ac_7m7XMBKrLI_O`
-- Integration ID used throughout: `googledrive`
-- Composio Trigger used: **New File Matching Query** filtered to Google Docs mimeType
-- Full text is exported as plain text for memory storage
-- Always-on monitoring is webhook-driven (no pg_cron needed); the optional "Check Now" triggers a one-off backfill/sync for verification and initial catch-up
+**Modified files (11)**:
+
+- `supabase/config.toml`
+- `supabase/functions/composio-connect/index.ts`
+- `src/data/integrations.ts`
+- `src/data/threads.ts`
+- `src/data/threadConfigs.ts`
+- `src/data/flowConfigs.ts`
+- `src/types/flows.ts`
+- `src/pages/FlowPage.tsx`
+- `src/pages/Threads.tsx`
+- `src/pages/ThreadOverview.tsx`
+- `src/components/memories/MemoryCard.tsx`
+
+**Database migration (1)**:
+
+- Two tables: `googledrive_automation_config`, `googledrive_processed_documents`
