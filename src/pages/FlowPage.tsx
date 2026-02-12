@@ -71,6 +71,8 @@ import { TodoistAutomationFlow } from "@/components/flows/todoist-automation";
 // Fireflies Automation components
 import { FirefliesAutomationFlow } from "@/components/flows/fireflies-automation";
 
+// Google Drive Automation components
+import { GoogleDriveAutomationFlow } from "@/components/flows/googledrive-automation";
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -267,6 +269,12 @@ export default function FlowPage() {
   
   if (config.isFirefliesAutomationFlow) {
     return <FirefliesAutomationFlow />;
+  }
+
+  // === GOOGLE DRIVE AUTOMATION FLOW RENDER ===
+  
+  if (config.isGoogleDriveAutomationFlow) {
+    return <GoogleDriveAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===
