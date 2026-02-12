@@ -128,6 +128,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "googlesuper": "googlesuper",
   "google_super": "googlesuper",
   "google-super": "googlesuper",
+  "fireflies": "fireflies",
+  "fireflies_ai": "fireflies",
+  "firefliesai": "fireflies",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -2052,6 +2055,52 @@ async function fetchBoxProfile(accessToken: string): Promise<{
   }
 }
 
+// Fetch Fireflies.ai user profile via Fireflies GraphQL API
+async function fetchFirefliesProfile(accessToken: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Fireflies profile via GraphQL API...");
+    
+    const response = await fetch(
+      "https://api.fireflies.ai/graphql",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: "{ user { name email user_id } }",
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`composio-callback: Fireflies GraphQL response status=${response.status}`);
+    console.log(`composio-callback: Fireflies GraphQL response=${responseText.slice(0, 500)}`);
+
+    if (!response.ok) {
+      console.error("composio-callback: Failed to fetch Fireflies profile");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const result = JSON.parse(responseText);
+    const userData = result.data?.user || {};
+    
+    return {
+      email: userData.email || null,
+      name: userData.name || null,
+      avatarUrl: null, // Fireflies API does not expose profile pictures
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Fireflies profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -3070,6 +3119,29 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Google Super profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Fireflies.ai, fetch user profile via Fireflies GraphQL API
+    if (toolkit === "fireflies") {
+      console.log("composio-callback: Fetching Fireflies profile info via GraphQL API...");
+      
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        const profileInfo = await fetchFirefliesProfile(accessToken);
+        
+        if (profileInfo.email) {
+          accountEmail = profileInfo.email;
+        }
+        if (profileInfo.name) {
+          accountName = profileInfo.name;
+        }
+        // No avatar for Fireflies - UI will show initials fallback
+        
+        console.log(`composio-callback: Fireflies profile - name=${accountName}, email=${accountEmail}`);
+      } else {
+        console.log("composio-callback: No access_token found for Fireflies connection");
+      }
     }
 
     const { data: savedData, error: dbError } = await supabase
