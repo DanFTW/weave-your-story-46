@@ -15,6 +15,7 @@ export function useFirefliesAutomation() {
   const [config, setConfig] = useState<FirefliesAutomationConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
 
@@ -106,9 +107,20 @@ export function useFirefliesAutomation() {
 
       setWebhookUrl(data.webhookUrl);
       setWebhookSecret(data.webhookSecret);
-      setConfig(prev => prev ? { ...prev, isActive: true, webhookToken: data.webhookToken, webhookSecret: data.webhookSecret } : null);
+      setConfig(prev => prev ? {
+        ...prev,
+        isActive: true,
+        webhookToken: data.webhookToken,
+        webhookSecret: data.webhookSecret,
+        transcriptsSaved: data.totalSaved ?? prev.transcriptsSaved,
+        lastReceivedAt: new Date().toISOString(),
+      } : null);
       setPhase('active');
-      toast({ title: "Monitoring activated", description: "Paste the webhook URL into Fireflies" });
+
+      const msg = data.newTranscripts > 0
+        ? `Monitoring activated — ${data.newTranscripts} transcript(s) saved`
+        : "Monitoring activated — paste the webhook URL into Fireflies";
+      toast({ title: msg });
       return true;
     } catch (err) {
       console.error('Error activating:', err);
@@ -118,6 +130,46 @@ export function useFirefliesAutomation() {
       setIsActivating(false);
     }
   }, [config, toast]);
+
+  const manualSync = useCallback(async (): Promise<boolean> => {
+    setIsSyncing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({ title: "Authentication required", variant: "destructive" });
+        return false;
+      }
+
+      const { data, error } = await supabase.functions.invoke('fireflies-automation-triggers', {
+        body: { action: 'manual-poll' },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+        return false;
+      }
+
+      setConfig(prev => prev ? {
+        ...prev,
+        transcriptsSaved: data.totalSaved ?? prev.transcriptsSaved,
+        lastReceivedAt: new Date().toISOString(),
+      } : null);
+
+      if (data.newTranscripts > 0) {
+        toast({ title: `${data.newTranscripts} new transcript(s) saved` });
+      } else {
+        toast({ title: "No new transcripts found" });
+      }
+      return true;
+    } catch (err) {
+      console.error('Error syncing:', err);
+      toast({ title: "Sync failed", variant: "destructive" });
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [toast]);
 
   const deactivateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
@@ -151,7 +203,7 @@ export function useFirefliesAutomation() {
   }, []);
 
   return {
-    phase, setPhase, config, stats, isLoading, isActivating,
-    loadConfig, activateMonitoring, deactivateMonitoring, reset,
+    phase, setPhase, config, stats, isLoading, isActivating, isSyncing,
+    loadConfig, activateMonitoring, deactivateMonitoring, manualSync, reset,
   };
 }

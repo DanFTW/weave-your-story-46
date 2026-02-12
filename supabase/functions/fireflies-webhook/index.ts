@@ -56,13 +56,13 @@ async function signRequest(privateKey: CryptoKey, body: object): Promise<string>
   return toDER(new Uint8Array(signature));
 }
 
-// === VERIFY FIREFLIES SIGNATURE ===
+// === VERIFY FIREFLIES SIGNATURE (x-hub-signature) ===
 
 async function verifyFirefliesSignature(rawBody: string, secret: string, signatureHeader: string | null): Promise<boolean> {
+  // If a secret is configured, signature verification is mandatory
   if (!signatureHeader) {
-    console.log("[Fireflies Webhook] No signature header, skipping verification");
-    // Fireflies may not always send signatures; allow through if token is valid
-    return true;
+    console.error("[Fireflies Webhook] Missing x-hub-signature header while secret is configured");
+    return false;
   }
 
   try {
@@ -75,8 +75,11 @@ async function verifyFirefliesSignature(rawBody: string, secret: string, signatu
       ["sign"]
     );
     const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
-    const computed = Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
-    return computed === signatureHeader;
+    const computed = "sha256=" + Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
+
+    // Compare: Fireflies sends "sha256=<hex>" format
+    const headerValue = signatureHeader.startsWith("sha256=") ? signatureHeader : `sha256=${signatureHeader}`;
+    return computed === headerValue;
   } catch (err) {
     console.error("[Fireflies Webhook] Signature verification error:", err);
     return false;
@@ -99,7 +102,6 @@ async function getAutomationConfigByToken(supabase: any, token: string) {
 // === FETCH TRANSCRIPT VIA COMPOSIO ===
 
 async function fetchTranscriptViaComposio(userId: string, meetingId: string, supabase: any) {
-  // Get user's Fireflies connection
   const { data: integration } = await supabase
     .from("user_integrations")
     .select("composio_connection_id")
@@ -211,24 +213,6 @@ async function saveMemoryToLiam(supabase: any, userId: string, content: string):
   }
 }
 
-// === MARK TRANSCRIPT PROCESSED ===
-
-async function markTranscriptProcessed(supabase: any, userId: string, transcriptId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from("fireflies_processed_transcripts")
-    .insert({ user_id: userId, fireflies_transcript_id: transcriptId });
-
-  if (error) {
-    if (error.code === "23505") {
-      // Duplicate - already processed
-      return false;
-    }
-    console.error("[Fireflies Webhook] Insert processed error:", error);
-    return false;
-  }
-  return true;
-}
-
 // === MAIN HANDLER ===
 
 Deno.serve(async (req) => {
@@ -269,13 +253,15 @@ Deno.serve(async (req) => {
 
     // Read raw body for signature verification
     const rawBody = await req.text();
-    const signatureHeader = req.headers.get("x-ff-signature") || req.headers.get("x-fireflies-signature");
 
-    // Verify signature
-    const isValid = await verifyFirefliesSignature(rawBody, config.webhook_secret, signatureHeader);
-    if (!isValid) {
-      console.error("[Fireflies Webhook] Invalid signature");
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    // Verify signature using x-hub-signature header (Fireflies standard)
+    if (config.webhook_secret) {
+      const signatureHeader = req.headers.get("x-hub-signature");
+      const isValid = await verifyFirefliesSignature(rawBody, config.webhook_secret, signatureHeader);
+      if (!isValid) {
+        console.error("[Fireflies Webhook] Invalid or missing signature");
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+      }
     }
 
     // Parse payload
@@ -295,23 +281,25 @@ Deno.serve(async (req) => {
 
     console.log(`[Fireflies Webhook] Processing meeting: ${meetingId}`);
 
-    // Dedup check
-    const isNew = await markTranscriptProcessed(supabase, config.user_id, String(meetingId));
-    if (!isNew) {
-      console.log("[Fireflies Webhook] Already processed, skipping");
-      return new Response(JSON.stringify({ ok: true, duplicate: true }), { status: 200 });
-    }
-
     // Fetch transcript details via Composio
     const transcript = await fetchTranscriptViaComposio(config.user_id, String(meetingId), supabase);
 
     // Format memory
     const memoryContent = formatTranscriptAsMemory(transcript, String(meetingId));
 
-    // Save to LIAM
+    // Save to LIAM first
     const saved = await saveMemoryToLiam(supabase, config.user_id, memoryContent);
 
     if (saved) {
+      // Only mark as processed after successful memory save (retry-safe)
+      const { error: dedupError } = await supabase
+        .from("fireflies_processed_transcripts")
+        .insert({ user_id: config.user_id, fireflies_transcript_id: String(meetingId) });
+
+      if (dedupError && dedupError.code === "23505") {
+        console.log("[Fireflies Webhook] Already processed (duplicate delivery), memory saved anyway");
+      }
+
       // Update stats
       await supabase
         .from("fireflies_automation_config")
