@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram, Twitter, Mic, FileText } from "lucide-react";
+import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram, Twitter, Mic } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -70,7 +70,6 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   instagram: { icon: Instagram, gradient: "bg-gradient-to-r from-pink-500 via-purple-500 to-orange-400", label: "Instagram" },
   twitter: { icon: Twitter, gradient: "bg-gradient-to-r from-gray-900 to-black", label: "Twitter" },
   fireflies: { icon: Mic, gradient: "bg-gradient-to-r from-purple-500 to-pink-500", label: "Fireflies Transcript Tracker" },
-  googledrive: { icon: FileText, gradient: "bg-gradient-to-r from-blue-500 to-blue-600", label: "Google Drive Document Tracker" },
 };
 
 export function getCategoryConfig(category?: string, tag?: string, content?: string) {
@@ -106,11 +105,9 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
   if (combined.includes('instagram')) return categoryConfig.instagram;
   if (combined.includes('twitter') || combined.includes('tweet')) return categoryConfig.twitter;
   if (combined.includes('fireflies')) return categoryConfig.fireflies;
-  if (combined.includes('googledrive')) return categoryConfig.googledrive;
   
   // Content-based fallback for fireflies
   if (content && content.toLowerCase().includes('fireflies')) return categoryConfig.fireflies;
-  if (content && content.toLowerCase().includes('google drive document')) return categoryConfig.googledrive;
   
   return categoryConfig.default;
 }
@@ -119,7 +116,7 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
 const CATEGORY_TAGS = new Set([
   'twitter', 'instagram', 'email', 'receipt', 'receipts',
   'family', 'work', 'food', 'shopping', 'personal', 'lifestyle',
-  'quick_note', 'interests', 'tweet', 'fireflies', 'googledrive'
+  'quick_note', 'interests', 'tweet', 'fireflies'
 ]);
 
 function parseTags(memory: Memory): string[] {

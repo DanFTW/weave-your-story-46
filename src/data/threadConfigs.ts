@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -747,38 +747,6 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         type: "save",
         title: "Always-On Monitoring",
         description: "Transcripts saved automatically",
-        icon: Wifi,
-        badge: "LIVE",
-      },
-    ],
-  },
-  "googledrive-tracker": {
-    id: "googledrive-tracker",
-    title: "Google Drive Document Tracker",
-    subtitle: "Automatic document memories",
-    description: "Automatically save new Google Docs documents from your Drive as memories with full text content.",
-    gradient: "blue",
-    icon: FileText,
-    steps: [
-      {
-        id: "connect",
-        type: "integration",
-        title: "Connect Google Drive",
-        description: "Authorize access to your documents",
-        iconUrl: "/src/assets/integrations/googledrive.svg",
-      },
-      {
-        id: "configure",
-        type: "setup",
-        title: "Document Monitoring",
-        description: "Toggle monitoring on/off",
-        icon: Settings,
-      },
-      {
-        id: "active",
-        type: "save",
-        title: "Always-On Monitoring",
-        description: "Documents saved automatically",
         icon: Wifi,
         badge: "LIVE",
       },

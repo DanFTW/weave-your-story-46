@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -467,19 +467,6 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "FIREFLIES",
     fields: [],
     isFirefliesAutomationFlow: true,
-  },
-  "googledrive-tracker": {
-    id: "googledrive-tracker",
-    title: "Google Drive Document Tracker",
-    subtitle: "Automatic document monitoring",
-    description: "Automatically save new Google Docs documents as memories.",
-    gradient: "blue",
-    icon: FileText,
-    entryName: "document",
-    entryNamePlural: "documents",
-    memoryTag: "GOOGLEDRIVE",
-    fields: [],
-    isGoogleDriveAutomationFlow: true,
   },
 };
 

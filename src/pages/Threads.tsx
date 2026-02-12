@@ -15,7 +15,7 @@ const flowEnabledThreads = [
   'email-dump', 'email-automation', 'google-photos-sync', 'instagram-sync', 
   'instagram-live', 'twitter-sync', 'twitter-live', 'youtube-sync', 
   'linkedin-live', 'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker',
-  'todoist-task-tracker', 'fireflies-tracker', 'googledrive-tracker'
+  'todoist-task-tracker', 'fireflies-tracker'
 ];
 
 type FlowModeFilter = "all" | "thread" | "flow" | "dump";
