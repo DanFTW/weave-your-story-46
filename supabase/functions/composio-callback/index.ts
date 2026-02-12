@@ -431,7 +431,9 @@ async function fetchGoogleDocsProfile(connectionId: string): Promise<{
         
         return {
           email: userinfo.email || null,
-          name: userinfo.name || null,
+          name: userinfo.name || 
+            [userinfo.given_name, userinfo.family_name].filter(Boolean).join(" ") || 
+            null,
           avatarUrl: userinfo.picture || null,
         };
       } else {
