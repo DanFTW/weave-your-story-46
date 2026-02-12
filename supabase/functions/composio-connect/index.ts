@@ -22,7 +22,7 @@ async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
   try {
     const composioName = COMPOSIO_TOOLKIT_NAMES[toolkit] || toolkit.toUpperCase();
     const response = await fetch(
-      `https://backend.composio.dev/api/v3/auth-configs?toolkit_slug=${composioName}&is_composio_managed=true`,
+      `https://backend.composio.dev/api/v3/auth_configs?toolkit_slug=${composioName}&is_composio_managed=true`,
       {
         method: "GET",
         headers: {
