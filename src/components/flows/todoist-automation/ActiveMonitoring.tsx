@@ -1,13 +1,16 @@
-import { CheckSquare, Pause } from "lucide-react";
+import { CheckSquare, Pause, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TodoistTaskStats } from "@/types/todoistAutomation";
+import { formatDistanceToNow } from "date-fns";
 
 interface ActiveMonitoringProps {
   stats: TodoistTaskStats;
   onPause: () => void;
+  onCheckNow: () => void;
+  isPolling?: boolean;
 }
 
-export function ActiveMonitoring({ stats, onPause }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: ActiveMonitoringProps) {
   return (
     <div className="space-y-6">
       <div className="bg-card rounded-xl p-5 border border-border">
@@ -17,7 +20,11 @@ export function ActiveMonitoring({ stats, onPause }: ActiveMonitoringProps) {
           </div>
           <div>
             <h3 className="font-semibold text-foreground">Monitoring Active</h3>
-            <p className="text-sm text-muted-foreground">Tracking new Todoist tasks in real-time</p>
+            <p className="text-sm text-muted-foreground">
+              {stats.lastPolledAt
+                ? `Last checked ${formatDistanceToNow(new Date(stats.lastPolledAt), { addSuffix: true })}`
+                : "Tracking new Todoist tasks"}
+            </p>
           </div>
         </div>
 
@@ -42,10 +49,16 @@ export function ActiveMonitoring({ stats, onPause }: ActiveMonitoringProps) {
         </div>
       </div>
 
-      <Button variant="outline" onClick={onPause} className="w-full">
-        <Pause className="w-4 h-4 mr-2" />
-        Pause
-      </Button>
+      <div className="flex gap-3">
+        <Button variant="outline" onClick={onCheckNow} disabled={isPolling} className="flex-1">
+          <RefreshCw className={`w-4 h-4 mr-2 ${isPolling ? 'animate-spin' : ''}`} />
+          {isPolling ? 'Checking...' : 'Check Now'}
+        </Button>
+        <Button variant="outline" onClick={onPause} className="flex-1">
+          <Pause className="w-4 h-4 mr-2" />
+          Pause
+        </Button>
+      </div>
     </div>
   );
 }

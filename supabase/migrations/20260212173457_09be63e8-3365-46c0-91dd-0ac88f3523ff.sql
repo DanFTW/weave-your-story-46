@@ -1,0 +1,2 @@
+ALTER TABLE public.todoist_automation_config
+ADD COLUMN last_polled_at TIMESTAMPTZ;

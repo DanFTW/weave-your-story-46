@@ -14,10 +14,12 @@ export function useTodoistAutomation() {
   const [config, setConfig] = useState<TodoistAutomationConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
 
   const stats: TodoistTaskStats = {
     tasksTracked: config?.tasksTracked ?? 0,
     isActive: config?.isActive ?? false,
+    lastPolledAt: config?.lastPolledAt ?? null,
   };
 
   const loadConfig = useCallback(async () => {
@@ -43,6 +45,7 @@ export function useTodoistAutomation() {
         setConfig({
           id: d.id, userId: d.user_id, monitorNewTasks: d.monitor_new_tasks,
           isActive: d.is_active, triggerId: d.trigger_id, tasksTracked: d.tasks_tracked ?? 0,
+          lastPolledAt: d.last_polled_at ?? null,
           createdAt: d.created_at, updatedAt: d.updated_at,
         });
         setPhase(d.is_active ? 'active' : 'configure');
@@ -59,6 +62,7 @@ export function useTodoistAutomation() {
         setConfig({
           id: n.id, userId: n.user_id, monitorNewTasks: n.monitor_new_tasks,
           isActive: n.is_active, triggerId: n.trigger_id, tasksTracked: n.tasks_tracked ?? 0,
+          lastPolledAt: n.last_polled_at ?? null,
           createdAt: n.created_at, updatedAt: n.updated_at,
         });
         setPhase('configure');
@@ -94,6 +98,45 @@ export function useTodoistAutomation() {
     }
   }, [config, toast]);
 
+  const manualPoll = useCallback(async (): Promise<boolean> => {
+    setIsPolling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({ title: "Authentication required", variant: "destructive" });
+        return false;
+      }
+
+      const { data, error } = await supabase.functions.invoke('todoist-automation-triggers', {
+        body: { action: 'manual-poll' },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Poll failed", description: error.message, variant: "destructive" });
+        return false;
+      }
+
+      // Update local state with new stats
+      setConfig(prev => prev ? {
+        ...prev,
+        tasksTracked: data.totalTracked ?? prev.tasksTracked,
+        lastPolledAt: new Date().toISOString(),
+      } : null);
+
+      if (data.newTasks > 0) {
+        toast({ title: `${data.newTasks} new task(s) tracked` });
+      }
+      return true;
+    } catch (err) {
+      console.error('Error polling:', err);
+      toast({ title: "Poll failed", description: "An unexpected error occurred", variant: "destructive" });
+      return false;
+    } finally {
+      setIsPolling(false);
+    }
+  }, [toast]);
+
   const activateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
     setIsActivating(true);
@@ -114,9 +157,14 @@ export function useTodoistAutomation() {
         return false;
       }
 
-      await updateConfig({ isActive: true });
+      setConfig(prev => prev ? {
+        ...prev,
+        isActive: true,
+        tasksTracked: data.totalTracked ?? prev.tasksTracked,
+        lastPolledAt: new Date().toISOString(),
+      } : null);
       setPhase('active');
-      toast({ title: "Monitoring activated", description: "Your Todoist tasks will be tracked automatically" });
+      toast({ title: "Monitoring activated", description: "Your Todoist tasks will be tracked" });
       return true;
     } catch (err) {
       console.error('Error activating monitoring:', err);
@@ -125,7 +173,7 @@ export function useTodoistAutomation() {
     } finally {
       setIsActivating(false);
     }
-  }, [config, updateConfig, toast]);
+  }, [config, toast]);
 
   const deactivateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
@@ -159,7 +207,7 @@ export function useTodoistAutomation() {
   }, []);
 
   return {
-    phase, setPhase, config, stats, isLoading, isActivating,
-    loadConfig, updateConfig, activateMonitoring, deactivateMonitoring, reset,
+    phase, setPhase, config, stats, isLoading, isActivating, isPolling,
+    loadConfig, updateConfig, activateMonitoring, deactivateMonitoring, manualPoll, reset,
   };
 }
