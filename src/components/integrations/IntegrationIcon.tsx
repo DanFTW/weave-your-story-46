@@ -48,6 +48,7 @@ import ticketmasterIcon from "@/assets/integrations/ticketmaster.svg";
 import boxIcon from "@/assets/integrations/box.svg";
 import googlesuperIcon from "@/assets/integrations/googlesuper.svg";
 import firefliesIcon from "@/assets/integrations/fireflies.png";
+import googledriveIcon from "@/assets/integrations/googledrive.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -102,6 +103,7 @@ const iconImages: Record<string, string> = {
   box: boxIcon,
   googlesuper: googlesuperIcon,
   fireflies: firefliesIcon,
+  googledrive: googledriveIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {

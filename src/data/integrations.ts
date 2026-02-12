@@ -268,6 +268,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "fireflies",
         status: "unconfigured",
       },
+      {
+        id: "googledrive",
+        name: "Google Drive",
+        icon: "googledrive",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -868,6 +874,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#6C3AED",    // Fireflies purple
       secondary: "#DB2777",  // Fireflies pink
       tertiary: "#7C3AED",   // Fireflies light purple
+    },
+  },
+  "googledrive": {
+    id: "googledrive",
+    name: "Google Drive",
+    icon: "googledrive",
+    status: "unconfigured",
+    description: "Google Drive allows Weave to monitor your documents and files. Create memories automatically when new documents are added, browse folders, and track your content.",
+    capabilities: ["View files", "Browse folders", "Monitor new documents", "Access shared content"],
+    gradientColors: {
+      primary: "#4285F4",    // Google blue
+      secondary: "#0F9D58",  // Google green
+      tertiary: "#F4B400",   // Google yellow
     },
   },
 };
