@@ -47,6 +47,7 @@ import perplexityIcon from "@/assets/integrations/perplexity.svg";
 import ticketmasterIcon from "@/assets/integrations/ticketmaster.svg";
 import boxIcon from "@/assets/integrations/box.svg";
 import googlesuperIcon from "@/assets/integrations/googlesuper.svg";
+import firefliesIcon from "@/assets/integrations/fireflies.png";
 
 interface IntegrationIconProps {
   icon: string;
@@ -100,6 +101,7 @@ const iconImages: Record<string, string> = {
   ticketmaster: ticketmasterIcon,
   box: boxIcon,
   googlesuper: googlesuperIcon,
+  fireflies: firefliesIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {

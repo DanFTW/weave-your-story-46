@@ -262,6 +262,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "googlesuper",
         status: "unconfigured",
       },
+      {
+        id: "fireflies",
+        name: "Fireflies.ai",
+        icon: "fireflies",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -849,6 +855,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#EA4335",  // Google red
       tertiary: "#34A853",   // Google green
       quaternary: "#FBBC05", // Google yellow
+    },
+  },
+  "fireflies": {
+    id: "fireflies",
+    name: "Fireflies.ai",
+    icon: "fireflies",
+    status: "unconfigured",
+    description: "Fireflies.ai allows Weave to access your meeting transcripts and notes. Create memories from your conversations, search across meetings, and capture key action items automatically.",
+    capabilities: ["Transcribe meetings", "View transcripts", "Access summaries", "Search conversations"],
+    gradientColors: {
+      primary: "#6C3AED",    // Fireflies purple
+      secondary: "#DB2777",  // Fireflies pink
+      tertiary: "#7C3AED",   // Fireflies light purple
     },
   },
 };
