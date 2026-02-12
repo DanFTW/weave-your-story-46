@@ -493,6 +493,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          last_polled_at: string | null
           monitor_new_tasks: boolean
           tasks_tracked: number
           trigger_id: string | null
@@ -503,6 +504,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          last_polled_at?: string | null
           monitor_new_tasks?: boolean
           tasks_tracked?: number
           trigger_id?: string | null
@@ -513,6 +515,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          last_polled_at?: string | null
           monitor_new_tasks?: boolean
           tasks_tracked?: number
           trigger_id?: string | null

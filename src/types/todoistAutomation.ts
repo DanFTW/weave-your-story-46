@@ -11,6 +11,7 @@ export interface TodoistAutomationConfig {
   isActive: boolean;
   triggerId: string | null;
   tasksTracked: number;
+  lastPolledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,6 +19,7 @@ export interface TodoistAutomationConfig {
 export interface TodoistTaskStats {
   tasksTracked: number;
   isActive: boolean;
+  lastPolledAt: string | null;
 }
 
 export interface TodoistAutomationUpdatePayload {
