@@ -44,6 +44,7 @@ export interface FlowConfig {
   isHubSpotAutomationFlow?: boolean; // If true, uses HubSpot automation UI
   isTwitterAlphaTrackerFlow?: boolean; // If true, uses Twitter Alpha Tracker UI
   isTodoistAutomationFlow?: boolean; // If true, uses Todoist automation UI
+  isFirefliesAutomationFlow?: boolean; // If true, uses Fireflies automation UI
 }
 
 // Single data entry (e.g., one family member)

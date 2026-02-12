@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -454,6 +454,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "email",
     fields: [],
     isEmailAutomationFlow: true,
+  },
+  "fireflies-tracker": {
+    id: "fireflies-tracker",
+    title: "Fireflies Transcript Tracker",
+    subtitle: "Automatic transcript monitoring",
+    description: "Automatically save new meeting transcripts as memories.",
+    gradient: "purple",
+    icon: Mic,
+    entryName: "transcript",
+    entryNamePlural: "transcripts",
+    memoryTag: "FIREFLIES",
+    fields: [],
+    isFirefliesAutomationFlow: true,
   },
 };
 
