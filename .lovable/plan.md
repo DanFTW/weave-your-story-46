@@ -1,79 +1,255 @@
-#  Fix Google Drive Icon and Account Card
+# Google Drive Document Tracker Thread
 
-## Problem 1: "G" Fallback Instead of Google Drive Logo
+## Overview
 
-**Root cause**: `IntegrationLargeIcon.tsx` (used on the detail page header) does not have `googledrive` in its `iconImages` map, even though `IntegrationIcon.tsx` (used on the list page) does. This causes the large icon to render the "G" text fallback.
+Create a "Google Drive Document Tracker" thread that uses Composio's **webhook trigger** `GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER`) to automatically detect new Google Docs and save them as memories. Includes a manual "Check Now" poll fallback. Modeled after the Todoist/Trello automation patterns.
 
-Additionally, the current `googledrive.svg` is a monochrome blue shape -- it should be the official multicolor Google Drive triangle logo.
+## Architecture
 
-**Fix**:
+The flow uses a **dual-mode** approach:
 
-- Replace `src/assets/integrations/googledrive.svg` with the official multicolor Google Drive logo (sourced from Simple Icons / official brand assets, rendered with the four brand colors: blue #4285F4, green #0F9D58, yellow #F4B400, red #EA4335)
-- Add the `googledrive` import and map entry to `IntegrationLargeIcon.tsx` (lines 51 and 105)
+1. **Real-time**: Composio webhook trigger fires when a new Google Doc is created, calling our webhook endpoint
 
-## Problem 2: Account Card Shows "Connected Account" Instead of User's Name
+2. **Manual fallback**: "Check Now" button polls via Composio `GOOGLEDRIVE_SEARCH_FILE` tool for backfilling
 
-**Root cause**: The database has `account_name = NULL` for the googledrive integration. The `fetchGoogleDocsProfile` function in `composio-callback/index.ts` fetches Google's userinfo endpoint and reads `userinfo.name`, but that field was null in the API response. Google's userinfo v3 API also returns `given_name` and `family_name` as separate fields, which the code does not check as a fallback.
+### Two-step user flow:
 
-The `IntegrationDetail.tsx` then renders `connectedAccount.name || "Connected Account"` -- since name is empty string (from `integration.account_name || ""`), it shows the fallback.
+1. Connect Google Drive (redirect to `/integration/googledrive` if not connected)
 
-**Fix**:
+2. Toggle Document Monitoring on/off + Activate
 
-- In `composio-callback/index.ts`, update the `fetchGoogleDocsProfile` function (around line 432) to construct the name from `given_name` + `family_name` when `name` is null
-- This fix benefits all Google integrations (Docs, Photos, Drive, YouTube, etc.) since they all use this shared function
+## Files to Create (9 new files)
 
-## Files to Modify
+### 1. Type Definition
 
-1. `src/assets/integrations/googledrive.svg` -- Replace with official multicolor Google Drive logo
-2. `src/components/integrations/IntegrationLargeIcon.tsx` -- Add googledrive import and map entry
-3. `supabase/functions/composio-callback/index.ts` -- Add `given_name`/`family_name` fallback in `fetchGoogleDocsProfile`
+*`src/types/googleDriveAutomation.ts`**
+
+* `GoogleDriveAutomationPhase`: `'auth-check' | 'configure' | 'activating' | 'active'`
+
+* `GoogleDriveAutomationConfig`: id, userId, isActive, triggerInstanceId, documentsSaved, lastSyncAt
+
+* `GoogleDriveDocStats`: documentsSaved, isActive, lastSyncAt
+
+* Follows `todoistAutomation.ts` pattern exactly
+
+### 2. Custom Hook
+
+*`src/hooks/useGoogleDriveAutomation.ts`**
+
+* Modeled on `useTodoistAutomation.ts`
+
+* Reads/writes `googledrive_automation_config` table
+
+* Calls `googledrive-automation-triggers` edge function for activate/deactivate/manual-poll
+
+* Manages phase state, config loading, stats
+
+### 3. Flow UI Components (4 files)
+
+*`src/components/flows/googledrive-automation/index.ts`** -- Barrel exports
+
+*`src/components/flows/googledrive-automation/GoogleDriveAutomationFlow.tsx`**
+
+* Modeled on `TodoistAutomationFlow.tsx`
+
+* Uses `useComposio('GOOGLEDRIVE')` for auth check
+
+* Blue gradient with `#4285F4` accent color (Google Drive brand)
+
+* `FileText` icon throughout
+
+* Redirects to `/integration/googledrive` if not connected (stores return path in sessionStorage)
+
+*`src/components/flows/googledrive-automation/AutomationConfig.tsx`**
+
+* Single "Document Monitoring" toggle with description
+
+* "Activate Monitoring" button styled with `#4285F4`
+
+* Modeled on Todoist's `AutomationConfig.tsx`
+
+*`src/components/flows/googledrive-automation/ActiveMonitoring.tsx`**
+
+* Green pulse indicator, "Documents Saved" stat counter
+
+* "Check Now" + "Pause" buttons
+
+* Modeled on Todoist's `ActiveMonitoring.tsx`
+
+*`src/components/flows/googledrive-automation/ActivatingScreen.tsx`**
+
+* Loading spinner with `#4285F4` accent, "Setting up monitoring..." text
+
+### 4. Webhook Receiver Edge Function
+
+*`supabase/functions/googledrive-automation-webhook/index.ts`**
+
+* Receives Composio webhook payloads when `GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER` fires
+
+* Extracts trigger_id from payload, looks up user via `googledrive_automation_config.trigger_instance_id`
+
+* For each new file: checks dedup against `googledrive_processed_documents`, exports doc content via `GOOGLEDRIVE_EXPORT_FILE` Composio tool (text/plain), saves as memory via LIAM API with `GOOGLEDRIVE` tag
+
+* Follows `trello-automation-webhook` pattern (retry-safe: only marks processed after successful memory save)
+
+### 5. Trigger Management Edge Function
+
+*`supabase/functions/googledrive-automation-triggers/index.ts`**
+
+* Three actions: `activate`, `deactivate`, `manual-poll`
+
+* **activate**: Creates `GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER` via Composio trigger upsert API with `trigger_config: { query: "mimeType='application/vnd.google-apps.document'" }`, sets webhook_url to the webhook function, stores trigger_instance_id in DB, runs initial poll
+
+* **deactivate**: Disables trigger via `PATCH /trigger_instances/manage/{triggerId}`, sets `is_active = false`
+
+* **manual-poll**: Polls via `GOOGLEDRIVE_SEARCH_FILE` Composio tool with mimeType filter, exports new docs via `GOOGLEDRIVE_EXPORT_FILE`, saves as memories
+
+* Auth pattern: Bearer token validation via Supabase auth (same as Todoist/Fireflies)
+
+* LIAM API integration with ECDSA signing (same crypto utilities as other edge functions)
+
+## Files to Edit (6 existing files)
+
+### 6. Thread Registration
+
+*`src/data/threads.ts`**
+
+* Add `googledrive-tracker` entry: `{ id: "googledrive-tracker", title: "Google Drive Document Tracker", description: "Automatically save new documents as memories", icon: FileText, gradient: "blue", type: "automation", triggerType: "automatic", flowMode: "thread" }`
+
+### 7. Thread Config
+
+*`src/data/threadConfigs.ts`**
+
+* Add config with 3 steps: Connect Google Drive (iconUrl: googledrive.svg), Enable Monitoring (Settings icon), Always-On Monitoring (Wifi icon, LIVE badge)
+
+### 8. Flow Config
+
+*`src/data/flowConfigs.ts`**
+
+* Add `googledrive-tracker` entry with `isGoogleDriveAutomationFlow: true`
+
+### 9. Flow Type
+
+*`src/types/flows.ts`**
+
+* Add `isGoogleDriveAutomationFlow?: boolean` to `FlowConfig` interface
+
+### 10. Navigation Registration
+
+*`src/pages/Threads.tsx`**
+
+* Add `'googledrive-tracker'` to `flowEnabledThreads` array
+
+*`src/pages/FlowPage.tsx`**
+
+* Import `GoogleDriveAutomationFlow`
+
+* Add render block: `if (config.isGoogleDriveAutomationFlow) return <GoogleDriveAutomationFlow />;`
+
+### 11. Edge Function Config
+
+*`supabase/config.toml`**
+
+* Add `[functions.googledrive-automation-triggers]` with `verify_jwt = false`
+
+* Add `[functions.googledrive-automation-webhook]` with `verify_jwt = false`
 
 ## Technical Details
 
-### IntegrationLargeIcon.tsx changes
+### Webhook Trigger Setup (activate action)
 
-```typescript
-// Add import (after line 50)
-import googledriveIcon from "@/assets/integrations/googledrive.svg";
+```text
 
-// Add to iconImages map (after line 104)
-googledrive: googledriveIcon,
+POST /api/v3/trigger_instances/GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER/upsert
 
-```
+Body: {
 
-### composio-callback/index.ts change (line ~432)
+  connected_account_id: "ca_...",
 
-```typescript
-return {
-  email: userinfo.email || null,
-  name: userinfo.name || 
-    [userinfo.given_name, userinfo.family_name].filter(Boolean).join(" ") || 
-    null,
-  avatarUrl: userinfo.picture || null,
-};
+  trigger_config: {
+
+    query: "mimeType='application/[vnd.google](http://vnd.google)-apps.document'"
+
+  },
+
+  webhook_url: "{SUPABASE_URL}/functions/v1/googledrive-automation-webhook"
+
+}
 
 ```
 
-### googledrive.svg
+### Document Export (for content extraction)
 
-Replace monochrome SVG with official multicolor Google Drive triangle logo using brand colors (#4285F4, #0F9D58, #F4B400, #EA4335).
+```text
 
-## Note on Existing Data
+POST /api/v3/tools/execute/GOOGLEDRIVE_EXPORT_FILE
 
-After deploying the callback fix, the user will need to reconnect (or "Change" account) to re-trigger the profile fetch and populate the name field. Alternatively, a one-time DB update can set the name for the existing record.
+Body: {
+
+  connected_account_id: "ca_...",
+
+  arguments: { fileId: "...", mimeType: "text/plain" }
+
+}
+
+```
+
+### Database Tables (already exist)
+
+* `googledrive_automation_config`: id, user_id, is_active, trigger_instance_id, documents_saved, last_sync_at, last_webhook_at
+
+* `googledrive_processed_documents`: id, user_id, googledrive_file_id (deduplication)
+
+### Brand Colors
+
+* Accent: `#4285F4` (Google blue)
+
+* Gradient: `blue` (matching thread gradient system)
+
+* Icon: `FileText` from lucide-react
+
+* Same card/badge/button patterns as Todoist and Fireflies trackers
+
+* `flowMode: "thread"` with Auto + Thread badges
 
 ---
 
-## Suggestions (only additions)
+## Suggestions (only the deltas I’d make before you approve)
 
-1. **Fix the “name becomes empty string” logic gap at the source**
+1. **Make it truly “no polling” by default**
 
-- In the code where you map DB → `connectedAccount`, do **not** coerce null to `""` (e.g. avoid `integration.account_name || ""`). Keep it `null` so your UI logic can correctly distinguish “missing” vs “present”. This prevents weird fallthrough behavior and keeps the data model clean.
+   * In `activate`, **remove “runs initial poll”**. Activation should *only* create the Composio trigger + set `is_active=true`.
 
-2. **If** `userinfo.name` **is null, it’s often a scope/config issue**
+   * Keep “Check Now” as **manual backfill** only (user-initiated), not a background poll.
 
-- If you still see missing `name/picture`, ensure the Composio auth config for Google Drive includes Google profile scopes (profile/email or equivalent). Otherwise you’ll “fix” fallbacks but still get no data.
+2. **Match your requested 2-step flow**
 
-3. **Make the icon mapping impossible to drift again**
+   * In `src/data/threadConfigs.ts`, **do not add a 3rd “Always-On Monitoring” step**. Keep it exactly:
 
-- Minimal modularity tweak: export a single `iconImages` map used by both `IntegrationIcon.tsx` and `IntegrationLargeIcon.tsx` (one shared module), so you never fix one and forget the other.
+     1. Connect Google Drive
+
+     2. Document Monitoring Toggle (On/Off)
+
+3. **Fix webhook → user routing so it’s reliable**
+
+   * Don’t rely on “extracts trigger_id” (payloads vary). Route by *`trigger_instance_id`** (or equivalent field) and also store *`connected_account_id`** alongside it in `googledrive_automation_config` so you can validate the webhook belongs to that account.
+
+   * Update the plan line in the webhook receiver to: “Extract `trigger_instance_id` (and fileId), look up user by `googledrive_automation_config.trigger_instance_id` (and confirm `connected_account_id` matches).”
+
+4. **Security best-practice for edge functions**
+
+   * Keep *`googledrive-automation-webhook`** as `verify_jwt=false` (it’s called by Composio).
+
+   * Change *`googledrive-automation-triggers`** to `verify_jwt=true` and require the user’s Supabase session JWT (since it’s called from the app). This prevents anyone from activating/deactivating triggers without auth.
+
+5. **Tighten the trigger query**
+
+   * Update the trigger query to avoid noise:
+
+     * `mimeType='application/vnd.google-apps.document' and trashed=false`
+
+6. **Naming consistency**
+
+   * This plan is good about `googledrive-automation-webhook` vs `googledrive-automation-triggers`. Just make sure the `webhook_url` and the function folder name stay exactly aligned (no `googledocs-webhook` naming leftovers).
+
+Approve and implement this plan now. Do not add polling beyond the manual “Check Now” action. Do not make any other changes.
