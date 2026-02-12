@@ -8,11 +8,21 @@ const corsHeaders = {
 
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
+// Map our internal toolkit IDs to Composio's expected toolkit names (for dynamic auth config lookup)
+const COMPOSIO_TOOLKIT_NAMES: Record<string, string> = {
+  googledrive: "GOOGLE_DRIVE",
+  googlephotos: "GOOGLE_PHOTOS",
+  googledocs: "GOOGLE_DOCS",
+  googletasks: "GOOGLE_TASKS",
+  googlesuper: "GOOGLE",
+};
+
 // Fetch the default Composio-managed auth config for a toolkit
 async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
   try {
+    const composioName = COMPOSIO_TOOLKIT_NAMES[toolkit] || toolkit.toUpperCase();
     const response = await fetch(
-      `https://backend.composio.dev/api/v3/auth-configs?toolkit=${toolkit.toUpperCase()}&is_composio_managed=true`,
+      `https://backend.composio.dev/api/v3/auth-configs?toolkit=${composioName}&is_composio_managed=true`,
       {
         method: "GET",
         headers: {
