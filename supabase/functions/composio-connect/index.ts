@@ -10,7 +10,7 @@ const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY");
 
 // Map our internal toolkit IDs to Composio's expected toolkit names (for dynamic auth config lookup)
 const COMPOSIO_TOOLKIT_NAMES: Record<string, string> = {
-  googledrive: "GOOGLE_DRIVE",
+  googledrive: "GOOGLEDRIVE",
   googlephotos: "GOOGLE_PHOTOS",
   googledocs: "GOOGLE_DOCS",
   googletasks: "GOOGLE_TASKS",
@@ -22,7 +22,7 @@ async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
   try {
     const composioName = COMPOSIO_TOOLKIT_NAMES[toolkit] || toolkit.toUpperCase();
     const response = await fetch(
-      `https://backend.composio.dev/api/v3/auth-configs?toolkit=${composioName}&is_composio_managed=true`,
+      `https://backend.composio.dev/api/v3/auth-configs?toolkit_slug=${composioName}&is_composio_managed=true`,
       {
         method: "GET",
         headers: {
@@ -32,12 +32,21 @@ async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
       }
     );
 
+    const responseText = await response.text();
+    console.log(`Auth config API response for ${composioName} (status ${response.status}): ${responseText}`);
+
     if (!response.ok) {
       console.error(`Failed to fetch auth configs for ${toolkit}: ${response.status}`);
       return null;
     }
 
-    const data = await response.json();
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error(`Non-JSON response for ${composioName}: ${responseText}`);
+      return null;
+    }
     
     // Find the default/enabled Composio-managed auth config
     const authConfigs = data.items || [];
@@ -104,7 +113,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   box: "ac_wBJCQEG3imPm",
   googlesuper: "ac_2kVKJUxBH97r",
   fireflies: "ac_67tCzpRn7AdZ",
-  // googledrive uses dynamic Composio-managed auth (no custom config)
+  googledrive: "ac_7m7XMBKrLI_O",
 };
 
 // All valid toolkits (includes those using Composio default auth)
