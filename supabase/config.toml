@@ -77,3 +77,9 @@ verify_jwt = false
 
 [functions.googledrive-automation-webhook]
 verify_jwt = false
+
+[functions.discord-automation-triggers]
+verify_jwt = false
+
+[functions.discord-automation-webhook]
+verify_jwt = false

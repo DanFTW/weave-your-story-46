@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -779,6 +779,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         type: "save",
         title: "Always-On Monitoring",
         description: "Documents saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
+  "discord-tracker": {
+    id: "discord-tracker",
+    title: "Discord Channel Message Tracker",
+    subtitle: "Real-time channel monitoring",
+    description: "Automatically save new messages from a selected Discord channel as memories.",
+    gradient: "purple",
+    icon: MessageSquare,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Discord",
+        description: "Authorize access to your servers",
+        iconUrl: "/src/assets/integrations/discord.svg",
+      },
+      {
+        id: "select-channel",
+        type: "setup",
+        title: "Select Channel",
+        description: "Choose server and channel to monitor",
+        icon: Hash,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Messages saved automatically",
         icon: Wifi,
         badge: "LIVE",
       },

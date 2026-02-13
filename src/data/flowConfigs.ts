@@ -481,6 +481,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     fields: [],
     isGoogleDriveAutomationFlow: true,
   },
+  "discord-tracker": {
+    id: "discord-tracker",
+    title: "Discord Channel Message Tracker",
+    subtitle: "Real-time message monitoring",
+    description: "Automatically save new Discord channel messages as memories.",
+    gradient: "purple",
+    icon: MessageSquare,
+    entryName: "message",
+    entryNamePlural: "messages",
+    memoryTag: "DISCORD",
+    fields: [],
+    isDiscordAutomationFlow: true,
+  },
 };
 
 export function getFlowConfig(flowId: string): FlowConfig | undefined {
