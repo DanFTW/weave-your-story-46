@@ -83,6 +83,12 @@ export const integrationSections: IntegrationSection[] = [
         status: "unconfigured",
       },
       {
+        id: "discord",
+        name: "Discord",
+        icon: "discord",
+        status: "unconfigured",
+      },
+      {
         id: "discordbot",
         name: "Discord Bot",
         icon: "discord",
@@ -468,6 +474,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0A66C2",    // LinkedIn blue
       secondary: "#004182",  // LinkedIn dark blue
       tertiary: "#0077B5",   // LinkedIn classic blue
+    },
+  },
+  "discord": {
+    id: "discord",
+    name: "Discord",
+    icon: "discord",
+    status: "unconfigured",
+    description: "Discord allows Weave to access your profile, servers, and activity. Create memories from your conversations and community interactions.",
+    capabilities: ["View profile", "Access servers", "Read messages", "View activity"],
+    gradientColors: {
+      primary: "#5865F2",    // Discord blurple
+      secondary: "#4752C4",  // Discord dark blurple
+      tertiary: "#7289DA",   // Discord legacy blurple
     },
   },
   "discordbot": {

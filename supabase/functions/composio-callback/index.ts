@@ -54,7 +54,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "linkedin": "linkedin",
   "linkedin_v2": "linkedin",
   "discord": "discord",
-  "discord_bot": "discord",
+  "discord_bot": "discordbot",
+  "discordbot": "discordbot",
   "googledocs": "googledocs",
   "google_docs": "googledocs",
   "docs": "googledocs",
@@ -834,45 +835,81 @@ async function fetchWhatsAppProfile(connectionId: string): Promise<{
   }
 }
 
-// Fetch Discord user profile via Discord API directly
-async function fetchDiscordProfile(accessToken: string): Promise<{
+// Fetch Discord user profile — Composio-first, with Discord API fallback
+async function fetchDiscordProfile(connectionId: string, accessToken: string | null): Promise<{
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
 }> {
   try {
-    console.log("composio-callback: Fetching Discord profile via Discord API...");
+    console.log("composio-callback: Fetching Discord profile (Composio-first)...");
     
-    // Call Discord API /users/@me endpoint directly with the OAuth access token
-    const response = await fetch(
-      "https://discord.com/api/v10/users/@me",
+    // Step 1: Try Composio connection metadata for profile fields
+    const connResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
       {
         method: "GET",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "x-api-key": COMPOSIO_API_KEY! },
       }
     );
 
+    if (connResponse.ok) {
+      const connData = await connResponse.json();
+      const meta = connData.data || connData.connection_params || connData;
+      console.log(`composio-callback: Discord Composio connection keys: ${Object.keys(meta).join(", ")}`);
+
+      const composioEmail = meta.email || meta.user_email || null;
+      const composioName = meta.global_name || meta.username || meta.display_name || meta.name || null;
+      let composioAvatar: string | null = null;
+
+      if (meta.avatar && meta.id) {
+        composioAvatar = `https://cdn.discordapp.com/avatars/${meta.id}/${meta.avatar}.png?size=256`;
+      } else if (meta.avatar_url || meta.picture) {
+        composioAvatar = meta.avatar_url || meta.picture;
+      }
+
+      // If we got enough data from Composio, return early
+      if (composioName || composioEmail) {
+        console.log("composio-callback: Using Discord profile from Composio metadata");
+        return { email: composioEmail, name: composioName, avatarUrl: composioAvatar };
+      }
+
+      // Use access_token from Composio if none was passed directly
+      if (!accessToken && meta.access_token) {
+        accessToken = meta.access_token;
+      }
+    }
+
+    // Step 2: Fallback to Discord API /users/@me
+    if (!accessToken) {
+      console.log("composio-callback: No access_token available for Discord API fallback");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    console.log("composio-callback: Falling back to Discord API /users/@me...");
+    const response = await fetch("https://discord.com/api/v10/users/@me", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
     const responseText = await response.text();
-    console.log(`composio-callback: Discord API /users/@me response status=${response.status}`);
-    console.log(`composio-callback: Discord API response=${responseText.slice(0, 500)}`);
+    console.log(`composio-callback: Discord API response status=${response.status}`);
 
     if (!response.ok) {
-      console.error("composio-callback: Failed to fetch Discord profile from Discord API");
+      console.error("composio-callback: Discord API fallback failed");
       return { email: null, name: null, avatarUrl: null };
     }
 
     const userData = JSON.parse(responseText);
-    
-    // Discord returns: id, username, discriminator, avatar, email, global_name
     const avatarHash = userData.avatar;
     const userId = userData.id;
-    const avatarUrl = avatarHash 
+    const avatarUrl = avatarHash
       ? `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=256`
       : null;
-    
+
     return {
       email: userData.email || null,
       name: userData.global_name || userData.username || null,
@@ -2395,30 +2432,24 @@ serve(async (req) => {
       console.log(`composio-callback: LinkedIn profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
-    // For Discord, fetch user profile via Discord API directly
-    if (toolkit === "discord") {
-      console.log("composio-callback: Fetching Discord profile info via Discord API...");
+    // For Discord (regular) and Discord Bot, fetch profile (Composio-first)
+    if (toolkit === "discord" || toolkit === "discordbot") {
+      console.log(`composio-callback: Fetching ${toolkit} profile info (Composio-first)...`);
       
-      // Extract access_token from Composio connection data
-      const accessToken = data.access_token;
+      const accessToken = data.access_token || null;
+      const profileInfo = await fetchDiscordProfile(connectionId, accessToken);
       
-      if (accessToken) {
-        const profileInfo = await fetchDiscordProfile(accessToken);
-        
-        if (profileInfo.email) {
-          accountEmail = profileInfo.email;
-        }
-        if (profileInfo.name) {
-          accountName = profileInfo.name;
-        }
-        if (profileInfo.avatarUrl) {
-          accountAvatarUrl = profileInfo.avatarUrl;
-        }
-        
-        console.log(`composio-callback: Discord profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
-      } else {
-        console.log("composio-callback: No access_token found for Discord connection");
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
       }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: ${toolkit} profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // For Google Docs, fetch profile from Composio connection data (uses id_token)

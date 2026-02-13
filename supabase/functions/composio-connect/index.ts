@@ -82,7 +82,8 @@ const AUTH_CONFIGS: Record<string, string> = {
   teams: "ac_rVyo3ZPHW1OL",
   excel: "ac_QMjsg-1512FZ",
   linkedin: "ac_kzzsdBscCW-a",
-  discord: "ac_jECZy5E0ycKY",
+  discord: "ac_BOCrE-Q-yqJu",
+  discordbot: "ac_jECZy5E0ycKY",
   googledocs: "ac_L-liU4EHxioi",
   trello: "ac_1s6sLEKtkxuE",
   github: "ac_kDM61t-M_opS",
@@ -120,7 +121,7 @@ const AUTH_CONFIGS: Record<string, string> = {
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "googledocs", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive"
+  "linkedin", "discord", "discordbot", "googledocs", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive"
 ];
 
 serve(async (req) => {
