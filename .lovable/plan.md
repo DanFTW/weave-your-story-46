@@ -1,52 +1,63 @@
-# Fix Discord Server Loading -- Use Direct Discord API
 
-## Root Cause
+# Fix Discord Server Loading
 
-The edge function logs show every call to `DISCORD_LIST_MY_GUILDS` returns:
+## Problem
 
-```
-401 Client Error: Unauthorized for url: https://discord.com/api/v10/users/@me/guilds
+Two issues are preventing servers from loading:
 
-```
+1. **Fallback logic bug** (lines 116-122): A broken ternary expression causes the same connection ID (`ca_CLVIIXBLidKg`) to be tried twice. The second connection (`ca_seifjoPKRVN6`) is never attempted.
 
-Composio's tool execution is internally using an expired or invalid OAuth token. The channel-fetching code (lines 160-261) already works around this by fetching the fresh `access_token` from Composio's connected account metadata and calling Discord's REST API directly. The server-fetching code needs the same treatment.
-
-The console errors in the screenshot (`ERR_BLOCKED_BY_CLIENT`) are from third-party analytics/tracking scripts blocked by an ad blocker -- they are unrelated to this issue.
+2. **Stale Discord connection**: The `discord` entry in the database (`ca_CLVIIXBLidKg`) appears to hold an invalid/expired token. The `discordbot` entry (`ca_seifjoPKRVN6`) may work but is never reached due to bug #1.
 
 ## Solution
 
-### `supabase/functions/discord-automation-triggers/index.ts` (1 file)
+**Single file**: `supabase/functions/discord-automation-triggers/index.ts`
 
-Replace the `get-servers` case (lines 89-148) to:
+### 1. Fix the broken fallback logic (lines 116-124)
 
-1. Fetch the OAuth `access_token` from Composio metadata: `GET /api/v3/connected_accounts/{connectionId}` (same code already used in `get-channels`)
-2. Call Discord REST API directly: `GET https://discord.com/api/v10/users/@me/guilds` with `Authorization: Bearer {accessToken}`
-3. Map the response to `{ id, name, icon }` server objects
+Replace the complex ternary with simple array deduplication:
 
-To avoid duplicating the token-fetching logic, extract a shared helper function `getDiscordAccessToken(connectionId)` that both `get-servers` and `get-channels` can call.
+```text
+Before (buggy):
+  const fallbackConnectionId = (discordIntegration && botIntegration && discordIntegration !== integration)
+    ? botIntegration.composio_connection_id
+    : (botIntegration && discordIntegration && botIntegration !== integration)
+      ? discordIntegration.composio_connection_id
+      : null;
 
-### Refactored structure:
-
+After (fixed):
+  const allConnectionIds = [
+    discordIntegration?.composio_connection_id,
+    botIntegration?.composio_connection_id,
+  ].filter((id): id is string => !!id && id.startsWith("ca_"));
+  const connectionIdsToUse = [...new Set(allConnectionIds)];
+  const connectionId = connectionIdsToUse[0];
 ```
-// Helper: fetch access token from Composio metadata (used by both actions)
-async function getDiscordAccessToken(connectionId: string): Promise<string>
 
-// get-servers: calls getDiscordAccessToken, then GET /users/@me/guilds
-// get-channels: calls getDiscordAccessToken, then GET /guilds/{id}/channels
+### 2. Use the fixed list in get-servers and get-channels
 
-```
+- Line 153: Replace `[connectionId, fallbackConnectionId].filter(Boolean)` with `connectionIdsToUse`
+- Line 241: Same change for channels
 
-No frontend changes needed. No other files affected.
+### 3. Prioritize regular Discord OAuth
 
----
+Reorder `connectionIdsToUse` so the `discord` integration (auth config `ac_BOCrE-Q-yqJu`) is always tried first, before `discordbot`. This is already handled by lines 105-107 where `discordIntegration` is listed first in the array.
 
-## Suggestions (only the deltas I’d make before you approve)
+### 4. Add a "reconnect" action
 
-1. **Do not return an empty “no servers found” on API failure**
-  - If Discord returns 401/403/429, return a non-200 response (or `{ error: ... }`) so the UI shows a real error state instead of an empty list.
-2. **Validate the Composio identifier**
-  - Ensure `connectionId` is the **Composio connected_account_id** (not an integration id / trigger id / internal DB id). If it isn’t, the metadata call will succeed/fail incorrectly and you’ll always get no servers.
-3. **Add a clear reconnect message for missing Discord scopes**
-  - If the token lacks required scopes (commonly `guilds`), surface: “Discord connection missing required scopes (guilds). Please reconnect Discord.” This prevents silent empty results.
-4. **Add minimal rate-limit handling**
-  - If Discord responds 429, respect `Retry-After` (or return a friendly “Rate limited, try again in X seconds” message).
+Add a new `reconnect` case that calls the Composio initiate-connection API with auth config `ac_BOCrE-Q-yqJu` to get a fresh OAuth URL. This gives the frontend a way to trigger re-authentication for the regular Discord integration without going through the full integrations page.
+
+## After deploying
+
+The user will need to **reconnect their Discord (regular) integration** since the existing token (`ca_CLVIIXBLidKg`) is expired/invalid. The fix ensures that:
+- Both connections are actually tried (fixing the fallback bug)
+- Regular Discord OAuth (`ac_BOCrE-Q-yqJu`) is preferred
+- Clear error messaging tells the user to reconnect if both fail
+
+## Technical Details
+
+- Lines 116-124: Replace with array dedup (5 lines)
+- Line 153: `connectionIdsToUse` instead of `[connectionId, fallbackConnectionId].filter(Boolean)`
+- Line 241: Same
+- No frontend changes needed
+- Deploy the updated edge function
