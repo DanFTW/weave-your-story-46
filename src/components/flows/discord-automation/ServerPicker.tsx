@@ -1,4 +1,4 @@
-import { RefreshCw, AlertCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordServer } from "@/types/discordAutomation";
 
@@ -6,11 +6,13 @@ interface ServerPickerProps {
   servers: DiscordServer[];
   isLoading: boolean;
   hasError?: boolean;
+  needsReconnect?: boolean;
   onSelectServer: (server: DiscordServer) => void;
   onRefresh: () => void;
+  onReconnect?: () => void;
 }
 
-export function ServerPicker({ servers, isLoading, hasError, onSelectServer, onRefresh }: ServerPickerProps) {
+export function ServerPicker({ servers, isLoading, hasError, needsReconnect, onSelectServer, onRefresh, onReconnect }: ServerPickerProps) {
   if (isLoading && servers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -24,14 +26,27 @@ export function ServerPicker({ servers, isLoading, hasError, onSelectServer, onR
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <AlertCircle className="w-12 h-12 text-destructive mb-4" />
-        <p className="text-foreground font-medium mb-2">Failed to load servers</p>
-        <p className="text-muted-foreground text-sm text-center mb-4">
-          Could not connect to Discord. This may be a temporary issue.
+        <p className="text-foreground font-medium mb-2">
+          {needsReconnect ? "Discord authorization expired" : "Failed to load servers"}
         </p>
-        <Button onClick={onRefresh} disabled={isLoading}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          Try Again
-        </Button>
+        <p className="text-muted-foreground text-sm text-center mb-4">
+          {needsReconnect
+            ? "Your Discord connection needs to be re-authorized. Please reconnect to continue."
+            : "Could not connect to Discord. This may be a temporary issue."}
+        </p>
+        <div className="flex gap-2">
+          {needsReconnect && onReconnect ? (
+            <Button onClick={onReconnect} disabled={isLoading}>
+              <LogIn className="w-4 h-4 mr-2" />
+              Reconnect Discord
+            </Button>
+          ) : (
+            <Button onClick={onRefresh} disabled={isLoading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Try Again
+            </Button>
+          )}
+        </div>
       </div>
     );
   }

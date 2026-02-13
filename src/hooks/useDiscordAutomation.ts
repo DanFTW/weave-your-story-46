@@ -17,8 +17,10 @@ interface UseDiscordAutomationReturn {
   channels: DiscordChannel[];
   isLoading: boolean;
   hasLoadError: boolean;
+  needsReconnect: boolean;
   stats: DiscordAutomationStats;
   fetchServers: () => Promise<void>;
+  reconnectDiscord: () => Promise<void>;
   selectServer: (server: DiscordServer) => Promise<void>;
   selectChannel: (channel: DiscordChannel) => Promise<void>;
   activateMonitoring: () => Promise<void>;
@@ -36,6 +38,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadError, setHasLoadError] = useState(false);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
 
   const stats: DiscordAutomationStats = {
@@ -106,6 +109,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const fetchServers = useCallback(async () => {
     setIsLoading(true);
     setHasLoadError(false);
+    setNeedsReconnect(false);
     try {
       const { data, error } = await supabase.functions.invoke(
         "discord-automation-triggers",
@@ -113,6 +117,13 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       );
       if (error) throw error;
       if (data.error) {
+        // Detect "all connections failed" → user needs to reconnect
+        const isAuthFailure =
+          data.details?.includes("All available Discord connections failed") ||
+          data.error?.includes("reconnect");
+        if (isAuthFailure) {
+          setNeedsReconnect(true);
+        }
         toast({
           title: "Failed to load servers",
           description: extractErrorMessage(data),
@@ -132,6 +143,35 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       });
       setServers([]);
       setHasLoadError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  const reconnectDiscord = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "discord-automation-triggers",
+        { body: { action: "reconnect" } }
+      );
+      if (error) throw error;
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+      } else {
+        toast({
+          title: "Reconnection failed",
+          description: data.error || "Could not get Discord authorization URL.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to reconnect Discord:", error);
+      toast({
+        title: "Reconnection failed",
+        description: "Could not initiate Discord reconnection. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -376,8 +416,10 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     channels,
     isLoading,
     hasLoadError,
+    needsReconnect,
     stats,
     fetchServers,
+    reconnectDiscord,
     selectServer,
     selectChannel,
     activateMonitoring,
