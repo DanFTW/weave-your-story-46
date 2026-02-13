@@ -12,6 +12,45 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3";
 
+/**
+ * Fetch the Discord OAuth access_token from Composio connected-account metadata.
+ * Shared by get-servers and get-channels actions.
+ */
+async function getDiscordAccessToken(connectionId: string): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const res = await fetch(
+      `${COMPOSIO_API_BASE}/connected_accounts/${connectionId}`,
+      {
+        headers: { "x-api-key": COMPOSIO_API_KEY },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeout);
+
+    const text = await res.text();
+    console.log(`[Discord] Composio metadata status: ${res.status}, body: ${text.substring(0, 500)}`);
+
+    if (!res.ok) {
+      throw new Error(`Composio metadata HTTP ${res.status}`);
+    }
+
+    const meta = JSON.parse(text);
+    const token = meta?.connectionParams?.access_token || meta?.data?.access_token;
+
+    if (!token) {
+      throw new Error("No access_token in Composio metadata. Please reconnect Discord.");
+    }
+
+    return token;
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -87,64 +126,85 @@ serve(async (req) => {
 
     switch (action) {
       case "get-servers": {
-        console.log(`[Discord] Fetching servers for connection: ${connectionId}`);
+        console.log(`[Discord] Fetching servers via direct Discord API for connection: ${connectionId}`);
 
-        const response = await fetch(
-          `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_MY_GUILDS`,
-          {
-            method: "POST",
-            headers: {
-              "x-api-key": COMPOSIO_API_KEY,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              connected_account_id: connectionId,
-              arguments: {},
-            }),
-          }
-        );
+        let accessToken: string;
+        try {
+          accessToken = await getDiscordAccessToken(connectionId);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          console.error("[Discord] Token retrieval failed:", msg);
+          return new Response(JSON.stringify({
+            error: "Discord not connected or token unavailable",
+            details: msg,
+            servers: [],
+          }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`[Discord] Get servers error ${response.status}:`, errorText);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10_000);
 
-          let errorDetails = "Unknown error";
-          try {
-            const parsed = JSON.parse(errorText);
-            if (parsed.error && typeof parsed.error === "object") {
-              errorDetails = parsed.error.message || parsed.error.suggested_fix || JSON.stringify(parsed.error);
-            } else {
-              errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+        try {
+          const discordRes = await fetch(
+            "https://discord.com/api/v10/users/@me/guilds",
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: controller.signal,
             }
-          } catch {
-            errorDetails = errorText || `HTTP ${response.status}`;
+          );
+          clearTimeout(timeout);
+
+          const body = await discordRes.text();
+          console.log(`[Discord] Guilds API status: ${discordRes.status}, body: ${body.substring(0, 500)}`);
+
+          if (discordRes.status === 429) {
+            const retryAfter = discordRes.headers.get("Retry-After") || "a few";
+            return new Response(JSON.stringify({
+              error: "Rate limited by Discord",
+              details: `Try again in ${retryAfter} seconds`,
+              servers: [],
+            }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
+
+          if (discordRes.status === 401 || discordRes.status === 403) {
+            return new Response(JSON.stringify({
+              error: "Discord connection missing required scopes (guilds). Please reconnect Discord.",
+              details: `Discord API returned ${discordRes.status}`,
+              servers: [],
+            }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (!discordRes.ok) {
+            return new Response(JSON.stringify({
+              error: "Failed to load servers",
+              details: `Discord API error (HTTP ${discordRes.status})`,
+              servers: [],
+            }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const guilds = JSON.parse(body);
 
           return new Response(JSON.stringify({
-            error: "Failed to load servers",
-            details: errorDetails,
-            servers: [],
+            servers: Array.isArray(guilds)
+              ? guilds.map((g: any) => ({
+                  id: g.id,
+                  name: g.name,
+                  icon: g.icon || null,
+                }))
+              : [],
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
+        } catch (e) {
+          clearTimeout(timeout);
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          console.error("[Discord] Guild listing failed:", msg);
+          return new Response(JSON.stringify({
+            error: "Failed to load servers",
+            details: msg,
+            servers: [],
+          }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-
-        const data = await safeJsonParse(response);
-        console.log("[Discord] Get servers response:", JSON.stringify(data));
-
-        const guilds = data?.data?.response_data || data?.data || [];
-
-        return new Response(JSON.stringify({
-          servers: Array.isArray(guilds)
-            ? guilds.map((g: any) => ({
-                id: g.id,
-                name: g.name,
-                icon: g.icon || null,
-              }))
-            : [],
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
       }
 
       case "get-channels": {
@@ -157,52 +217,17 @@ serve(async (req) => {
 
         console.log(`[Discord] Fetching channels for server: ${serverId}`);
 
-        // Step 1: Get OAuth access token from Composio connected account metadata
-        const metadataController = new AbortController();
-        const metadataTimeout = setTimeout(() => metadataController.abort(), 10000);
-
         let accessToken: string;
         try {
-          const metaResponse = await fetch(
-            `${COMPOSIO_API_BASE}/connected_accounts/${connectionId}`,
-            {
-              headers: { "x-api-key": COMPOSIO_API_KEY },
-              signal: metadataController.signal,
-            }
-          );
-          clearTimeout(metadataTimeout);
-
-          const metaText = await metaResponse.text();
-          console.log(`[Discord] Composio metadata status: ${metaResponse.status}, body: ${metaText.substring(0, 500)}`);
-
-          if (!metaResponse.ok) {
-            return new Response(JSON.stringify({
-              error: "Failed to load channels",
-              details: `Could not retrieve Discord token (HTTP ${metaResponse.status})`,
-              channels: [],
-            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
-
-          const metaData = JSON.parse(metaText);
-          accessToken = metaData?.connectionParams?.access_token || metaData?.data?.access_token;
-
-          if (!accessToken) {
-            console.error("[Discord] No access_token in metadata:", metaText.substring(0, 500));
-            return new Response(JSON.stringify({
-              error: "Discord not connected or token unavailable",
-              details: "Could not find an access token for your Discord connection. Please reconnect Discord.",
-              channels: [],
-            }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
+          accessToken = await getDiscordAccessToken(connectionId);
         } catch (e) {
-          clearTimeout(metadataTimeout);
           const msg = e instanceof Error ? e.message : "Unknown error";
-          console.error("[Discord] Metadata fetch failed:", msg);
+          console.error("[Discord] Token retrieval failed:", msg);
           return new Response(JSON.stringify({
             error: "Failed to load channels",
-            details: `Token retrieval failed: ${msg}`,
+            details: msg,
             channels: [],
-          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         // Step 2: Call Discord REST API directly to list guild channels
