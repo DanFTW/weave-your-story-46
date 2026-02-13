@@ -104,6 +104,7 @@ const iconImages: Record<string, string> = {
   googlesuper: googlesuperIcon,
   fireflies: firefliesIcon,
   googledrive: googledriveIcon,
+  slack: slackIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {

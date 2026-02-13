@@ -202,16 +202,21 @@ export function useComposio(toolkit: string): UseComposioReturn {
         stopPolling();
         window.location.assign(data.redirectUrl);
       } else {
-        // Desktop - try popup, fallback to redirect
-        // Popup allows polling to continue in background
-        const popup = window.open(data.redirectUrl, '_blank', 'width=600,height=700');
-        
-        if (!popup) {
-          console.log("Popup blocked, using standard redirect");
-          stopPolling();
-          // Use top-level window to escape iframe
-          const targetWindow = window.top || window;
-          targetWindow.location.assign(data.redirectUrl);
+        // Desktop - try new tab first (less likely to be blocked than popup)
+        const popup = window.open(data.redirectUrl, '_blank');
+
+        if (!popup || popup.closed) {
+          console.log("New tab blocked, trying popup window...");
+          const popupWindow = window.open(
+            data.redirectUrl, 'oauth_popup', 'width=600,height=700'
+          );
+
+          if (!popupWindow || popupWindow.closed) {
+            console.log("All popups blocked, using top-level redirect");
+            stopPolling();
+            const targetWindow = window.top || window;
+            targetWindow.location.assign(data.redirectUrl);
+          }
         }
       }
     } catch (error) {
