@@ -113,15 +113,13 @@ serve(async (req) => {
       });
     }
 
-    // We have both connection IDs available for fallback
-    const primaryConnectionId = integration.composio_connection_id;
-    const fallbackConnectionId = (discordIntegration && botIntegration && discordIntegration !== integration)
-      ? botIntegration.composio_connection_id
-      : (botIntegration && discordIntegration && botIntegration !== integration)
-        ? discordIntegration.composio_connection_id
-        : null;
-
-    const connectionId = primaryConnectionId;
+    // Collect all unique valid connection IDs, preferring regular Discord OAuth first
+    const allConnectionIds = [
+      discordIntegration?.composio_connection_id,
+      botIntegration?.composio_connection_id,
+    ].filter((id): id is string => !!id && id.startsWith("ca_"));
+    const connectionIdsToUse = [...new Set(allConnectionIds)];
+    const connectionId = connectionIdsToUse[0];
 
     if (!connectionId?.startsWith("ca_")) {
       console.error("[Discord] Invalid connection ID format:", connectionId);
@@ -150,7 +148,7 @@ serve(async (req) => {
     switch (action) {
       case "get-servers": {
         // Try primary connection, then fallback if 401
-        const connectionIdsToTry = [connectionId, fallbackConnectionId].filter(Boolean) as string[];
+        const connectionIdsToTry = connectionIdsToUse;
         console.log(`[Discord] Fetching servers, connections to try: ${connectionIdsToTry.join(", ")}`);
 
         for (const connId of connectionIdsToTry) {
@@ -238,7 +236,7 @@ serve(async (req) => {
           });
         }
 
-        const channelConnectionIds = [connectionId, fallbackConnectionId].filter(Boolean) as string[];
+        const channelConnectionIds = connectionIdsToUse;
         console.log(`[Discord] Fetching channels for server: ${serverId}, connections: ${channelConnectionIds.join(", ")}`);
 
         for (const connId of channelConnectionIds) {
@@ -380,6 +378,47 @@ serve(async (req) => {
           .eq("user_id", user.id);
 
         return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "reconnect": {
+        // Initiate a fresh Discord OAuth connection using the regular Discord auth config
+        const DISCORD_AUTH_CONFIG_ID = "ac_BOCrE-Q-yqJu";
+        const redirectUrl = `${SUPABASE_URL}/functions/v1/composio-callback`;
+
+        const initiateRes = await fetch(
+          `${COMPOSIO_API_BASE}/connected_accounts`,
+          {
+            method: "POST",
+            headers: {
+              "x-api-key": COMPOSIO_API_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              auth_config_id: DISCORD_AUTH_CONFIG_ID,
+              redirect_url: redirectUrl,
+              entity_id: user.id,
+            }),
+          }
+        );
+
+        const initiateData = await safeJsonParse(initiateRes);
+        console.log("[Discord] Reconnect initiate response:", JSON.stringify(initiateData));
+
+        if (!initiateRes.ok || !initiateData?.redirectUrl) {
+          return new Response(JSON.stringify({
+            error: "Failed to initiate Discord reconnection",
+            details: initiateData?.message || `HTTP ${initiateRes.status}`,
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        return new Response(JSON.stringify({
+          redirectUrl: initiateData.redirectUrl,
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
