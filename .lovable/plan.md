@@ -1,172 +1,81 @@
-# Discord Channel Message Tracker
+# Fix Discord Server/Channel Loading
 
-## Overview
+## Problem
 
-Create a new "Discord Channel Message Tracker" thread that automatically saves new messages from a selected Discord channel as memories using the Composio `DISCORD_NEW_MESSAGE_TRIGGER` webhook.
+The edge function uses incorrect Composio tool slugs:
 
-## Architecture
+- `DISCORD_LIST_CURRENT_USER_GUILDS` does not exist -- the correct slug is `DISCORD_LIST_MY_GUILDS`
+- `DISCORD_LIST_GUILD_CHANNELS` does not exist in the Discord (non-bot) toolkit -- channel listing is only available in the Discord Bot toolkit
 
-Follows the exact same pattern as the Trello Task Tracker (server/channel picker) and HubSpot Contact Tracker (webhook trigger activation).
+The Discord (non-bot) toolkit only has 15 tools and 1 trigger (`DISCORD_NEW_MESSAGE_TRIGGER`). It does NOT include a channel-listing tool.
 
-## Flow
+## Solution
 
-1. Connect to Discord (auth gate via `useComposio('DISCORD')`)
-2. Select Server -> Select Channel (two-step picker, like Trello's Board -> List)
-3. Toggle monitoring on/off (webhook-based via `DISCORD_NEW_MESSAGE_TRIGGER`)
+### 1. Fix server fetching (wrong tool slug)
 
-## Files to Create
+In `supabase/functions/discord-automation-triggers/index.ts`, change:
 
-### Types
+- `DISCORD_LIST_CURRENT_USER_GUILDS` to `DISCORD_LIST_MY_GUILDS`
 
-`src/types/discordAutomation.ts`
+### 2. Fix channel fetching (tool doesn't exist in this toolkit)
 
-- `DiscordAutomationPhase`: `'auth-check' | 'select-server' | 'select-channel' | 'configure' | 'activating' | 'active'`
-- `DiscordServer`: `{ id, name, icon? }`
-- `DiscordChannel`: `{ id, name, type }`
-- `DiscordAutomationConfig`: `{ id, userId, serverId, serverName, channelId, channelName, isActive, triggerInstanceId, connectedAccountId, messagesTracked }`
-- `DiscordAutomationStats`: `{ messagesTracked, lastChecked, isActive }`
+Since `DISCORD_LIST_GUILD_CHANNELS` is not available in the Discord OAuth toolkit, we need to use the **Direct Discord REST API** instead. The approach:
 
-### Hook
+1. Fetch the user's OAuth access token from the Composio connection metadata (`GET /api/v3/connected_accounts/{connectionId}`)
+2. Call the Discord REST API directly: `GET https://discord.com/api/v10/guilds/{guild_id}/channels` with `Authorization: Bearer {accessToken}`
+3. Filter to text channels (type 0)
 
-`src/hooks/useDiscordAutomation.ts`
+This mirrors the same Composio-first pattern already used in `fetchDiscordProfile` in the callback function.
 
-- Manages phases, config loading/creation from `discord_automation_config` table
-- `fetchServers()` -- calls edge function with `action: 'get-servers'`
-- `selectServer()` -- stores selection, fetches channels via `action: 'get-channels'`
-- `selectChannel()` -- stores selection, transitions to configure phase
-- `activateMonitoring()` / `deactivateMonitoring()` -- calls edge function with `action: 'activate'` / `action: 'deactivate'`
-- Pattern follows `useTrelloAutomation` (picker phases) + `useHubSpotAutomation` (webhook activation)
+### 3. Confirm trigger slug is correct
 
-### Flow Components (5 files)
+The user's screenshot confirms the trigger slug is `DISCORD_NEW_MESSAGE_TRIGGER` with params `channel_id` (required), `interval` (default 1), and `limit` (default 50). This matches what is already in the code -- no change needed for the trigger.
 
-`src/components/flows/discord-automation/DiscordAutomationFlow.tsx`
+## File Changes
 
-- Main flow component, same structure as `TrelloAutomationFlow.tsx`
-- Auth gate with `useComposio('DISCORD')`, sessionStorage return path `returnAfterDiscordConnect`
-- Renders ServerPicker -> ChannelPicker -> AutomationConfig -> ActiveMonitoring based on phase
+### `supabase/functions/discord-automation-triggers/index.ts` (1 file)
 
-`src/components/flows/discord-automation/ServerPicker.tsx`
+**get-servers action** (~line 93): Replace `DISCORD_LIST_CURRENT_USER_GUILDS` with `DISCORD_LIST_MY_GUILDS`
 
-- Lists Discord servers (guilds) the user belongs to
-- Same pattern as `BoardPicker.tsx` (loading, error, empty states, card list)
-- Uses Discord Blurple (`#5865F2`) accent color
+**get-channels action** (~lines 160-218): Replace the Composio tool execution call with:
 
-`src/components/flows/discord-automation/ChannelPicker.tsx`
+1. Fetch the access token from the Composio connection metadata endpoint
+2. Call Discord REST API `GET /guilds/{serverId}/channels` directly using that token
+3. Keep the existing text-channel filtering (type 0) and response format
 
-- Lists text channels in the selected server
-- Same pattern as `ListPicker.tsx`
-- Filters to text channels only (type 0)
+No other files need changes.
 
-`src/components/flows/discord-automation/AutomationConfig.tsx`
+## Technical Details
 
-- Single toggle for "New Messages" monitoring
-- "Activate Monitoring" button, same as HubSpot `AutomationConfig.tsx`
+### Access Token Retrieval
 
-`src/components/flows/discord-automation/ActiveMonitoring.tsx`
+```text
+GET https://backend.composio.dev/api/v3/connected_accounts/{connectionId}
+Headers: x-api-key: {COMPOSIO_API_KEY}
+Response: { data: { access_token: "...", ... } }
 
-- Status card with pulse indicator, stats (messages tracked, last checked)
-- Pause button, same pattern as HubSpot `ActiveMonitoring.tsx`
+```
 
-`src/components/flows/discord-automation/ActivatingScreen.tsx`
+### Discord Channel Listing
 
-- Loading spinner screen during webhook setup
+```text
+GET https://discord.com/api/v10/guilds/{guild_id}/channels
+Headers: Authorization: Bearer {access_token}
+Response: [{ id, name, type, position, ... }, ...]
 
-`src/components/flows/discord-automation/index.ts`
+```
 
-- Barrel export
+Channels with `type: 0` are text channels, which we filter to and return.
 
-### Edge Function
+---
 
-`supabase/functions/discord-automation-triggers/index.ts`
+## Suggestions (only the deltas I’d make before you approve)
 
-- Actions: `get-servers`, `get-channels`, `activate`, `deactivate`
-- `get-servers`: Composio tool execution `DISCORD_LIST_GUILDS`
-- `get-channels`: Composio tool execution `DISCORD_LIST_GUILD_CHANNELS` filtered to text channels (type 0)
-- `activate`: Creates `DISCORD_NEW_MESSAGE_TRIGGER` via Composio trigger upsert API, with `channel_id` in `trigger_config`, webhook URL pointing to `discord-automation-webhook`, stores `trigger_instance_id` and `connected_account_id` in DB
-- `deactivate`: Deletes trigger instance, sets `is_active = false`
-- Auth pattern identical to `trello-automation-triggers`
-
-`supabase/functions/discord-automation-webhook/index.ts`
-
-- Receives webhook payloads from Composio for `DISCORD_NEW_MESSAGE_TRIGGER`
-- Extracts `trigger_instance_id` from payload, looks up user via `discord_automation_config.trigger_instance_id` (and confirms `connected_account_id` matches)
-- Extracts message content, author, channel name, timestamp
-- Deduplicates via `discord_processed_messages` table
-- Creates memory via LIAM API (same ECDSA signing pattern as all other webhooks)
-- Formats memory as: "Discord Message in #channel-name\n\nFrom: username\nMessage: content\nSent: date"
-
-### Database (2 tables via migration)
-
-`discord_automation_config`
-
-- `id` (uuid PK, default gen_random_uuid())
-- `user_id` (uuid, NOT NULL, unique)
-- `server_id` (text, nullable)
-- `server_name` (text, nullable)
-- `channel_id` (text, nullable)
-- `channel_name` (text, nullable)
-- `is_active` (boolean, default false)
-- `trigger_instance_id` (text, nullable)
-- `connected_account_id` (text, nullable)
-- `messages_tracked` (integer, default 0)
-- `last_checked_at` (timestamptz, nullable)
-- `created_at` / `updated_at` (timestamptz, default now())
-- RLS: users can only read/update their own row
-
-`discord_processed_messages`
-
-- `id` (uuid PK, default gen_random_uuid())
-- `user_id` (uuid, NOT NULL)
-- `discord_message_id` (text, NOT NULL)
-- `created_at` (timestamptz, default now())
-- Unique constraint on `(user_id, discord_message_id)`
-- RLS: users can only read their own rows
-
-## Files to Modify
-
-### `src/data/threads.ts`
-
-- Add new thread entry:
-  - `id: "discord-tracker"`, `title: "Discord Channel Message Tracker"`
-  - `description: "Automatically save new messages from a selected channel as memories"`
-  - `icon: MessageSquare` (from lucide-react)
-  - `gradient: "purple"`, `integrations: ["discord"]`
-  - `flowMode: "thread"`, `triggerType: "automatic"`, `type: "automation"`
-
-### `src/data/threadConfigs.ts`
-
-- Add `"discord-tracker"` config with 3 steps: Connect Discord, Server/Channel to monitor, Toggle monitoring on/off
-- Uses `discord.svg` icon URL for the connect step
-
-### `src/data/flowConfigs.ts`
-
-- Add `"discord-tracker"` entry with `isDiscordAutomationFlow: true`
-
-### `src/types/flows.ts`
-
-- Add `isDiscordAutomationFlow?: boolean` to `FlowConfig` interface
-
-### `src/pages/Threads.tsx`
-
-- Add `"discord-tracker"` to `flowEnabledThreads` array
-
-### `src/pages/ThreadOverview.tsx`
-
-- Add `"discord-tracker"` to `flowEnabledThreads` array (line 36)
-
-### `src/pages/FlowPage.tsx`
-
-- Import `DiscordAutomationFlow`
-- Add `if (config.isDiscordAutomationFlow)` render block (follows existing pattern)
-
-### `supabase/config.toml`
-
-- Add `[functions.discord-automation-triggers]` with `verify_jwt = true`
-- Add `[functions.discord-automation-webhook]` with `verify_jwt = false`
-
-## Technical Notes
-
-- The Discord `DISCORD_NEW_MESSAGE_TRIGGER` requires `channel_id` in its trigger config to scope monitoring to a single channel
-- Server/channel fetching uses Composio tool execution API (`/api/v3/tools/execute/{ACTION_SLUG}`) with the user's `connected_account_id`
-- Webhook deduplication uses Discord's unique message ID to prevent duplicate memories
-- Memory creation is routed through LIAM API with ECDSA signing, consistent with all other automation threads
+1. **Use the actual Composio connected account id**
+  - Everywhere the plan says `{connectionId}`, use the same `connected_account_id` you already store for the Discord integration (Composio calls this a connected account). Don’t introduce a new “connection id” concept.
+2. **Add basic error hardening (no UI changes)**
+  - If the Composio metadata call returns no `access_token`, return a clear 401-style error: `"Discord not connected or token unavailable"`.
+  - If Discord channel listing returns `401/403`, return a specific message (e.g. `"Discord token lacks permission to list channels for this server"`), so your UI isn’t forced to show “temporary issue” for permanent auth problems.
+3. **Add timeouts + minimal logging**
+  - Add a short timeout (e.g., 10s) to both network calls.
+  - Log only status + a short snippet (first ~500 chars) of the response body for debugging.
