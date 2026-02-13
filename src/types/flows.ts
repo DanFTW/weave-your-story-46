@@ -46,6 +46,7 @@ export interface FlowConfig {
   isTodoistAutomationFlow?: boolean; // If true, uses Todoist automation UI
   isFirefliesAutomationFlow?: boolean; // If true, uses Fireflies automation UI
   isGoogleDriveAutomationFlow?: boolean; // If true, uses Google Drive automation UI
+  isDiscordAutomationFlow?: boolean; // If true, uses Discord automation UI
 }
 
 // Single data entry (e.g., one family member)

@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "discord-tracker",
+    title: "Discord Channel Message Tracker",
+    description: "Automatically save new messages from a selected channel as memories",
+    icon: MessageSquare,
+    gradient: "purple",
+    status: "active",
+    type: "automation",
+    category: "social",
+    integrations: ["discord"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "googledrive-tracker",
     title: "Google Drive Document Tracker",

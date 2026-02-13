@@ -74,6 +74,9 @@ import { FirefliesAutomationFlow } from "@/components/flows/fireflies-automation
 // Google Drive Automation components
 import { GoogleDriveAutomationFlow } from "@/components/flows/googledrive-automation";
 
+// Discord Automation components
+import { DiscordAutomationFlow } from "@/components/flows/discord-automation";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -276,6 +279,12 @@ export default function FlowPage() {
 
   if (config.isGoogleDriveAutomationFlow) {
     return <GoogleDriveAutomationFlow />;
+  }
+
+  // === DISCORD AUTOMATION FLOW RENDER ===
+
+  if (config.isDiscordAutomationFlow) {
+    return <DiscordAutomationFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

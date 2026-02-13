@@ -31,6 +31,7 @@ const integrationGradients: Record<string, string> = {
   trello: "linear-gradient(135deg, #CCAD00 0%, #A68C00 100%)",
   googlephotos: "linear-gradient(135deg, #BC7A0B 0%, #956208 100%)",
   fireflies: "linear-gradient(135deg, #6C3AED 0%, #DB2777 100%)",
+  discord: "linear-gradient(135deg, #99AAF5 0%, #7983CF 100%)",
 };
 
 // Filler icons that represent device capabilities, not external services

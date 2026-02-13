@@ -32,6 +32,75 @@ export type Database = {
         }
         Relationships: []
       }
+      discord_automation_config: {
+        Row: {
+          channel_id: string | null
+          channel_name: string | null
+          connected_account_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          last_checked_at: string | null
+          messages_tracked: number
+          server_id: string | null
+          server_name: string | null
+          trigger_instance_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel_id?: string | null
+          channel_name?: string | null
+          connected_account_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_checked_at?: string | null
+          messages_tracked?: number
+          server_id?: string | null
+          server_name?: string | null
+          trigger_instance_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel_id?: string | null
+          channel_name?: string | null
+          connected_account_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_checked_at?: string | null
+          messages_tracked?: number
+          server_id?: string | null
+          server_name?: string | null
+          trigger_instance_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      discord_processed_messages: {
+        Row: {
+          created_at: string
+          discord_message_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          discord_message_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          discord_message_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_automation_contacts: {
         Row: {
           contact_name: string | null
