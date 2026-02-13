@@ -280,6 +280,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "googledrive",
         status: "unconfigured",
       },
+      {
+        id: "slack",
+        name: "Slack",
+        icon: "slack",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -906,6 +912,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#4285F4",    // Google blue
       secondary: "#0F9D58",  // Google green
       tertiary: "#F4B400",   // Google yellow
+    },
+  },
+  "slack": {
+    id: "slack",
+    name: "Slack",
+    icon: "slack",
+    status: "unconfigured",
+    description: "Slack allows Weave to access your workspaces, channels, and messages. Create memories from important conversations, decisions, and team collaborations.",
+    capabilities: ["View channels", "Read messages", "Access profile", "View workspaces"],
+    gradientColors: {
+      primary: "#4A154B",
+      secondary: "#611f69",
+      tertiary: "#36C5F0",
     },
   },
 };

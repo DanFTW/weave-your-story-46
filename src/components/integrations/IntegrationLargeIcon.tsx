@@ -17,7 +17,7 @@ import dropboxIcon from "@/assets/integrations/dropbox.png";
 import googleDocsIcon from "@/assets/integrations/googledocs.svg";
 import notionIcon from "@/assets/integrations/notion.svg";
 import trelloIcon from "@/assets/integrations/trello.svg";
-import slackIcon from "@/assets/integrations/slack.svg";
+import slackIcon from "@/assets/integrations/slack.png";
 import githubIcon from "@/assets/integrations/github.svg";
 import linearIcon from "@/assets/integrations/linear.svg";
 import onedriveIcon from "@/assets/integrations/onedrive.svg";
@@ -104,6 +104,7 @@ const iconImages: Record<string, string> = {
   googlesuper: googlesuperIcon,
   fireflies: firefliesIcon,
   googledrive: googledriveIcon,
+  slack: slackIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
