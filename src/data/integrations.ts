@@ -84,7 +84,7 @@ export const integrationSections: IntegrationSection[] = [
       },
       {
         id: "discord",
-        name: "Discord",
+        name: "Discord Bot",
         icon: "discord",
         status: "unconfigured",
       },
@@ -472,10 +472,10 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
   },
   "discord": {
     id: "discord",
-    name: "Discord",
+    name: "Discord Bot",
     icon: "discord",
     status: "unconfigured",
-    description: "Discord allows Weave to access your servers, messages, and activity. Create memories from your conversations, communities, and shared moments.",
+    description: "Discord Bot allows Weave to access your servers, messages, and activity. Create memories from your conversations, communities, and shared moments.",
     capabilities: ["View servers", "Access messages", "Read profile", "View activity"],
     gradientColors: {
       primary: "#5865F2",    // Discord blurple
