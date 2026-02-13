@@ -298,7 +298,7 @@ serve(async (req) => {
           error: "Failed to load channels",
           details: "All Discord connections failed. Please reconnect Discord.",
           channels: [],
-        }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       case "activate": {
