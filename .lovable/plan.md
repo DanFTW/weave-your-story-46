@@ -1,63 +1,62 @@
+# Fix: Channel Loading Auth Failure in Discord Tracker
 
-# Fix Discord Server Loading
+## Root Cause
 
-## Problem
+The edge function correctly returns a 200 with error details when channel loading fails, but the frontend has two gaps:
 
-Two issues are preventing servers from loading:
+1. `useDiscordAutomation.ts`**** `selectServer` **function** (lines 230-236): When channel loading returns an error, it shows a toast and sets empty channels, but does NOT set `needsReconnect = true`. So the reconnect UI never appears.
+2. `ChannelPicker` **component**: Has no props or UI for handling auth failures / reconnect. It only shows "No text channels found" when channels are empty.
+3. `DiscordAutomationFlow` (lines 148-155): Does not pass `needsReconnect` or `onReconnect` to `ChannelPicker`.
 
-1. **Fallback logic bug** (lines 116-122): A broken ternary expression causes the same connection ID (`ca_CLVIIXBLidKg`) to be tried twice. The second connection (`ca_seifjoPKRVN6`) is never attempted.
+## Changes
 
-2. **Stale Discord connection**: The `discord` entry in the database (`ca_CLVIIXBLidKg`) appears to hold an invalid/expired token. The `discordbot` entry (`ca_seifjoPKRVN6`) may work but is never reached due to bug #1.
+### 1. `src/hooks/useDiscordAutomation.ts` - Detect channel auth failures in `selectServer`
 
-## Solution
+In the `selectServer` callback (around lines 230-236), add auth failure detection when `channelData.error` is present:
 
-**Single file**: `supabase/functions/discord-automation-triggers/index.ts`
+```typescript
+if (channelData.error) {
+  const isChannelAuthFailure =
+    channelData.details?.includes("All Discord connections failed") ||
+    channelData.error?.includes("reconnect");
 
-### 1. Fix the broken fallback logic (lines 116-124)
+  if (isChannelAuthFailure) {
+    setNeedsReconnect(true);
+  }
 
-Replace the complex ternary with simple array deduplication:
+  toast({
+    title: "Failed to load channels",
+    description: extractErrorMessage(channelData),
+    variant: "destructive",
+  });
+  setChannels([]);
+}
 
-```text
-Before (buggy):
-  const fallbackConnectionId = (discordIntegration && botIntegration && discordIntegration !== integration)
-    ? botIntegration.composio_connection_id
-    : (botIntegration && discordIntegration && botIntegration !== integration)
-      ? discordIntegration.composio_connection_id
-      : null;
-
-After (fixed):
-  const allConnectionIds = [
-    discordIntegration?.composio_connection_id,
-    botIntegration?.composio_connection_id,
-  ].filter((id): id is string => !!id && id.startsWith("ca_"));
-  const connectionIdsToUse = [...new Set(allConnectionIds)];
-  const connectionId = connectionIdsToUse[0];
 ```
 
-### 2. Use the fixed list in get-servers and get-channels
+### 2. `src/components/flows/discord-automation/ChannelPicker.tsx` - Add reconnect UI
 
-- Line 153: Replace `[connectionId, fallbackConnectionId].filter(Boolean)` with `connectionIdsToUse`
-- Line 241: Same change for channels
+Add `needsReconnect`, `onReconnect`, and `onGoBack` props. When `channels` is empty and `needsReconnect` is true, show a "Reconnect Discord" button instead of just "No text channels found". Also add a "Pick a different server" button.
 
-### 3. Prioritize regular Discord OAuth
+### 3. `src/components/flows/discord-automation/DiscordAutomationFlow.tsx` - Wire reconnect to ChannelPicker
 
-Reorder `connectionIdsToUse` so the `discord` integration (auth config `ac_BOCrE-Q-yqJu`) is always tried first, before `discordbot`. This is already handled by lines 105-107 where `discordIntegration` is listed first in the array.
+Pass `needsReconnect`, `onReconnect={reconnectDiscord}`, and `onGoBack` to the `ChannelPicker` component (lines 148-155).
 
-### 4. Add a "reconnect" action
+## No edge function changes needed
 
-Add a new `reconnect` case that calls the Composio initiate-connection API with auth config `ac_BOCrE-Q-yqJu` to get a fresh OAuth URL. This gives the frontend a way to trigger re-authentication for the regular Discord integration without going through the full integrations page.
+The edge function already returns 200 with the correct error body. The fix is entirely frontend.
 
-## After deploying
+---
 
-The user will need to **reconnect their Discord (regular) integration** since the existing token (`ca_CLVIIXBLidKg`) is expired/invalid. The fix ensures that:
-- Both connections are actually tried (fixing the fallback bug)
-- Regular Discord OAuth (`ac_BOCrE-Q-yqJu`) is preferred
-- Clear error messaging tells the user to reconnect if both fail
+## Suggestions (additions only)
 
-## Technical Details
-
-- Lines 116-124: Replace with array dedup (5 lines)
-- Line 153: `connectionIdsToUse` instead of `[connectionId, fallbackConnectionId].filter(Boolean)`
-- Line 241: Same
-- No frontend changes needed
-- Deploy the updated edge function
+1. **Reset** `needsReconnect` **on success and on new server selection**
+  - Before fetching channels in `selectServer`, call `setNeedsReconnect(false)` so a previous failure doesn’t “stick”.
+  - When channels load successfully, also ensure `setNeedsReconnect(false)`.
+2. **Make auth-failure detection slightly more robust (still scoped)**
+  - Instead of checking only `details`/`error`, run the same check against the final `extractErrorMessage(channelData)` (covers cases where the message is stored in a different field).
+3. **ChannelPicker empty-state should differentiate “no channels” vs “auth failure”**
+  - If `needsReconnect === false`, keep “No text channels found in this server”.
+  - If `needsReconnect === true`, show the reconnect CTA + a short line like “Your Discord connection needs to be refreshed to list channels.”
+4. `onGoBack` **should actually return to the server picker**
+  - Wire `onGoBack` to set the phase back to `'select-server'` (or call your existing “reset selection” method if you have one).
