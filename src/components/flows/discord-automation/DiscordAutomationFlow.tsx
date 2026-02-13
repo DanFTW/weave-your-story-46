@@ -150,7 +150,10 @@ export function DiscordAutomationFlow() {
             channels={channels}
             isLoading={isLoading}
             serverName={config?.serverName || ""}
+            needsReconnect={needsReconnect}
             onSelectChannel={selectChannel}
+            onReconnect={reconnectDiscord}
+            onGoBack={() => setPhase("select-server")}
           />
         )}
 

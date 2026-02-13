@@ -228,13 +228,24 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
 
         if (channelError) throw channelError;
         if (channelData.error) {
+          const errorMsg = extractErrorMessage(channelData);
+          const isChannelAuthFailure =
+            channelData.details?.includes("All Discord connections failed") ||
+            channelData.error?.includes("reconnect") ||
+            errorMsg.includes("reconnect");
+
+          if (isChannelAuthFailure) {
+            setNeedsReconnect(true);
+          }
+
           toast({
             title: "Failed to load channels",
-            description: extractErrorMessage(channelData),
+            description: errorMsg,
             variant: "destructive",
           });
           setChannels([]);
         } else {
+          setNeedsReconnect(false);
           setChannels(channelData.channels || []);
         }
 
