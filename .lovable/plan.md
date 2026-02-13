@@ -1,106 +1,100 @@
-# Fix: Use Composio Tool Execution for Channel Listing
+# Add Slack Integration to /integrations Page
 
-## Root Cause
+## Overview
 
-The Discord REST API endpoint `GET /guilds/{guild_id}/channels` **requires Bot authorization** -- it does not work with regular user OAuth tokens regardless of scopes. The current code calls this endpoint directly with the user's OAuth `Bearer` token, which always returns `401 Unauthorized`.
+Add Slack as a fully functional integration on the /integrations page, using the user-provided logo (PNG) and Composio auth config `ac_BOCrE-Q-yqJu`. Profile data (name, email, avatar) will be fetched via Composio Tool Execution (two-step: `SLACK_GET_AUTH_TEST` then `SLACK_GET_USER_INFO`).
 
-Server listing works because `GET /users/@me/guilds` is a user OAuth endpoint. Channel listing is not.
+**Suggestion (preflight):** Before wiring this in, confirm in Composio that auth config `ac_BOCrE-Q-yqJu` is actually for **Slack** (toolkit slug `SLACK`) and not another toolkit. If it’s not Slack, replace this ID everywhere below with the correct Slack auth config ID.
 
-## Solution
-
-Instead of calling the Discord REST API directly, use **Composio Tool Execution** (`POST /api/v3/tools/execute/{ACTION_SLUG}`) to list channels. Composio handles the auth internally and can proxy the request correctly through the user's connected account. This is the same pattern already used successfully elsewhere in the codebase (e.g., Instagram, LinkedIn, Trello integrations).
+---
 
 ## Changes
 
-### 1. Edge Function: `supabase/functions/discord-automation-triggers/index.ts`
+### 1. Copy Slack Logo Asset
 
-**Replace** the `get-channels` case (lines 231-302) to use Composio tool execution instead of direct Discord API calls:
+Copy the uploaded `Slack_New_Logo_Icon.png` to `src/assets/integrations/slack.png`.
 
-```typescript
-case "get-channels": {
-  if (!serverId) {
-    return new Response(JSON.stringify({ error: "serverId required" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+### 2. Fix Icon Imports (slack.svg does not exist)
+
+Both `IntegrationIcon.tsx` and `IntegrationLargeIcon.tsx` import `slack.svg` which does not exist. Update both to import `slack.png` instead, and add `slack` to the `iconImages` map in `IntegrationLargeIcon.tsx` (it is already mapped in `IntegrationIcon.tsx`).
+
+**Files:**
+
+- `src/components/integrations/IntegrationIcon.tsx` -- change import from `.svg` to `.png`
+- `src/components/integrations/IntegrationLargeIcon.tsx` -- change import from `.svg` to `.png`, add `slack: slackIcon` to `iconImages` map
+
+### 3. Add Slack to Integration Data
+
+**File:** `src/data/integrations.ts`
+
+- Add Slack entry to the `integrationSections[0].integrations` array (Apps section):
+  ```
+  { id: "slack", name: "Slack", icon: "slack", status: "unconfigured" }
+
+  ```
+- Add Slack detail to `integrationDetails`:
+  ```
+  slack: {
+    id: "slack",
+    name: "Slack",
+    icon: "slack",
+    status: "unconfigured",
+    description: "Slack allows Weave to access your workspaces, channels, and messages. Create memories from important conversations, decisions, and team collaborations.",
+    capabilities: ["View channels", "Read messages", "Access profile", "View workspaces"],
+    gradientColors: {
+      primary: "#4A154B",   // Slack aubergine
+      secondary: "#611f69", // Slack dark purple
+      tertiary: "#36C5F0",  // Slack blue
+    },
   }
 
-  console.log(`[Discord] Fetching channels via Composio for server: ${serverId}`);
+  ```
 
-  for (const connId of connectionIdsToUse) {
-    try {
-      const execRes = await fetch(
-        `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_GUILD_CHANNELS`,
-        {
-          method: "POST",
-          headers: {
-            "x-api-key": COMPOSIO_API_KEY,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            connected_account_id: connId,
-            arguments: { guild_id: serverId },
-          }),
-        }
-      );
+### 4. Add Slack to Available Integrations List
 
-      const execText = await execRes.text();
-      console.log(
-        `[Discord] Composio channel exec status: ${execRes.status} (conn: ${connId}), body: ${execText.substring(
-          0,
-          500
-        )}`
-      );
+**File:** `src/components/integrations/IntegrationSection.tsx`
 
-      if (!execRes.ok) continue;
+Add `"slack"` to the `availableIntegrations` array so it shows as connectable (not "Coming soon").
 
-      const execData = JSON.parse(execText);
-      // Composio wraps results in data.response_data or similar
-      const channelList =
-        execData?.data?.response_data ||
-        execData?.response_data ||
-        execData?.data ||
-        [];
-      const allChannels = Array.isArray(channelList) ? channelList : [];
+### 5. Add Slack Auth Config to Composio Connect
 
-      const textChannels = allChannels
-        .filter((c: any) => c.type === 0)
-        .map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
+**File:** `supabase/functions/composio-connect/index.ts`
 
-      return new Response(JSON.stringify({ channels: textChannels }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } catch (e) {
-      console.error(`[Discord] Composio channel exec failed for ${connId}:`, e);
-      continue;
-    }
-  }
+- Add `slack: "ac_BOCrE-Q-yqJu"` to `AUTH_CONFIGS`
+- Add `"slack"` to `VALID_TOOLKITS`
 
-  // Fallback: all connections failed
-  return new Response(
-    JSON.stringify({
-      error: "Failed to load channels",
-      details: "All Discord connections failed. Please reconnect Discord.",
-      channels: [],
-    }),
-    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
-}
+### 6. Add Slack Profile Fetching to Composio Callback
 
-```
+**File:** `supabase/functions/composio-callback/index.ts`
 
-If `DISCORD_LIST_GUILD_CHANNELS` is not the correct Composio action slug, the function will log the error and we can adjust. Common alternatives: `DISCORD_GET_GUILD_CHANNELS`, `DISCORD_LIST_CHANNELS`. The logs will reveal the correct slug.
+- Add Slack mappings to `APP_TO_TOOLKIT`: `"slack" -> "slack"`, `"slack_bot" -> "slack"`
+- Add a `fetchSlackProfile(connectionId)` function using the two-step Composio Tool Execution pattern:
+  1. Call `SLACK_GET_AUTH_TEST` to get the `user_id`
+  2. Call `SLACK_GET_USER_INFO` with that `user_id` to get `real_name`, `email`, and `image_192`
+- Wire it into the main callback handler so Slack connections populate the account card with name, email, and avatar
 
-### 2. Deploy edge function
+**Suggestion (resilience):** Implement a tiny tool-slug fallback with logging inside `fetchSlackProfile` so if Composio’s Slack tool slugs differ in your workspace/version, you can adjust without breaking the integration. Concretely: attempt `SLACK_GET_AUTH_TEST`, and if Composio returns “tool not found”, log it and try the next known alternative slug (same idea for `SLACK_GET_USER_INFO`). Keep the final output mapping identical (`account_name`, `account_email`, `account_avatar_url`) so the frontend card parsing never changes.
 
-Redeploy `discord-automation-triggers` after the change.
+**Suggestion (naming clarity):** If your existing code uses `connected_account_id` everywhere, name the function param `connectedAccountId` (even if the value is the same as `connectionId`) to avoid accidentally passing an integration ID instead of a `ca_*` id.
 
-### 3. No frontend changes needed
+### 7. Deploy Edge Functions
 
-The frontend already handles the response format (`channels` array) and the error/reconnect flow correctly from previous changes.
+Redeploy `composio-connect` and `composio-callback`.
 
-## Technical Notes
+---
 
-- This follows the same Composio tool execution pattern used by Trello (`TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD`), HubSpot, Instagram, and other integrations in the codebase
-- The `connected_account_id` (`ca_*`) is passed to Composio which handles token refresh and API proxying
-- If the action slug needs adjustment, the logs will show the exact error from Composio, making it easy to correct
+## Files Modified
+
+
+| File                                                   | Change                                   |
+| ------------------------------------------------------ | ---------------------------------------- |
+| `src/assets/integrations/slack.png`                    | Copy uploaded logo                       |
+| `src/components/integrations/IntegrationIcon.tsx`      | Fix import: `.svg` to `.png`             |
+| `src/components/integrations/IntegrationLargeIcon.tsx` | Fix import: `.svg` to `.png`, add to map |
+| `src/data/integrations.ts`                             | Add Slack entry + detail                 |
+| `src/components/integrations/IntegrationSection.tsx`   | Add "slack" to available list            |
+| `supabase/functions/composio-connect/index.ts`         | Add auth config + valid toolkit          |
+| `supabase/functions/composio-callback/index.ts`        | Add profile fetching + toolkit mapping   |
+
+
+No other files changed.
