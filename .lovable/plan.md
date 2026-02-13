@@ -1,100 +1,73 @@
-# Add Slack Integration to /integrations Page
+# Fix Slack Integration: Icon + OAuth Connection
 
-## Overview
+## Problem 1: Missing Slack Icon on /integrations
 
-Add Slack as a fully functional integration on the /integrations page, using the user-provided logo (PNG) and Composio auth config `ac_BOCrE-Q-yqJu`. Profile data (name, email, avatar) will be fetched via Composio Tool Execution (two-step: `SLACK_GET_AUTH_TEST` then `SLACK_GET_USER_INFO`).
+`IntegrationIcon.tsx` imports the `slack.png` asset but **never adds it to the** `iconImages` **map**. The lookup `iconImages["slack"]` returns `undefined`, triggering the fallback "S" letter placeholder.
 
-**Suggestion (preflight):** Before wiring this in, confirm in Composio that auth config `ac_BOCrE-Q-yqJu` is actually for **Slack** (toolkit slug `SLACK`) and not another toolkit. If it’s not Slack, replace this ID everywhere below with the correct Slack auth config ID.
+### Fix
+
+Add `slack: slackIcon` to the `iconImages` map in `IntegrationIcon.tsx` (after `googledrive` on line 106).
 
 ---
 
-## Changes
+## Problem 2: OAuth Redirect Blocked in Iframe
 
-### 1. Copy Slack Logo Asset
+The Composio API call succeeds and returns a valid redirect URL. However, Slack's OAuth page sets `X-Frame-Options: DENY`, which prevents it from loading inside the Lovable preview iframe.
 
-Copy the uploaded `Slack_New_Logo_Icon.png` to `src/assets/integrations/slack.png`.
+The current `useComposio.ts` desktop flow:
 
-### 2. Fix Icon Imports (slack.svg does not exist)
+1. Tries `window.open(url, '_blank', 'width=600,height=700')` -- this can be blocked by browsers when called from within an iframe
+2. If popup fails, falls back to `window.top.location.assign(url)` -- this navigates the top-level Lovable editor away, which is undesirable, or gets blocked by frame security
 
-Both `IntegrationIcon.tsx` and `IntegrationLargeIcon.tsx` import `slack.svg` which does not exist. Update both to import `slack.png` instead, and add `slack` to the `iconImages` map in `IntegrationLargeIcon.tsx` (it is already mapped in `IntegrationIcon.tsx`).
+### Fix
 
-**Files:**
+Update the desktop popup fallback in `useComposio.ts` to always attempt `window.open` without popup dimensions first (which opens a new tab instead of a popup window -- less likely to be blocked), and only fall back to `window.top` navigation as last resort.
 
-- `src/components/integrations/IntegrationIcon.tsx` -- change import from `.svg` to `.png`
-- `src/components/integrations/IntegrationLargeIcon.tsx` -- change import from `.svg` to `.png`, add `slack: slackIcon` to `iconImages` map
+**File:** `src/hooks/useComposio.ts` (lines 204-’215)
 
-### 3. Add Slack to Integration Data
+Change the desktop branch to:
 
-**File:** `src/data/integrations.ts`
+```typescript
+} else {
+  // Desktop - try new tab first (less likely to be blocked than popup)
+  const popup = window.open(data.redirectUrl, '_blank');
 
-- Add Slack entry to the `integrationSections[0].integrations` array (Apps section):
-  ```
-  { id: "slack", name: "Slack", icon: "slack", status: "unconfigured" }
+  if (!popup || popup.closed) {
+    console.log("New tab blocked, trying popup window...");
+    const popupWindow = window.open(
+      data.redirectUrl, 'oauth_popup', 'width=600,height=700'
+    );
 
-  ```
-- Add Slack detail to `integrationDetails`:
-  ```
-  slack: {
-    id: "slack",
-    name: "Slack",
-    icon: "slack",
-    status: "unconfigured",
-    description: "Slack allows Weave to access your workspaces, channels, and messages. Create memories from important conversations, decisions, and team collaborations.",
-    capabilities: ["View channels", "Read messages", "Access profile", "View workspaces"],
-    gradientColors: {
-      primary: "#4A154B",   // Slack aubergine
-      secondary: "#611f69", // Slack dark purple
-      tertiary: "#36C5F0",  // Slack blue
-    },
+    if (!popupWindow || popupWindow.closed) {
+      console.log("All popups blocked, using top-level redirect");
+      stopPolling();
+      const targetWindow = window.top || window;
+      targetWindow.location.assign(data.redirectUrl);
+    }
   }
+}
 
-  ```
+```
 
-### 4. Add Slack to Available Integrations List
-
-**File:** `src/components/integrations/IntegrationSection.tsx`
-
-Add `"slack"` to the `availableIntegrations` array so it shows as connectable (not "Coming soon").
-
-### 5. Add Slack Auth Config to Composio Connect
-
-**File:** `supabase/functions/composio-connect/index.ts`
-
-- Add `slack: "ac_BOCrE-Q-yqJu"` to `AUTH_CONFIGS`
-- Add `"slack"` to `VALID_TOOLKITS`
-
-### 6. Add Slack Profile Fetching to Composio Callback
-
-**File:** `supabase/functions/composio-callback/index.ts`
-
-- Add Slack mappings to `APP_TO_TOOLKIT`: `"slack" -> "slack"`, `"slack_bot" -> "slack"`
-- Add a `fetchSlackProfile(connectionId)` function using the two-step Composio Tool Execution pattern:
-  1. Call `SLACK_GET_AUTH_TEST` to get the `user_id`
-  2. Call `SLACK_GET_USER_INFO` with that `user_id` to get `real_name`, `email`, and `image_192`
-- Wire it into the main callback handler so Slack connections populate the account card with name, email, and avatar
-
-**Suggestion (resilience):** Implement a tiny tool-slug fallback with logging inside `fetchSlackProfile` so if Composio’s Slack tool slugs differ in your workspace/version, you can adjust without breaking the integration. Concretely: attempt `SLACK_GET_AUTH_TEST`, and if Composio returns “tool not found”, log it and try the next known alternative slug (same idea for `SLACK_GET_USER_INFO`). Keep the final output mapping identical (`account_name`, `account_email`, `account_avatar_url`) so the frontend card parsing never changes.
-
-**Suggestion (naming clarity):** If your existing code uses `connected_account_id` everywhere, name the function param `connectedAccountId` (even if the value is the same as `connectionId`) to avoid accidentally passing an integration ID instead of a `ca_*` id.
-
-### 7. Deploy Edge Functions
-
-Redeploy `composio-connect` and `composio-callback`.
+This tries a plain new tab first (which browsers are more permissive about), then falls back to a sized popup, then finally to top-level navigation.
 
 ---
 
 ## Files Modified
 
 
-| File                                                   | Change                                   |
-| ------------------------------------------------------ | ---------------------------------------- |
-| `src/assets/integrations/slack.png`                    | Copy uploaded logo                       |
-| `src/components/integrations/IntegrationIcon.tsx`      | Fix import: `.svg` to `.png`             |
-| `src/components/integrations/IntegrationLargeIcon.tsx` | Fix import: `.svg` to `.png`, add to map |
-| `src/data/integrations.ts`                             | Add Slack entry + detail                 |
-| `src/components/integrations/IntegrationSection.tsx`   | Add "slack" to available list            |
-| `supabase/functions/composio-connect/index.ts`         | Add auth config + valid toolkit          |
-| `supabase/functions/composio-callback/index.ts`        | Add profile fetching + toolkit mapping   |
+| File                                              | Change                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------- |
+| `src/components/integrations/IntegrationIcon.tsx` | Add `slack: slackIcon` to iconImages map                    |
+| `src/hooks/useComposio.ts`                        | Improve desktop OAuth redirect to prefer new tab over popup |
 
 
-No other files changed.
+No backend or edge function changes needed. The Composio connect flow and auth config (`ac_H9kYZsVaw_gS`) are working correctly.
+
+---
+
+## Suggestion (only)
+
+Replace the last line with the correct Slack auth config id you provided earlier:
+
+- Replace `ac_H9kYZsVaw_gS` with `ac_BOCrE-Q-yqJu`
