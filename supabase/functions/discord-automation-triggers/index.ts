@@ -220,12 +220,12 @@ serve(async (req) => {
           }
         }
 
-        // All connections failed
+        // All connections failed — return 200 so frontend can read the error body
         return new Response(JSON.stringify({
           error: "Discord connection missing required scopes (guilds). Please reconnect Discord.",
           details: "All available Discord connections failed to list servers.",
           servers: [],
-        }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       case "get-channels": {
