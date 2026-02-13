@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Search, Loader2, FileText, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,33 @@ interface DocumentSearchProps {
 export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch, onSave }: DocumentSearchProps) {
   const [query, setQuery] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, []);
+
+  const handleInputChange = (value: string) => {
+    setQuery(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setHasSearched(false);
+      return;
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      setHasSearched(true);
+      onSearch(trimmed);
+    }, 300);
+  };
 
   const handleSearch = () => {
     if (!query.trim()) return;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
     setHasSearched(true);
     onSearch(query.trim());
   };
@@ -35,7 +59,7 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
           <Input
             placeholder="Search by title..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             className="pl-10 h-11 rounded-xl bg-secondary/50 border-0"
           />
