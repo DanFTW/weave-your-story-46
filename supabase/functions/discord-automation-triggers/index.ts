@@ -236,60 +236,43 @@ serve(async (req) => {
           });
         }
 
-        const channelConnectionIds = connectionIdsToUse;
-        console.log(`[Discord] Fetching channels for server: ${serverId}, connections: ${channelConnectionIds.join(", ")}`);
+        console.log(`[Discord] Fetching channels via Composio for server: ${serverId}`);
 
-        for (const connId of channelConnectionIds) {
-          let creds: { token: string; authHeader: string };
+        for (const connId of connectionIdsToUse) {
           try {
-            creds = await getDiscordCredentials(connId);
-          } catch (e) {
-            console.error(`[Discord] Token retrieval failed for ${connId}:`, e instanceof Error ? e.message : e);
-            continue;
-          }
-
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 10_000);
-
-          try {
-            const discordResponse = await fetch(
-              `https://discord.com/api/v10/guilds/${serverId}/channels`,
+            const execRes = await fetch(
+              `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_GUILD_CHANNELS`,
               {
-                headers: { Authorization: creds.authHeader },
-                signal: ctrl.signal,
+                method: "POST",
+                headers: {
+                  "x-api-key": COMPOSIO_API_KEY,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  connected_account_id: connId,
+                  arguments: { guild_id: serverId },
+                }),
               }
             );
-            clearTimeout(t);
 
-            const discordText = await discordResponse.text();
-            console.log(`[Discord] Channel list status: ${discordResponse.status} (conn: ${connId}), body: ${discordText.substring(0, 500)}`);
+            const execText = await execRes.text();
+            console.log(`[Discord] Composio channel exec status: ${execRes.status} (conn: ${connId}), body: ${execText.substring(0, 500)}`);
 
-            if (discordResponse.status === 401 || discordResponse.status === 403) {
-              console.warn(`[Discord] Connection ${connId} returned ${discordResponse.status} for channels, trying next...`);
-              continue;
-            }
+            if (!execRes.ok) continue;
 
-            if (!discordResponse.ok) {
-              return new Response(JSON.stringify({
-                error: "Failed to load channels",
-                details: `Discord API error (HTTP ${discordResponse.status})`,
-                channels: [],
-              }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-            }
+            const execData = JSON.parse(execText);
+            const channelList = execData?.data?.response_data || execData?.response_data || execData?.data || [];
+            const allChannels = Array.isArray(channelList) ? channelList : [];
 
-            const allChannels = JSON.parse(discordText);
-            const textChannels = Array.isArray(allChannels)
-              ? allChannels
-                  .filter((c: any) => c.type === 0)
-                  .map((c: any) => ({ id: c.id, name: c.name, type: c.type }))
-              : [];
+            const textChannels = allChannels
+              .filter((c: any) => c.type === 0 || c.type === 5)
+              .map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
 
             return new Response(JSON.stringify({ channels: textChannels }), {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           } catch (e) {
-            clearTimeout(t);
-            console.error(`[Discord] Channel fetch failed for ${connId}:`, e instanceof Error ? e.message : e);
+            console.error(`[Discord] Composio channel exec failed for ${connId}:`, e);
             continue;
           }
         }
