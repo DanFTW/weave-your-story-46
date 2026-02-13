@@ -90,7 +90,7 @@ serve(async (req) => {
         console.log(`[Discord] Fetching servers for connection: ${connectionId}`);
 
         const response = await fetch(
-          `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_CURRENT_USER_GUILDS`,
+          `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_MY_GUILDS`,
           {
             method: "POST",
             headers: {
@@ -157,65 +157,108 @@ serve(async (req) => {
 
         console.log(`[Discord] Fetching channels for server: ${serverId}`);
 
-        const response = await fetch(
-          `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_GUILD_CHANNELS`,
-          {
-            method: "POST",
-            headers: {
-              "x-api-key": COMPOSIO_API_KEY,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              connected_account_id: connectionId,
-              arguments: { guild_id: serverId },
-            }),
-          }
-        );
+        // Step 1: Get OAuth access token from Composio connected account metadata
+        const metadataController = new AbortController();
+        const metadataTimeout = setTimeout(() => metadataController.abort(), 10000);
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`[Discord] Get channels error ${response.status}:`, errorText);
-
-          let errorDetails = "Unknown error";
-          try {
-            const parsed = JSON.parse(errorText);
-            if (parsed.error && typeof parsed.error === "object") {
-              errorDetails = parsed.error.message || parsed.error.suggested_fix || JSON.stringify(parsed.error);
-            } else {
-              errorDetails = parsed.message || parsed.error || parsed.details || errorText;
+        let accessToken: string;
+        try {
+          const metaResponse = await fetch(
+            `${COMPOSIO_API_BASE}/connected_accounts/${connectionId}`,
+            {
+              headers: { "x-api-key": COMPOSIO_API_KEY },
+              signal: metadataController.signal,
             }
-          } catch {
-            errorDetails = errorText || `HTTP ${response.status}`;
+          );
+          clearTimeout(metadataTimeout);
+
+          const metaText = await metaResponse.text();
+          console.log(`[Discord] Composio metadata status: ${metaResponse.status}, body: ${metaText.substring(0, 500)}`);
+
+          if (!metaResponse.ok) {
+            return new Response(JSON.stringify({
+              error: "Failed to load channels",
+              details: `Could not retrieve Discord token (HTTP ${metaResponse.status})`,
+              channels: [],
+            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
+          const metaData = JSON.parse(metaText);
+          accessToken = metaData?.connectionParams?.access_token || metaData?.data?.access_token;
+
+          if (!accessToken) {
+            console.error("[Discord] No access_token in metadata:", metaText.substring(0, 500));
+            return new Response(JSON.stringify({
+              error: "Discord not connected or token unavailable",
+              details: "Could not find an access token for your Discord connection. Please reconnect Discord.",
+              channels: [],
+            }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        } catch (e) {
+          clearTimeout(metadataTimeout);
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          console.error("[Discord] Metadata fetch failed:", msg);
           return new Response(JSON.stringify({
             error: "Failed to load channels",
-            details: errorDetails,
+            details: `Token retrieval failed: ${msg}`,
             channels: [],
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        const data = await safeJsonParse(response);
-        console.log("[Discord] Get channels response:", JSON.stringify(data));
+        // Step 2: Call Discord REST API directly to list guild channels
+        const discordController = new AbortController();
+        const discordTimeout = setTimeout(() => discordController.abort(), 10000);
 
-        const allChannels = data?.data?.response_data || data?.data || [];
+        try {
+          const discordResponse = await fetch(
+            `https://discord.com/api/v10/guilds/${serverId}/channels`,
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: discordController.signal,
+            }
+          );
+          clearTimeout(discordTimeout);
 
-        // Filter to text channels only (type 0)
-        const textChannels = Array.isArray(allChannels)
-          ? allChannels
-              .filter((c: any) => c.type === 0)
-              .map((c: any) => ({
-                id: c.id,
-                name: c.name,
-                type: c.type,
-              }))
-          : [];
+          const discordText = await discordResponse.text();
+          console.log(`[Discord] Channel list status: ${discordResponse.status}, body: ${discordText.substring(0, 500)}`);
 
-        return new Response(JSON.stringify({ channels: textChannels }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+          if (!discordResponse.ok) {
+            const detail = discordResponse.status === 401 || discordResponse.status === 403
+              ? "Discord token lacks permission to list channels for this server"
+              : `Discord API error (HTTP ${discordResponse.status})`;
+            return new Response(JSON.stringify({
+              error: "Failed to load channels",
+              details: detail,
+              channels: [],
+            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const allChannels = JSON.parse(discordText);
+
+          // Filter to text channels only (type 0)
+          const textChannels = Array.isArray(allChannels)
+            ? allChannels
+                .filter((c: any) => c.type === 0)
+                .map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                  type: c.type,
+                }))
+            : [];
+
+          return new Response(JSON.stringify({ channels: textChannels }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } catch (e) {
+          clearTimeout(discordTimeout);
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          console.error("[Discord] Discord API fetch failed:", msg);
+          return new Response(JSON.stringify({
+            error: "Failed to load channels",
+            details: `Channel listing failed: ${msg}`,
+            channels: [],
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
       }
 
       case "activate": {
