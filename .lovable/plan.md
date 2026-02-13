@@ -1,62 +1,96 @@
-# Fix: Channel Loading Auth Failure in Discord Tracker
+
+
+# Fix: Use Composio Tool Execution for Channel Listing
 
 ## Root Cause
 
-The edge function correctly returns a 200 with error details when channel loading fails, but the frontend has two gaps:
+The Discord REST API endpoint `GET /guilds/{guild_id}/channels` **requires Bot authorization** -- it does not work with regular user OAuth tokens regardless of scopes. The current code calls this endpoint directly with the user's OAuth `Bearer` token, which always returns `401 Unauthorized`.
 
-1. `useDiscordAutomation.ts`**** `selectServer` **function** (lines 230-236): When channel loading returns an error, it shows a toast and sets empty channels, but does NOT set `needsReconnect = true`. So the reconnect UI never appears.
-2. `ChannelPicker` **component**: Has no props or UI for handling auth failures / reconnect. It only shows "No text channels found" when channels are empty.
-3. `DiscordAutomationFlow` (lines 148-155): Does not pass `needsReconnect` or `onReconnect` to `ChannelPicker`.
+Server listing works because `GET /users/@me/guilds` is a user OAuth endpoint. Channel listing is not.
+
+## Solution
+
+Instead of calling the Discord REST API directly, use **Composio Tool Execution** (`POST /api/v3/tools/execute/{ACTION_SLUG}`) to list channels. Composio handles the auth internally and can proxy the request correctly through the user's connected account. This is the same pattern already used successfully elsewhere in the codebase (e.g., Instagram, LinkedIn, Trello integrations).
 
 ## Changes
 
-### 1. `src/hooks/useDiscordAutomation.ts` - Detect channel auth failures in `selectServer`
+### 1. Edge Function: `supabase/functions/discord-automation-triggers/index.ts`
 
-In the `selectServer` callback (around lines 230-236), add auth failure detection when `channelData.error` is present:
+**Replace** the `get-channels` case (lines 231-302) to use Composio tool execution instead of direct Discord API calls:
 
 ```typescript
-if (channelData.error) {
-  const isChannelAuthFailure =
-    channelData.details?.includes("All Discord connections failed") ||
-    channelData.error?.includes("reconnect");
-
-  if (isChannelAuthFailure) {
-    setNeedsReconnect(true);
+case "get-channels": {
+  if (!serverId) {
+    return new Response(JSON.stringify({ error: "serverId required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
-  toast({
-    title: "Failed to load channels",
-    description: extractErrorMessage(channelData),
-    variant: "destructive",
-  });
-  setChannels([]);
-}
+  console.log(`[Discord] Fetching channels via Composio for server: ${serverId}`);
 
+  for (const connId of connectionIdsToUse) {
+    try {
+      const execRes = await fetch(
+        `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_GUILD_CHANNELS`,
+        {
+          method: "POST",
+          headers: {
+            "x-api-key": COMPOSIO_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            connected_account_id: connId,
+            arguments: { guild_id: serverId },
+          }),
+        }
+      );
+
+      const execText = await execRes.text();
+      console.log(`[Discord] Composio channel exec status: ${execRes.status} (conn: ${connId}), body: ${execText.substring(0, 500)}`);
+
+      if (!execRes.ok) continue;
+
+      const execData = JSON.parse(execText);
+      // Composio wraps results in data.response_data or similar
+      const channelList = execData?.data?.response_data || execData?.response_data || execData?.data || [];
+      const allChannels = Array.isArray(channelList) ? channelList : [];
+
+      const textChannels = allChannels
+        .filter((c: any) => c.type === 0)
+        .map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
+
+      return new Response(JSON.stringify({ channels: textChannels }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (e) {
+      console.error(`[Discord] Composio channel exec failed for ${connId}:`, e);
+      continue;
+    }
+  }
+
+  // Fallback: all connections failed
+  return new Response(JSON.stringify({
+    error: "Failed to load channels",
+    details: "All Discord connections failed. Please reconnect Discord.",
+    channels: [],
+  }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
 ```
 
-### 2. `src/components/flows/discord-automation/ChannelPicker.tsx` - Add reconnect UI
+If `DISCORD_LIST_GUILD_CHANNELS` is not the correct Composio action slug, the function will log the error and we can adjust. Common alternatives: `DISCORD_GET_GUILD_CHANNELS`, `DISCORD_LIST_CHANNELS`. The logs will reveal the correct slug.
 
-Add `needsReconnect`, `onReconnect`, and `onGoBack` props. When `channels` is empty and `needsReconnect` is true, show a "Reconnect Discord" button instead of just "No text channels found". Also add a "Pick a different server" button.
+### 2. Deploy edge function
 
-### 3. `src/components/flows/discord-automation/DiscordAutomationFlow.tsx` - Wire reconnect to ChannelPicker
+Redeploy `discord-automation-triggers` after the change.
 
-Pass `needsReconnect`, `onReconnect={reconnectDiscord}`, and `onGoBack` to the `ChannelPicker` component (lines 148-155).
+### 3. No frontend changes needed
 
-## No edge function changes needed
+The frontend already handles the response format (`channels` array) and the error/reconnect flow correctly from previous changes.
 
-The edge function already returns 200 with the correct error body. The fix is entirely frontend.
+## Technical Notes
 
----
+- This follows the same Composio tool execution pattern used by Trello (`TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD`), HubSpot, Instagram, and other integrations in the codebase
+- The `connected_account_id` (ca_*) is passed to Composio which handles token refresh and API proxying
+- If the action slug needs adjustment, the logs will show the exact error from Composio, making it easy to correct
 
-## Suggestions (additions only)
-
-1. **Reset** `needsReconnect` **on success and on new server selection**
-  - Before fetching channels in `selectServer`, call `setNeedsReconnect(false)` so a previous failure doesn’t “stick”.
-  - When channels load successfully, also ensure `setNeedsReconnect(false)`.
-2. **Make auth-failure detection slightly more robust (still scoped)**
-  - Instead of checking only `details`/`error`, run the same check against the final `extractErrorMessage(channelData)` (covers cases where the message is stored in a different field).
-3. **ChannelPicker empty-state should differentiate “no channels” vs “auth failure”**
-  - If `needsReconnect === false`, keep “No text channels found in this server”.
-  - If `needsReconnect === true`, show the reconnect CTA + a short line like “Your Discord connection needs to be refreshed to list channels.”
-4. `onGoBack` **should actually return to the server picker**
-  - Wire `onGoBack` to set the phase back to `'select-server'` (or call your existing “reset selection” method if you have one).
