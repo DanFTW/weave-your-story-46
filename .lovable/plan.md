@@ -1,36 +1,74 @@
-
-
-# Auto-Search as You Type for Document Search
+# Add Regular Discord Integration
 
 ## Problem
-Currently the user must type a query and explicitly press the "Search" button (or Enter) to see results. This adds unnecessary friction -- results should appear live as the user types.
 
-## Solution
-Add debounced auto-search to `DocumentSearch.tsx`. As the user types, after a short delay (300ms), the search fires automatically. The Search button is kept as a fallback but becomes secondary.
+The existing Discord integration was renamed to "Discord Bot" (`/integration/discordbot`), but no regular Discord user integration exists yet. Additionally, the rename broke the backend -- `composio-connect` still has the auth config keyed as `discord`, but the frontend now sends `DISCORDBOT` as the toolkit.
 
-## Changes
+## Scope
 
-### 1. `src/components/flows/googledrive-automation/DocumentSearch.tsx`
+1. Fix the broken `discordbot` backend mapping
+2. Add a new regular `discord` integration with auth config `ac_BOCrE-Q-yqJu`
+3. Reuse the existing `fetchDiscordProfile` function, but make it **Composio-first** and only fall back to Discord API (`/users/@me`) if Composio profile fields are missing.
 
-- Import `useEffect` and `useRef` from React
-- Add a debounce mechanism using `useRef` for a timeout ID
-- In the `onChange` handler, after updating `query`, set a 300ms debounce timer that calls `onSearch(trimmedQuery)` when the user pauses typing
-- Clear the timer on each keystroke (standard debounce pattern)
-- Clear results and reset `hasSearched` when input is emptied
-- Clean up the timer on unmount via `useEffect` return
-- Keep the Search button functional as an immediate trigger (bypasses debounce)
-- Set `hasSearched = true` when auto-search fires so the empty-state message shows correctly
+## Files to Edit (4 files)
 
-No other files are modified. The `onSearch` prop contract and edge function remain identical -- only the trigger timing changes from "on click" to "on type (debounced)".
+### 1. `src/data/integrations.ts`
+
+- Add a new `discord` entry in the integrations list (right next to `discordbot`):
+  - `id: "discord"`, `name: "Discord"`, `icon: "discord"`, `status: "unconfigured"`
+- Add a new `discord` key in `integrationDetails` with:
+  - Description: "Discord allows Weave to access your profile, servers, and activity. Create memories from your conversations and community interactions."
+  - Capabilities: "View profile", "Access servers", "Read messages", "View activity"
+  - Gradient colors: same blurple palette as discordbot (`#5865F2`, `#4752C4`, `#7289DA`)
+
+### 2. `src/components/integrations/IntegrationSection.tsx`
+
+- Add `"discord"` to the `availableIntegrations` array (alongside existing `"discordbot"`)
+
+### 3. `supabase/functions/composio-connect/index.ts`
+
+- Rename `discord` -> `discordbot` in `AUTH_CONFIGS` (value stays `ac_jECZy5E0ycKY`)
+- Add `discord: "ac_BOCrE-Q-yqJu"` for the regular Discord integration
+- Add `"discordbot"` to `VALID_TOOLKITS` array (alongside existing `"discord"`)
+
+### 4. `supabase/functions/composio-callback/index.ts`
+
+Two changes:
+
+**APP_TO_TOOLKIT mapping** (lines ~56-57): Update to distinguish bot from regular:
+
+- `"discord"` -> `"discord"` (regular -- keep as-is)
+- `"discord_bot"` -> `"discordbot"` (was mapping to `"discord"`, now maps to the renamed bot ID)
+- Add `"discordbot"` -> `"discordbot"`
+
+**Callback handler** (~line 2398): Add a second block for `toolkit === "discordbot"` that uses the same `fetchDiscordProfile` function, so the bot integration also populates the account card correctly. The existing `toolkit === "discord"` block handles the new regular integration.
+
+## No New Files
+
+- The existing `discord.svg` (official Discord Clyde logo, `#5865F2`) is shared by both integrations via the `icon: "discord"` property
+- The existing `fetchDiscordProfile` function fetches username, email, and avatar via **Composio connection metadata first**, with a fallback to Discord API `/users/@me` only if needed -- works for both OAuth types
+- No new components needed; `IntegrationDetail` page and `useComposio` hook work generically
 
 ## Technical Details
 
+### Auth Flow
+
 ```text
-User types "tes" -> 300ms pause -> onSearch("tes") fires automatically
-User types "test" (continued typing) -> previous timer cleared, new 300ms timer
-User clears input -> results cleared, hasSearched reset
-User clicks Search -> immediate search (no debounce)
+User visits /integration/discord
+  -> useComposio("discord") sends toolkit="DISCORD" to composio-connect
+  -> Edge function lowercases to "discord", finds auth config ac_BOCrE-Q-yqJu
+  -> Composio OAuth redirect -> user authorizes
+  -> composio-callback resolves toolkit="discord" via APP_TO_TOOLKIT
+  -> fetchDiscordProfile(connection/accessToken) gets username, email, avatar (Composio-first)
+  -> Upserts user_integrations with integration_id="discord"
+  -> Polling detects connected status, account card populates
+
 ```
 
-The 300ms debounce strikes the right balance: fast enough to feel instant, slow enough to avoid excessive API calls during rapid typing.
+### Profile Data Mapping
 
+The `fetchDiscordProfile` function (updated to be Composio-first) maps:
+
+- `global_name` or `username` -> `account_name`
+- `email` -> `account_email` (may be null if not granted by scope)
+- Avatar CDN URL (`cdn.discordapp.com/avatars/{id}/{hash}.png`) -> `account_avatar_url`
