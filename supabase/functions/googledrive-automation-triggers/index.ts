@@ -469,6 +469,137 @@ Deno.serve(async (req) => {
       );
     }
 
+    // === SEARCH DOCS ===
+    if (action === "search-docs") {
+      const { query } = body;
+      if (!query || typeof query !== "string") {
+        return new Response(JSON.stringify({ error: "Query required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const escapedQuery = query.replace(/'/g, "\\'");
+      console.log(`[GoogleDrive Triggers] Searching docs for query: ${escapedQuery}`);
+
+      const toolResponse = await fetch(
+        "https://backend.composio.dev/api/v3/tools/execute/GOOGLEDRIVE_FIND_FILE",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": COMPOSIO_API_KEY },
+          body: JSON.stringify({
+            connected_account_id: connectionId,
+            arguments: {
+              q: `mimeType='application/vnd.google-apps.document' and trashed=false and name contains '${escapedQuery}'`,
+            },
+          }),
+        }
+      );
+
+      const toolText = await toolResponse.text();
+      if (!toolResponse.ok) {
+        console.error("[GoogleDrive Search] Composio error:", toolText.slice(0, 500));
+        throw new Error(`Search failed: ${toolResponse.status}`);
+      }
+
+      const toolData = safeJsonParse(toolText);
+      let files: any[] = [];
+      if (Array.isArray(toolData?.data?.response_data?.files)) files = toolData.data.response_data.files;
+      else if (Array.isArray(toolData?.data?.response_data)) files = toolData.data.response_data;
+      else if (Array.isArray(toolData?.data?.files)) files = toolData.data.files;
+      else if (Array.isArray(toolData?.data)) files = toolData.data;
+
+      files = files.slice(0, 20);
+
+      // Cross-reference dedup table
+      const fileIds = files.map((f: any) => String(f.id));
+      const { data: existing } = fileIds.length > 0
+        ? await supabaseClient.from("googledrive_processed_documents").select("googledrive_file_id").eq("user_id", userId).in("googledrive_file_id", fileIds)
+        : { data: [] };
+      const existingIds = new Set((existing || []).map((e: any) => e.googledrive_file_id));
+
+      const results = files.map((f: any) => ({
+        id: String(f.id),
+        name: f.name || f.title || "Untitled",
+        createdTime: f.createdTime || f.created_time || "",
+        webViewLink: f.webViewLink || f.web_view_link || "",
+        alreadySaved: existingIds.has(String(f.id)),
+      }));
+
+      return new Response(JSON.stringify({ results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === SAVE DOC ===
+    if (action === "save-doc") {
+      const { fileId, fileName } = body;
+      if (!fileId) {
+        return new Response(JSON.stringify({ error: "fileId required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check dedup
+      const { data: existingDoc } = await supabaseClient
+        .from("googledrive_processed_documents")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("googledrive_file_id", fileId)
+        .maybeSingle();
+
+      if (existingDoc) {
+        return new Response(JSON.stringify({ alreadySaved: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Export content
+      const content = await exportDocContent(connectionId, fileId);
+
+      // Get API keys
+      const { data: apiKeys } = await supabaseClient
+        .from("user_api_keys")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!apiKeys) {
+        return new Response(JSON.stringify({ error: "API keys not configured" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const doc = { name: fileName || "Untitled", createdTime: new Date().toISOString(), webViewLink: "" };
+      const memoryContent = formatDocAsMemory(doc, content);
+      const success = await createMemory(apiKeys, memoryContent, "GOOGLEDRIVE");
+
+      if (!success) {
+        return new Response(JSON.stringify({ error: "Failed to create memory" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Mark processed + increment counter
+      await supabaseClient.from("googledrive_processed_documents").insert({
+        user_id: userId, googledrive_file_id: fileId,
+      });
+
+      const { data: currentConfig } = await supabaseClient
+        .from("googledrive_automation_config")
+        .select("documents_saved")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      await supabaseClient
+        .from("googledrive_automation_config")
+        .update({ documents_saved: (currentConfig?.documents_saved || 0) + 1 })
+        .eq("user_id", userId);
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(
       JSON.stringify({ error: `Unknown action: ${action}` }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
