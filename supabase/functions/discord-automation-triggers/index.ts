@@ -93,14 +93,18 @@ serve(async (req) => {
 
     const { action, serverId, channelId, triggerInstanceId } = await req.json();
 
-    // Get user's Discord connection
-    const { data: integration } = await supabaseClient
+    // Get user's Discord connections (check both 'discord' and 'discordbot' integration IDs)
+    const { data: integrations } = await supabaseClient
       .from("user_integrations")
-      .select("composio_connection_id")
+      .select("composio_connection_id, integration_id")
       .eq("user_id", user.id)
-      .eq("integration_id", "discord")
-      .eq("status", "connected")
-      .single();
+      .in("integration_id", ["discord", "discordbot"])
+      .eq("status", "connected");
+
+    // Prefer the 'discord' (user OAuth) connection, fall back to 'discordbot'
+    const discordIntegration = integrations?.find((i) => i.integration_id === "discord");
+    const botIntegration = integrations?.find((i) => i.integration_id === "discordbot");
+    const integration = discordIntegration || botIntegration;
 
     if (!integration?.composio_connection_id) {
       return new Response(JSON.stringify({ error: "Discord not connected" }), {
@@ -109,7 +113,15 @@ serve(async (req) => {
       });
     }
 
-    const connectionId = integration.composio_connection_id;
+    // We have both connection IDs available for fallback
+    const primaryConnectionId = integration.composio_connection_id;
+    const fallbackConnectionId = (discordIntegration && botIntegration && discordIntegration !== integration)
+      ? botIntegration.composio_connection_id
+      : (botIntegration && discordIntegration && botIntegration !== integration)
+        ? discordIntegration.composio_connection_id
+        : null;
+
+    const connectionId = primaryConnectionId;
 
     if (!connectionId?.startsWith("ca_")) {
       console.error("[Discord] Invalid connection ID format:", connectionId);
@@ -137,85 +149,85 @@ serve(async (req) => {
 
     switch (action) {
       case "get-servers": {
-        console.log(`[Discord] Fetching servers via direct Discord API for connection: ${connectionId}`);
+        // Try primary connection, then fallback if 401
+        const connectionIdsToTry = [connectionId, fallbackConnectionId].filter(Boolean) as string[];
+        console.log(`[Discord] Fetching servers, connections to try: ${connectionIdsToTry.join(", ")}`);
 
-        let creds: { token: string; authHeader: string };
-        try {
-          creds = await getDiscordCredentials(connectionId);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Unknown error";
-          console.error("[Discord] Token retrieval failed:", msg);
-          return new Response(JSON.stringify({
-            error: "Discord not connected or token unavailable",
-            details: msg,
-            servers: [],
-          }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
+        for (const connId of connectionIdsToTry) {
+          let creds: { token: string; authHeader: string };
+          try {
+            creds = await getDiscordCredentials(connId);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "Unknown error";
+            console.error(`[Discord] Token retrieval failed for ${connId}:`, msg);
+            continue; // try next connection
+          }
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10_000);
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10_000);
 
-        try {
-          const discordRes = await fetch(
-            "https://discord.com/api/v10/users/@me/guilds",
-            {
-              headers: { Authorization: creds.authHeader },
-              signal: controller.signal,
+          try {
+            const discordRes = await fetch(
+              "https://discord.com/api/v10/users/@me/guilds",
+              {
+                headers: { Authorization: creds.authHeader },
+                signal: controller.signal,
+              }
+            );
+            clearTimeout(timeout);
+
+            const body = await discordRes.text();
+            console.log(`[Discord] Guilds API status: ${discordRes.status} (conn: ${connId}), body: ${body.substring(0, 500)}`);
+
+            if (discordRes.status === 429) {
+              const retryAfter = discordRes.headers.get("Retry-After") || "a few";
+              return new Response(JSON.stringify({
+                error: "Rate limited by Discord",
+                details: `Try again in ${retryAfter} seconds`,
+                servers: [],
+              }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
             }
-          );
-          clearTimeout(timeout);
 
-          const body = await discordRes.text();
-          console.log(`[Discord] Guilds API status: ${discordRes.status}, body: ${body.substring(0, 500)}`);
+            if (discordRes.status === 401 || discordRes.status === 403) {
+              console.warn(`[Discord] Connection ${connId} returned ${discordRes.status}, trying next...`);
+              continue; // try fallback connection
+            }
 
-          if (discordRes.status === 429) {
-            const retryAfter = discordRes.headers.get("Retry-After") || "a few";
+            if (!discordRes.ok) {
+              return new Response(JSON.stringify({
+                error: "Failed to load servers",
+                details: `Discord API error (HTTP ${discordRes.status})`,
+                servers: [],
+              }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const guilds = JSON.parse(body);
+
             return new Response(JSON.stringify({
-              error: "Rate limited by Discord",
-              details: `Try again in ${retryAfter} seconds`,
-              servers: [],
-            }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+              servers: Array.isArray(guilds)
+                ? guilds.map((g: any) => ({
+                    id: g.id,
+                    name: g.name,
+                    icon: g.icon || null,
+                  }))
+                : [],
+            }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          } catch (e) {
+            clearTimeout(timeout);
+            const msg = e instanceof Error ? e.message : "Unknown error";
+            console.error(`[Discord] Guild listing failed for ${connId}:`, msg);
+            continue; // try next connection
           }
-
-          if (discordRes.status === 401 || discordRes.status === 403) {
-            return new Response(JSON.stringify({
-              error: "Discord connection missing required scopes (guilds). Please reconnect Discord.",
-              details: `Discord API returned ${discordRes.status}`,
-              servers: [],
-            }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
-
-          if (!discordRes.ok) {
-            return new Response(JSON.stringify({
-              error: "Failed to load servers",
-              details: `Discord API error (HTTP ${discordRes.status})`,
-              servers: [],
-            }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
-
-          const guilds = JSON.parse(body);
-
-          return new Response(JSON.stringify({
-            servers: Array.isArray(guilds)
-              ? guilds.map((g: any) => ({
-                  id: g.id,
-                  name: g.name,
-                  icon: g.icon || null,
-                }))
-              : [],
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        } catch (e) {
-          clearTimeout(timeout);
-          const msg = e instanceof Error ? e.message : "Unknown error";
-          console.error("[Discord] Guild listing failed:", msg);
-          return new Response(JSON.stringify({
-            error: "Failed to load servers",
-            details: msg,
-            servers: [],
-          }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+
+        // All connections failed
+        return new Response(JSON.stringify({
+          error: "Discord connection missing required scopes (guilds). Please reconnect Discord.",
+          details: "All available Discord connections failed to list servers.",
+          servers: [],
+        }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       case "get-channels": {
@@ -226,75 +238,69 @@ serve(async (req) => {
           });
         }
 
-        console.log(`[Discord] Fetching channels for server: ${serverId}`);
+        const channelConnectionIds = [connectionId, fallbackConnectionId].filter(Boolean) as string[];
+        console.log(`[Discord] Fetching channels for server: ${serverId}, connections: ${channelConnectionIds.join(", ")}`);
 
-        let creds: { token: string; authHeader: string };
-        try {
-          creds = await getDiscordCredentials(connectionId);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Unknown error";
-          console.error("[Discord] Token retrieval failed:", msg);
-          return new Response(JSON.stringify({
-            error: "Failed to load channels",
-            details: msg,
-            channels: [],
-          }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        // Call Discord REST API directly to list guild channels
-        const discordController = new AbortController();
-        const discordTimeout = setTimeout(() => discordController.abort(), 10000);
-
-        try {
-          const discordResponse = await fetch(
-            `https://discord.com/api/v10/guilds/${serverId}/channels`,
-            {
-              headers: { Authorization: creds.authHeader },
-              signal: discordController.signal,
-            }
-          );
-          clearTimeout(discordTimeout);
-
-          const discordText = await discordResponse.text();
-          console.log(`[Discord] Channel list status: ${discordResponse.status}, body: ${discordText.substring(0, 500)}`);
-
-          if (!discordResponse.ok) {
-            const detail = discordResponse.status === 401 || discordResponse.status === 403
-              ? "Discord token lacks permission to list channels for this server"
-              : `Discord API error (HTTP ${discordResponse.status})`;
-            return new Response(JSON.stringify({
-              error: "Failed to load channels",
-              details: detail,
-              channels: [],
-            }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        for (const connId of channelConnectionIds) {
+          let creds: { token: string; authHeader: string };
+          try {
+            creds = await getDiscordCredentials(connId);
+          } catch (e) {
+            console.error(`[Discord] Token retrieval failed for ${connId}:`, e instanceof Error ? e.message : e);
+            continue;
           }
 
-          const allChannels = JSON.parse(discordText);
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 10_000);
 
-          // Filter to text channels only (type 0)
-          const textChannels = Array.isArray(allChannels)
-            ? allChannels
-                .filter((c: any) => c.type === 0)
-                .map((c: any) => ({
-                  id: c.id,
-                  name: c.name,
-                  type: c.type,
-                }))
-            : [];
+          try {
+            const discordResponse = await fetch(
+              `https://discord.com/api/v10/guilds/${serverId}/channels`,
+              {
+                headers: { Authorization: creds.authHeader },
+                signal: ctrl.signal,
+              }
+            );
+            clearTimeout(t);
 
-          return new Response(JSON.stringify({ channels: textChannels }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        } catch (e) {
-          clearTimeout(discordTimeout);
-          const msg = e instanceof Error ? e.message : "Unknown error";
-          console.error("[Discord] Discord API fetch failed:", msg);
-          return new Response(JSON.stringify({
-            error: "Failed to load channels",
-            details: `Channel listing failed: ${msg}`,
-            channels: [],
-          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            const discordText = await discordResponse.text();
+            console.log(`[Discord] Channel list status: ${discordResponse.status} (conn: ${connId}), body: ${discordText.substring(0, 500)}`);
+
+            if (discordResponse.status === 401 || discordResponse.status === 403) {
+              console.warn(`[Discord] Connection ${connId} returned ${discordResponse.status} for channels, trying next...`);
+              continue;
+            }
+
+            if (!discordResponse.ok) {
+              return new Response(JSON.stringify({
+                error: "Failed to load channels",
+                details: `Discord API error (HTTP ${discordResponse.status})`,
+                channels: [],
+              }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const allChannels = JSON.parse(discordText);
+            const textChannels = Array.isArray(allChannels)
+              ? allChannels
+                  .filter((c: any) => c.type === 0)
+                  .map((c: any) => ({ id: c.id, name: c.name, type: c.type }))
+              : [];
+
+            return new Response(JSON.stringify({ channels: textChannels }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          } catch (e) {
+            clearTimeout(t);
+            console.error(`[Discord] Channel fetch failed for ${connId}:`, e instanceof Error ? e.message : e);
+            continue;
+          }
         }
+
+        return new Response(JSON.stringify({
+          error: "Failed to load channels",
+          details: "All Discord connections failed. Please reconnect Discord.",
+          channels: [],
+        }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       case "activate": {
