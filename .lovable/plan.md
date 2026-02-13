@@ -1,5 +1,3 @@
-
-
 # Fix: Use Composio Tool Execution for Channel Listing
 
 ## Root Cause
@@ -47,13 +45,22 @@ case "get-channels": {
       );
 
       const execText = await execRes.text();
-      console.log(`[Discord] Composio channel exec status: ${execRes.status} (conn: ${connId}), body: ${execText.substring(0, 500)}`);
+      console.log(
+        `[Discord] Composio channel exec status: ${execRes.status} (conn: ${connId}), body: ${execText.substring(
+          0,
+          500
+        )}`
+      );
 
       if (!execRes.ok) continue;
 
       const execData = JSON.parse(execText);
       // Composio wraps results in data.response_data or similar
-      const channelList = execData?.data?.response_data || execData?.response_data || execData?.data || [];
+      const channelList =
+        execData?.data?.response_data ||
+        execData?.response_data ||
+        execData?.data ||
+        [];
       const allChannels = Array.isArray(channelList) ? channelList : [];
 
       const textChannels = allChannels
@@ -70,12 +77,16 @@ case "get-channels": {
   }
 
   // Fallback: all connections failed
-  return new Response(JSON.stringify({
-    error: "Failed to load channels",
-    details: "All Discord connections failed. Please reconnect Discord.",
-    channels: [],
-  }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(
+    JSON.stringify({
+      error: "Failed to load channels",
+      details: "All Discord connections failed. Please reconnect Discord.",
+      channels: [],
+    }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
 }
+
 ```
 
 If `DISCORD_LIST_GUILD_CHANNELS` is not the correct Composio action slug, the function will log the error and we can adjust. Common alternatives: `DISCORD_GET_GUILD_CHANNELS`, `DISCORD_LIST_CHANNELS`. The logs will reveal the correct slug.
@@ -91,6 +102,5 @@ The frontend already handles the response format (`channels` array) and the erro
 ## Technical Notes
 
 - This follows the same Composio tool execution pattern used by Trello (`TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD`), HubSpot, Instagram, and other integrations in the codebase
-- The `connected_account_id` (ca_*) is passed to Composio which handles token refresh and API proxying
+- The `connected_account_id` (`ca_*`) is passed to Composio which handles token refresh and API proxying
 - If the action slug needs adjustment, the logs will show the exact error from Composio, making it easy to correct
-
