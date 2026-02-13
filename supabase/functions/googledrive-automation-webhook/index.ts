@@ -91,6 +91,26 @@ function safeJsonParse(text: string): any {
   }
 }
 
+// === EXTRACT TEXT CONTENT FROM COMPOSIO RESPONSE ===
+
+function extractTextContent(data: any): string {
+  if (!data?.data) return "";
+
+  const rd = data.data.response_data;
+  if (typeof rd === "string" && rd.trim()) return rd.trim();
+  if (rd && typeof rd === "object") {
+    if (typeof rd.content === "string" && rd.content.trim()) return rd.content.trim();
+    if (typeof rd.text === "string" && rd.text.trim()) return rd.text.trim();
+    if (typeof rd.data === "string" && rd.data.length > 0) {
+      try { return new TextDecoder().decode(Uint8Array.from(atob(rd.data), c => c.charCodeAt(0))); } catch { /* not base64 */ }
+    }
+  }
+  if (typeof data.data.content === "string" && data.data.content.trim()) return data.data.content.trim();
+  if (rd && typeof rd === "object") return JSON.stringify(rd);
+  if (typeof data.data === "string" && data.data.trim()) return data.data.trim();
+  return "";
+}
+
 // === EXPORT DOCUMENT CONTENT ===
 
 async function exportDocContent(connectionId: string, fileId: string): Promise<string> {
@@ -117,7 +137,14 @@ async function exportDocContent(connectionId: string, fileId: string): Promise<s
     }
 
     const data = safeJsonParse(text);
-    return data?.data?.response_data || data?.data?.content || data?.data || "";
+    console.log("[GoogleDrive Webhook] Export response shape:", JSON.stringify({
+      hasData: !!data?.data,
+      responseDataType: typeof data?.data?.response_data,
+      contentType: typeof data?.data?.content,
+      keys: data?.data ? Object.keys(data.data).slice(0, 10) : [],
+    }));
+
+    return extractTextContent(data);
   } catch (error) {
     console.error("[GoogleDrive Webhook] Export error:", error);
     return "";
@@ -128,22 +155,21 @@ async function exportDocContent(connectionId: string, fileId: string): Promise<s
 
 function formatDocAsMemory(fileData: any, content: string): string {
   const title = fileData.name || fileData.title || "Untitled Document";
-  const parts = ["📄 Google Drive Document Created", ""];
-  parts.push(`Document: ${title}`);
-  if (fileData.mimeType) parts.push(`Type: ${fileData.mimeType}`);
-  if (fileData.createdTime || fileData.created_time) {
-    parts.push(`Created: ${new Date(fileData.createdTime || fileData.created_time).toLocaleDateString()}`);
-  }
-  if (fileData.webViewLink || fileData.web_view_link) {
-    parts.push(`Link: ${fileData.webViewLink || fileData.web_view_link}`);
-  }
-  parts.push("");
-  if (content && typeof content === "string") {
-    const preview = content.length > 2000 ? content.slice(0, 2000) + "..." : content;
-    parts.push("Content Preview:");
-    parts.push(preview);
-  }
-  return parts.join("\n");
+  const created = fileData.createdTime || fileData.created_time;
+  const link = fileData.webViewLink || fileData.web_view_link;
+
+  let header = `Google Drive Document: ${title}`;
+  const meta: string[] = [];
+  if (created) meta.push(`Created: ${new Date(created).toLocaleDateString()}`);
+  if (link) meta.push(`Link: ${link}`);
+  if (meta.length) header += `\n${meta.join(" | ")}`;
+
+  const MAX_CONTENT = 8000;
+  const trimmedContent = content && typeof content === "string"
+    ? (content.length > MAX_CONTENT ? content.slice(0, MAX_CONTENT) + "..." : content)
+    : "";
+
+  return trimmedContent ? `${header}\n\n${trimmedContent}` : header;
 }
 
 // === MAIN HANDLER ===
