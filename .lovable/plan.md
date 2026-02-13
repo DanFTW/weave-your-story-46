@@ -1,255 +1,107 @@
-# Google Drive Document Tracker Thread
+# Fix: Google Drive Document Tracker -- Consistent, Full-Text Memories
 
-## Overview
+## Problems Identified
 
-Create a "Google Drive Document Tracker" thread that uses Composio's **webhook trigger** `GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER`) to automatically detect new Google Docs and save them as memories. Includes a manual "Check Now" poll fallback. Modeled after the Todoist/Trello automation patterns.
+1. **Fragmented memories**: Each document metadata field (title, link, date) is being saved as a separate memory instead of one consolidated memory per document
+2. **No actual document content**: The `GOOGLEDRIVE_DOWNLOAD_FILE` response data isn't being extracted correctly -- memories only contain metadata like "Document Link: ..." and "Document Created on: ..."
+3. **Content too short**: The 2000-char limit truncates documents unnecessarily (Fireflies uses 8000)
+4. **No debug logging** on the export response, making it impossible to diagnose content extraction issues
+5. **“Random” documents being saved**: Activation/backfill or trigger delivery is causing existing/older docs (not strictly “newly created while monitoring is ON”) to be saved as memories.
 
-## Architecture
+## Root Cause
 
-The flow uses a **dual-mode** approach:
+The `exportDocContent` function tries several nested paths (`data.response_data`, `data.content`, `data`) but likely gets an object back (not a string), which then gets coerced to `[object Object]` or empty. The `formatDocAsMemory` function then creates a multi-line string with only metadata, **and the current code path is likely creating multiple LIAM memories per document (one per metadata field) instead of a single consolidated LIAM create call per document.** Additionally, the triggers path may be running an initial backfill/manual poll on activation (or the chosen trigger returns existing matches), which makes the saved documents appear “random” rather than only new docs created while monitoring is enabled.
 
-1. **Real-time**: Composio webhook trigger fires when a new Google Doc is created, calling our webhook endpoint
+## Changes
 
-2. **Manual fallback**: "Check Now" button polls via Composio `GOOGLEDRIVE_SEARCH_FILE` tool for backfilling
+### 1. Fix `supabase/functions/googledrive-automation-triggers/index.ts`
 
-### Two-step user flow:
+`exportDocContent` **function** (lines 121-151):
 
-1. Connect Google Drive (redirect to `/integration/googledrive` if not connected)
+- Add logging of the raw Composio response to diagnose what shape the data comes in
+- Walk deeper into nested response objects to find the actual text string
+- If `data` is an object, try `JSON.stringify` as last resort rather than returning empty
+- If Composio returns base64/bytes fields (common for “download/export”), decode to UTF-8 string before falling back to `JSON.stringify`
 
-2. Toggle Document Monitoring on/off + Activate
+`formatDocAsMemory` **function** (lines 98-117):
 
-## Files to Create (9 new files)
+- Build a single consolidated memory block with header + full content (not "Content Preview:")
+- Increase content limit from 2000 to 8000 chars (matching Fireflies pattern)
+- Ensure the entire memory is one coherent block -- title, metadata, and content together
+- Ensure the LIAM create call happens **exactly once per document** (no per-field/per-line memory creation)
 
-### 1. Type Definition
+**Trigger/backfill behavior** (same file, in the `activate` path):
 
-*`src/types/googleDriveAutomation.ts`**
+- Remove any “runs initial poll/backfill” behavior from `activate` so activation does **not** save existing docs automatically
+- Keep any polling/backfill strictly behind the user-initiated “Check Now” action only
 
-* `GoogleDriveAutomationPhase`: `'auth-check' | 'configure' | 'activating' | 'active'`
+### 2. Fix `supabase/functions/googledrive-automation-webhook/index.ts`
 
-* `GoogleDriveAutomationConfig`: id, userId, isActive, triggerInstanceId, documentsSaved, lastSyncAt
+Same fixes as above -- this file has its own copies of `exportDocContent` and `formatDocAsMemory`:
 
-* `GoogleDriveDocStats`: documentsSaved, isActive, lastSyncAt
+- Fix `exportDocContent` (lines 96-125): Add logging, improve content extraction
+- Fix `formatDocAsMemory` (lines 129-147): Consolidated format, 8000-char limit
+- Ensure the webhook handler creates **exactly one** LIAM memory per document (single call per fileId)
+- Ensure the webhook handler respects the monitoring toggle: if `googledrive_automation_config.is_active = false`, ignore the event (do nothing)
 
-* Follows `todoistAutomation.ts` pattern exactly
+### 3. Both files -- Content extraction improvement
 
-### 2. Custom Hook
+Replace the current extraction chain:
 
-*`src/hooks/useGoogleDriveAutomation.ts`**
-
-* Modeled on `useTodoistAutomation.ts`
-
-* Reads/writes `googledrive_automation_config` table
-
-* Calls `googledrive-automation-triggers` edge function for activate/deactivate/manual-poll
-
-* Manages phase state, config loading, stats
-
-### 3. Flow UI Components (4 files)
-
-*`src/components/flows/googledrive-automation/index.ts`** -- Barrel exports
-
-*`src/components/flows/googledrive-automation/GoogleDriveAutomationFlow.tsx`**
-
-* Modeled on `TodoistAutomationFlow.tsx`
-
-* Uses `useComposio('GOOGLEDRIVE')` for auth check
-
-* Blue gradient with `#4285F4` accent color (Google Drive brand)
-
-* `FileText` icon throughout
-
-* Redirects to `/integration/googledrive` if not connected (stores return path in sessionStorage)
-
-*`src/components/flows/googledrive-automation/AutomationConfig.tsx`**
-
-* Single "Document Monitoring" toggle with description
-
-* "Activate Monitoring" button styled with `#4285F4`
-
-* Modeled on Todoist's `AutomationConfig.tsx`
-
-*`src/components/flows/googledrive-automation/ActiveMonitoring.tsx`**
-
-* Green pulse indicator, "Documents Saved" stat counter
-
-* "Check Now" + "Pause" buttons
-
-* Modeled on Todoist's `ActiveMonitoring.tsx`
-
-*`src/components/flows/googledrive-automation/ActivatingScreen.tsx`**
-
-* Loading spinner with `#4285F4` accent, "Setting up monitoring..." text
-
-### 4. Webhook Receiver Edge Function
-
-*`supabase/functions/googledrive-automation-webhook/index.ts`**
-
-* Receives Composio webhook payloads when `GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER` fires
-
-* Extracts trigger_id from payload, looks up user via `googledrive_automation_config.trigger_instance_id`
-
-* For each new file: checks dedup against `googledrive_processed_documents`, exports doc content via `GOOGLEDRIVE_EXPORT_FILE` Composio tool (text/plain), saves as memory via LIAM API with `GOOGLEDRIVE` tag
-
-* Follows `trello-automation-webhook` pattern (retry-safe: only marks processed after successful memory save)
-
-### 5. Trigger Management Edge Function
-
-*`supabase/functions/googledrive-automation-triggers/index.ts`**
-
-* Three actions: `activate`, `deactivate`, `manual-poll`
-
-* **activate**: Creates `GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER` via Composio trigger upsert API with `trigger_config: { query: "mimeType='application/vnd.google-apps.document'" }`, sets webhook_url to the webhook function, stores trigger_instance_id in DB, runs initial poll
-
-* **deactivate**: Disables trigger via `PATCH /trigger_instances/manage/{triggerId}`, sets `is_active = false`
-
-* **manual-poll**: Polls via `GOOGLEDRIVE_SEARCH_FILE` Composio tool with mimeType filter, exports new docs via `GOOGLEDRIVE_EXPORT_FILE`, saves as memories
-
-* Auth pattern: Bearer token validation via Supabase auth (same as Todoist/Fireflies)
-
-* LIAM API integration with ECDSA signing (same crypto utilities as other edge functions)
-
-## Files to Edit (6 existing files)
-
-### 6. Thread Registration
-
-*`src/data/threads.ts`**
-
-* Add `googledrive-tracker` entry: `{ id: "googledrive-tracker", title: "Google Drive Document Tracker", description: "Automatically save new documents as memories", icon: FileText, gradient: "blue", type: "automation", triggerType: "automatic", flowMode: "thread" }`
-
-### 7. Thread Config
-
-*`src/data/threadConfigs.ts`**
-
-* Add config with 3 steps: Connect Google Drive (iconUrl: googledrive.svg), Enable Monitoring (Settings icon), Always-On Monitoring (Wifi icon, LIVE badge)
-
-### 8. Flow Config
-
-*`src/data/flowConfigs.ts`**
-
-* Add `googledrive-tracker` entry with `isGoogleDriveAutomationFlow: true`
-
-### 9. Flow Type
-
-*`src/types/flows.ts`**
-
-* Add `isGoogleDriveAutomationFlow?: boolean` to `FlowConfig` interface
-
-### 10. Navigation Registration
-
-*`src/pages/Threads.tsx`**
-
-* Add `'googledrive-tracker'` to `flowEnabledThreads` array
-
-*`src/pages/FlowPage.tsx`**
-
-* Import `GoogleDriveAutomationFlow`
-
-* Add render block: `if (config.isGoogleDriveAutomationFlow) return <GoogleDriveAutomationFlow />;`
-
-### 11. Edge Function Config
-
-*`supabase/config.toml`**
-
-* Add `[functions.googledrive-automation-triggers]` with `verify_jwt = false`
-
-* Add `[functions.googledrive-automation-webhook]` with `verify_jwt = false`
-
-## Technical Details
-
-### Webhook Trigger Setup (activate action)
-
-```text
-
-POST /api/v3/trigger_instances/GOOGLEDRIVE_NEW_FILE_MATCHING_QUERY_TRIGGER/upsert
-
-Body: {
-
-  connected_account_id: "ca_...",
-
-  trigger_config: {
-
-    query: "mimeType='application/[vnd.google](http://vnd.google)-apps.document'"
-
-  },
-
-  webhook_url: "{SUPABASE_URL}/functions/v1/googledrive-automation-webhook"
-
-}
+```
+data?.data?.response_data || data?.data?.content || data?.data || ""
 
 ```
 
-### Document Export (for content extraction)
+With a robust extractor that:
 
-```text
+- Logs the raw response shape for debugging
+- Checks `data.data.response_data` (string case)
+- Checks `data.data.response_data.content` (nested object case)
+- Checks `data.data.content`
+- Checks common base64/bytes fields and decodes to UTF-8 text when present
+- If result is an object, stringify it
+- Trims and validates the result is non-empty
 
-POST /api/v3/tools/execute/GOOGLEDRIVE_EXPORT_FILE
+### 4. Both files -- Memory format change
 
-Body: {
+Current (fragmented):
 
-  connected_account_id: "ca_...",
+```
+Document: Title
+Type: application/vnd.google-apps.document
+Created: 8/11/2025
+Link: https://docs.google.com/...
 
-  arguments: { fileId: "...", mimeType: "text/plain" }
-
-}
+Content Preview:
+(truncated at 2000 chars)
 
 ```
 
-### Database Tables (already exist)
+New (consolidated, single memory):
 
-* `googledrive_automation_config`: id, user_id, is_active, trigger_instance_id, documents_saved, last_sync_at, last_webhook_at
+```
+Google Drive Document: [Title]
+Created: [Date] | Link: [URL]
 
-* `googledrive_processed_documents`: id, user_id, googledrive_file_id (deduplication)
+[Full document text up to 8000 chars]
 
-### Brand Colors
+```
 
-* Accent: `#4285F4` (Google blue)
+### 5. Both files -- Dedupe + retry safety
 
-* Gradient: `blue` (matching thread gradient system)
+- Only insert into `googledrive_processed_documents` **after** the LIAM memory save succeeds
+- If the insert conflicts on the unique constraint, treat it as already-processed (safe no-op)
 
-* Icon: `FileText` from lucide-react
+## Files Modified
 
-* Same card/badge/button patterns as Todoist and Fireflies trackers
 
-* `flowMode: "thread"` with Auto + Thread badges
+| File                                                          | Change                                                                                                                                                                             |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/functions/googledrive-automation-triggers/index.ts` | Fix `exportDocContent` extraction + logging, fix `formatDocAsMemory` to be consolidated with 8000-char limit, ensure 1 LIAM call per doc, remove activation backfill/poll behavior |
+| `supabase/functions/googledrive-automation-webhook/index.ts`  | Same fixes for its copies of both functions, ensure webhook respects `is_active`, ensure 1 LIAM call per doc, retry-safe dedupe                                                    |
 
----
 
-## Suggestions (only the deltas I’d make before you approve)
+## No Other Changes
 
-1. **Make it truly “no polling” by default**
-
-   * In `activate`, **remove “runs initial poll”**. Activation should *only* create the Composio trigger + set `is_active=true`.
-
-   * Keep “Check Now” as **manual backfill** only (user-initiated), not a background poll.
-
-2. **Match your requested 2-step flow**
-
-   * In `src/data/threadConfigs.ts`, **do not add a 3rd “Always-On Monitoring” step**. Keep it exactly:
-
-     1. Connect Google Drive
-
-     2. Document Monitoring Toggle (On/Off)
-
-3. **Fix webhook → user routing so it’s reliable**
-
-   * Don’t rely on “extracts trigger_id” (payloads vary). Route by *`trigger_instance_id`** (or equivalent field) and also store *`connected_account_id`** alongside it in `googledrive_automation_config` so you can validate the webhook belongs to that account.
-
-   * Update the plan line in the webhook receiver to: “Extract `trigger_instance_id` (and fileId), look up user by `googledrive_automation_config.trigger_instance_id` (and confirm `connected_account_id` matches).”
-
-4. **Security best-practice for edge functions**
-
-   * Keep *`googledrive-automation-webhook`** as `verify_jwt=false` (it’s called by Composio).
-
-   * Change *`googledrive-automation-triggers`** to `verify_jwt=true` and require the user’s Supabase session JWT (since it’s called from the app). This prevents anyone from activating/deactivating triggers without auth.
-
-5. **Tighten the trigger query**
-
-   * Update the trigger query to avoid noise:
-
-     * `mimeType='application/vnd.google-apps.document' and trashed=false`
-
-6. **Naming consistency**
-
-   * This plan is good about `googledrive-automation-webhook` vs `googledrive-automation-triggers`. Just make sure the `webhook_url` and the function folder name stay exactly aligned (no `googledocs-webhook` naming leftovers).
-
-Approve and implement this plan now. Do not add polling beyond the manual “Check Now” action. Do not make any other changes.
+No UI, data, type, or config changes needed -- this is purely a backend content extraction and formatting fix **plus the minimal trigger/webhook handling adjustments required to ensure only new docs are saved when monitoring is ON and each doc produces exactly one full-text memory.**
