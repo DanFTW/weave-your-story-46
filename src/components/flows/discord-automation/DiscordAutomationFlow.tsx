@@ -23,8 +23,10 @@ export function DiscordAutomationFlow() {
     channels,
     isLoading,
     hasLoadError,
+    needsReconnect,
     stats,
     fetchServers,
+    reconnectDiscord,
     selectServer,
     selectChannel,
     activateMonitoring,
@@ -136,8 +138,10 @@ export function DiscordAutomationFlow() {
             servers={servers}
             isLoading={isLoading}
             hasError={hasLoadError}
+            needsReconnect={needsReconnect}
             onSelectServer={selectServer}
             onRefresh={fetchServers}
+            onReconnect={reconnectDiscord}
           />
         )}
 
