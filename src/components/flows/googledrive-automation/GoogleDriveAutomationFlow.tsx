@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useGoogleDriveAutomation } from "@/hooks/useGoogleDriveAutomation";
-import { AutomationConfig } from "./AutomationConfig";
-import { ActiveMonitoring } from "./ActiveMonitoring";
+import { MonitorToggle } from "./MonitorToggle";
+import { DocumentSearch } from "./DocumentSearch";
 import { ActivatingScreen } from "./ActivatingScreen";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +23,10 @@ export function GoogleDriveAutomationFlow() {
   const { isConnected, checkStatus } = useComposio('GOOGLEDRIVE');
 
   const {
-    phase, setPhase, config, stats, isLoading, isActivating, isPolling,
-    loadConfig, activateMonitoring, deactivateMonitoring, manualPoll,
+    phase, setPhase, config, stats, isLoading, isActivating,
+    isSearching, searchResults, isSaving,
+    loadConfig, activateMonitoring, deactivateMonitoring,
+    searchDocs, saveDocument,
   } = useGoogleDriveAutomation();
 
   useEffect(() => {
@@ -47,10 +49,14 @@ export function GoogleDriveAutomationFlow() {
 
   const handleBack = () => navigate('/threads');
 
-  const handleActivate = async () => {
-    setPhase('activating');
-    const success = await activateMonitoring();
-    if (!success) setPhase('configure');
+  const handleToggle = async (enabled: boolean) => {
+    if (enabled) {
+      setPhase('activating');
+      const success = await activateMonitoring();
+      if (!success) setPhase('ready');
+    } else {
+      await deactivateMonitoring();
+    }
   };
 
   if (isCheckingAuth || isLoading) {
@@ -65,14 +71,6 @@ export function GoogleDriveAutomationFlow() {
     return <ActivatingScreen />;
   }
 
-  const getSubtitle = () => {
-    switch (phase) {
-      case 'configure': return 'Set up monitoring';
-      case 'active': return 'Monitoring active';
-      default: return 'Document tracker';
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background pb-nav">
       <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses.blue)}>
@@ -85,26 +83,25 @@ export function GoogleDriveAutomationFlow() {
           </button>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-white truncate">Google Drive Document Tracker</h1>
-            <p className="text-white/70 text-sm truncate">{getSubtitle()}</p>
+            <p className="text-white/70 text-sm truncate">Document tracker</p>
           </div>
         </div>
       </div>
 
-      <div className="px-5 pt-6">
-        {phase === 'configure' && config && (
-          <AutomationConfig
-            onActivate={handleActivate}
-            isActivating={isActivating}
-          />
-        )}
-        {phase === 'active' && (
-          <ActiveMonitoring
-            stats={stats}
-            onPause={deactivateMonitoring}
-            onCheckNow={manualPoll}
-            isPolling={isPolling}
-          />
-        )}
+      <div className="px-5 pt-6 space-y-4">
+        <MonitorToggle
+          isActive={config?.isActive ?? false}
+          stats={stats}
+          isActivating={isActivating}
+          onToggle={handleToggle}
+        />
+        <DocumentSearch
+          isSearching={isSearching}
+          searchResults={searchResults}
+          isSaving={isSaving}
+          onSearch={searchDocs}
+          onSave={saveDocument}
+        />
       </div>
     </div>
   );

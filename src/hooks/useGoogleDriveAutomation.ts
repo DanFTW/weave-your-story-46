@@ -5,6 +5,7 @@ import {
   GoogleDriveAutomationPhase,
   GoogleDriveAutomationConfig,
   GoogleDriveDocStats,
+  GoogleDriveSearchResult,
 } from "@/types/googleDriveAutomation";
 
 export function useGoogleDriveAutomation() {
@@ -14,12 +15,24 @@ export function useGoogleDriveAutomation() {
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<GoogleDriveSearchResult[]>([]);
+  const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
 
   const stats: GoogleDriveDocStats = {
     documentsSaved: config?.documentsSaved ?? 0,
     isActive: config?.isActive ?? false,
     lastSyncAt: config?.lastSyncAt ?? null,
   };
+
+  const getSession = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast({ title: "Authentication required", variant: "destructive" });
+      return null;
+    }
+    return session;
+  }, [toast]);
 
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
@@ -47,7 +60,6 @@ export function useGoogleDriveAutomation() {
           documentsSaved: d.documents_saved ?? 0,
           lastSyncAt: d.last_sync_at ?? null,
         });
-        setPhase(d.is_active ? 'active' : 'configure');
       } else {
         const { data: newConfig, error: insertError } = await supabase
           .from('googledrive_automation_config' as any)
@@ -64,8 +76,8 @@ export function useGoogleDriveAutomation() {
           documentsSaved: n.documents_saved ?? 0,
           lastSyncAt: n.last_sync_at ?? null,
         });
-        setPhase('configure');
       }
+      setPhase('ready');
     } catch (err) {
       console.error('Error in loadConfig:', err);
     } finally {
@@ -73,55 +85,12 @@ export function useGoogleDriveAutomation() {
     }
   }, [toast]);
 
-  const manualPoll = useCallback(async (): Promise<boolean> => {
-    setIsPolling(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast({ title: "Authentication required", variant: "destructive" });
-        return false;
-      }
-
-      const { data, error } = await supabase.functions.invoke('googledrive-automation-triggers', {
-        body: { action: 'manual-poll' },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-
-      if (error) {
-        toast({ title: "Check failed", description: error.message, variant: "destructive" });
-        return false;
-      }
-
-      setConfig(prev => prev ? {
-        ...prev,
-        documentsSaved: data.totalTracked ?? prev.documentsSaved,
-        lastSyncAt: new Date().toISOString(),
-      } : null);
-
-      if (data.newDocs > 0) {
-        toast({ title: `${data.newDocs} new document(s) saved` });
-      } else {
-        toast({ title: "No new documents found" });
-      }
-      return true;
-    } catch (err) {
-      console.error('Error polling:', err);
-      toast({ title: "Check failed", description: "An unexpected error occurred", variant: "destructive" });
-      return false;
-    } finally {
-      setIsPolling(false);
-    }
-  }, [toast]);
-
   const activateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
     setIsActivating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast({ title: "Authentication required", description: "Please log in to activate monitoring", variant: "destructive" });
-        return false;
-      }
+      const session = await getSession();
+      if (!session) return false;
 
       const { data, error } = await supabase.functions.invoke('googledrive-automation-triggers', {
         body: { action: 'activate' },
@@ -138,7 +107,7 @@ export function useGoogleDriveAutomation() {
         isActive: true,
         triggerInstanceId: data.triggerInstanceId ?? prev.triggerInstanceId,
       } : null);
-      setPhase('active');
+      setPhase('ready');
       toast({ title: "Monitoring activated", description: "New Google Docs will be saved automatically" });
       return true;
     } catch (err) {
@@ -148,12 +117,12 @@ export function useGoogleDriveAutomation() {
     } finally {
       setIsActivating(false);
     }
-  }, [config, toast]);
+  }, [config, toast, getSession]);
 
   const deactivateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSession();
       if (!session) return false;
 
       const { error } = await supabase.functions.invoke('googledrive-automation-triggers', {
@@ -167,14 +136,76 @@ export function useGoogleDriveAutomation() {
       }
 
       setConfig(prev => prev ? { ...prev, isActive: false } : null);
-      setPhase('configure');
       toast({ title: "Monitoring paused", description: "Automatic tracking has been stopped" });
       return true;
     } catch (err) {
       console.error('Error deactivating:', err);
       return false;
     }
-  }, [config, toast]);
+  }, [config, toast, getSession]);
+
+  const searchDocs = useCallback(async (query: string): Promise<GoogleDriveSearchResult[]> => {
+    setIsSearching(true);
+    try {
+      const session = await getSession();
+      if (!session) return [];
+
+      const { data, error } = await supabase.functions.invoke('googledrive-automation-triggers', {
+        body: { action: 'search-docs', query },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Search failed", description: error.message, variant: "destructive" });
+        return [];
+      }
+
+      const results: GoogleDriveSearchResult[] = data.results ?? [];
+      setSearchResults(results);
+      return results;
+    } catch (err) {
+      console.error('Error searching docs:', err);
+      toast({ title: "Search failed", variant: "destructive" });
+      return [];
+    } finally {
+      setIsSearching(false);
+    }
+  }, [toast, getSession]);
+
+  const saveDocument = useCallback(async (fileId: string, fileName: string): Promise<boolean> => {
+    setIsSaving(prev => ({ ...prev, [fileId]: true }));
+    try {
+      const session = await getSession();
+      if (!session) return false;
+
+      const { data, error } = await supabase.functions.invoke('googledrive-automation-triggers', {
+        body: { action: 'save-doc', fileId, fileName },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Save failed", description: error.message, variant: "destructive" });
+        return false;
+      }
+
+      if (data.alreadySaved) {
+        toast({ title: "Already saved", description: `${fileName} was already saved as a memory` });
+      } else {
+        toast({ title: "Document saved", description: `${fileName} saved as a memory` });
+        setConfig(prev => prev ? { ...prev, documentsSaved: prev.documentsSaved + 1 } : null);
+      }
+
+      // Mark as saved in search results
+      setSearchResults(prev => prev.map(r => r.id === fileId ? { ...r, alreadySaved: true } : r));
+      return true;
+    } catch (err) {
+      console.error('Error saving doc:', err);
+      toast({ title: "Save failed", variant: "destructive" });
+      return false;
+    } finally {
+      setIsSaving(prev => ({ ...prev, [fileId]: false }));
+    }
+  }, [toast, getSession]);
 
   const reset = useCallback(() => {
     setPhase('auth-check');
@@ -183,6 +214,8 @@ export function useGoogleDriveAutomation() {
 
   return {
     phase, setPhase, config, stats, isLoading, isActivating, isPolling,
-    loadConfig, activateMonitoring, deactivateMonitoring, manualPoll, reset,
+    isSearching, searchResults, isSaving,
+    loadConfig, activateMonitoring, deactivateMonitoring,
+    searchDocs, saveDocument, reset,
   };
 }

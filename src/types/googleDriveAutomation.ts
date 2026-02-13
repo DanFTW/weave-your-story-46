@@ -1,8 +1,7 @@
 export type GoogleDriveAutomationPhase =
   | 'auth-check'
-  | 'configure'
-  | 'activating'
-  | 'active';
+  | 'ready'
+  | 'activating';
 
 export interface GoogleDriveAutomationConfig {
   id: string;
@@ -17,4 +16,12 @@ export interface GoogleDriveDocStats {
   documentsSaved: number;
   isActive: boolean;
   lastSyncAt: string | null;
+}
+
+export interface GoogleDriveSearchResult {
+  id: string;
+  name: string;
+  createdTime: string;
+  webViewLink: string;
+  alreadySaved: boolean;
 }
