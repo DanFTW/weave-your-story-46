@@ -13,10 +13,11 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3";
 
 /**
- * Fetch the Discord OAuth access_token from Composio connected-account metadata.
- * Shared by get-servers and get-channels actions.
+ * Fetch the Discord access token and its type from Composio connected-account metadata.
+ * Returns { token, authHeader } where authHeader is the full Authorization header value
+ * (e.g. "Bot xxx" for bot tokens, "Bearer xxx" for OAuth user tokens).
  */
-async function getDiscordAccessToken(connectionId: string): Promise<string> {
+async function getDiscordCredentials(connectionId: string): Promise<{ token: string; authHeader: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
@@ -44,7 +45,17 @@ async function getDiscordAccessToken(connectionId: string): Promise<string> {
       throw new Error("No access_token in Composio metadata. Please reconnect Discord.");
     }
 
-    return token;
+    // Detect bot vs user OAuth token:
+    // Bot tokens from Discord are base64-encoded and start with the bot's user ID
+    // The metadata also exposes toolkit.slug ("discordbot" vs "discord") and token_type
+    const tokenType = meta?.connectionParams?.token_type || meta?.data?.token_type || "Bearer";
+    const toolkitSlug = meta?.toolkit?.slug || meta?.auth_config?.toolkit_slug || "";
+    const isBot = toolkitSlug === "discordbot" || tokenType === "Bot";
+
+    const authHeader = isBot ? `Bot ${token}` : `Bearer ${token}`;
+    console.log(`[Discord] Token type resolved: ${isBot ? "Bot" : "Bearer"} (toolkit: ${toolkitSlug}, tokenType: ${tokenType})`);
+
+    return { token, authHeader };
   } catch (e) {
     clearTimeout(timeout);
     throw e;
@@ -128,9 +139,9 @@ serve(async (req) => {
       case "get-servers": {
         console.log(`[Discord] Fetching servers via direct Discord API for connection: ${connectionId}`);
 
-        let accessToken: string;
+        let creds: { token: string; authHeader: string };
         try {
-          accessToken = await getDiscordAccessToken(connectionId);
+          creds = await getDiscordCredentials(connectionId);
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Unknown error";
           console.error("[Discord] Token retrieval failed:", msg);
@@ -148,7 +159,7 @@ serve(async (req) => {
           const discordRes = await fetch(
             "https://discord.com/api/v10/users/@me/guilds",
             {
-              headers: { Authorization: `Bearer ${accessToken}` },
+              headers: { Authorization: creds.authHeader },
               signal: controller.signal,
             }
           );
@@ -217,9 +228,9 @@ serve(async (req) => {
 
         console.log(`[Discord] Fetching channels for server: ${serverId}`);
 
-        let accessToken: string;
+        let creds: { token: string; authHeader: string };
         try {
-          accessToken = await getDiscordAccessToken(connectionId);
+          creds = await getDiscordCredentials(connectionId);
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Unknown error";
           console.error("[Discord] Token retrieval failed:", msg);
@@ -230,7 +241,7 @@ serve(async (req) => {
           }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Step 2: Call Discord REST API directly to list guild channels
+        // Call Discord REST API directly to list guild channels
         const discordController = new AbortController();
         const discordTimeout = setTimeout(() => discordController.abort(), 10000);
 
@@ -238,7 +249,7 @@ serve(async (req) => {
           const discordResponse = await fetch(
             `https://discord.com/api/v10/guilds/${serverId}/channels`,
             {
-              headers: { Authorization: `Bearer ${accessToken}` },
+              headers: { Authorization: creds.authHeader },
               signal: discordController.signal,
             }
           );
