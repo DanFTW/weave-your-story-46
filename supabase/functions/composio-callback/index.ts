@@ -135,6 +135,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "googledrive": "googledrive",
   "google_drive": "googledrive",
   "gdrive": "googledrive",
+  "slack": "slack",
+  "slack_bot": "slack",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -1925,6 +1927,102 @@ async function fetchAttioProfile(connectionId: string): Promise<{
   }
 }
 
+// Fetch Slack user profile via Composio Tool Execution (two-step: auth.test → users.info)
+async function fetchSlackProfile(connectedAccountId: string): Promise<{
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}> {
+  try {
+    console.log("composio-callback: Fetching Slack profile via Composio API (step 1: auth.test)...");
+    
+    // Step 1: Call SLACK_GET_AUTH_TEST to get user_id
+    const authTestResponse = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/SLACK_GET_AUTH_TEST",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectedAccountId,
+          arguments: {},
+        }),
+      }
+    );
+
+    const authTestText = await authTestResponse.text();
+    console.log(`composio-callback: Slack auth.test status=${authTestResponse.status}`);
+    console.log(`composio-callback: Slack auth.test response=${authTestText.slice(0, 500)}`);
+
+    if (!authTestResponse.ok) {
+      console.error("composio-callback: Slack auth.test failed");
+      return { email: null, name: null, avatarUrl: null };
+    }
+
+    const authTestResult = JSON.parse(authTestText);
+    const authData = authTestResult.data?.response_data || authTestResult.data || authTestResult.response_data || authTestResult;
+    const slackUserId = authData.user_id || authData.userId;
+
+    if (!slackUserId) {
+      console.error("composio-callback: No user_id in Slack auth.test response");
+      // Fallback: use whatever we got
+      return {
+        email: authData.user || null,
+        name: authData.user || null,
+        avatarUrl: null,
+      };
+    }
+
+    console.log(`composio-callback: Slack user_id=${slackUserId}, fetching user info (step 2)...`);
+
+    // Step 2: Call SLACK_GET_USER_INFO with user_id
+    const userInfoResponse = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/SLACK_GET_USER_INFO",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectedAccountId,
+          arguments: { user: slackUserId },
+        }),
+      }
+    );
+
+    const userInfoText = await userInfoResponse.text();
+    console.log(`composio-callback: Slack users.info status=${userInfoResponse.status}`);
+    console.log(`composio-callback: Slack users.info response=${userInfoText.slice(0, 500)}`);
+
+    if (!userInfoResponse.ok) {
+      console.error("composio-callback: Slack users.info failed");
+      return {
+        email: null,
+        name: authData.user || null,
+        avatarUrl: null,
+      };
+    }
+
+    const userInfoResult = JSON.parse(userInfoText);
+    const userData = userInfoResult.data?.response_data || userInfoResult.data || userInfoResult.response_data || userInfoResult;
+    const user = userData.user || userData;
+
+    const profile = user.profile || {};
+    
+    return {
+      email: profile.email || user.email || null,
+      name: profile.real_name || user.real_name || user.name || null,
+      avatarUrl: profile.image_192 || profile.image_512 || profile.image_72 || null,
+    };
+  } catch (error) {
+    console.error("composio-callback: Error fetching Slack profile:", error);
+    return { email: null, name: null, avatarUrl: null };
+  }
+}
+
 // Fetch Notion user profile via Notion API directly
 async function fetchNotionProfile(accessToken: string): Promise<{
   email: string | null;
@@ -3204,6 +3302,25 @@ serve(async (req) => {
       } else {
         console.log("composio-callback: No access_token found for Fireflies connection");
       }
+    }
+
+    // For Slack, fetch profile via Composio tool execution (two-step: auth.test → users.info)
+    if (toolkit === "slack") {
+      console.log("composio-callback: Fetching Slack profile via Composio API...");
+      
+      const profileInfo = await fetchSlackProfile(connectionId);
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Slack profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase
