@@ -83,7 +83,7 @@ export const integrationSections: IntegrationSection[] = [
         status: "unconfigured",
       },
       {
-        id: "discord",
+        id: "discordbot",
         name: "Discord Bot",
         icon: "discord",
         status: "unconfigured",
@@ -470,8 +470,8 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       tertiary: "#0077B5",   // LinkedIn classic blue
     },
   },
-  "discord": {
-    id: "discord",
+  "discordbot": {
+    id: "discordbot",
     name: "Discord Bot",
     icon: "discord",
     status: "unconfigured",
