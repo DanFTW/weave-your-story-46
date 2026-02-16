@@ -236,50 +236,97 @@ serve(async (req) => {
           });
         }
 
-        console.log(`[Discord] Fetching channels via Composio for server: ${serverId}`);
+        // Prefer bot connection first since channel listing requires bot auth
+        const channelConnectionIds = [
+          botIntegration?.composio_connection_id,
+          discordIntegration?.composio_connection_id,
+        ].filter((id): id is string => !!id && id.startsWith("ca_"));
+        const uniqueChannelConnIds = [...new Set(channelConnectionIds)];
 
-        for (const connId of connectionIdsToUse) {
+        console.log(`[Discord] Fetching channels for server: ${serverId}, connections to try: ${uniqueChannelConnIds.join(", ")}`);
+
+        let lastStatus = 0;
+        for (const connId of uniqueChannelConnIds) {
+          let creds: { token: string; authHeader: string };
           try {
-            const execRes = await fetch(
-              `${COMPOSIO_API_BASE}/tools/execute/DISCORD_LIST_GUILD_CHANNELS`,
+            creds = await getDiscordCredentials(connId);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "Unknown error";
+            console.error(`[Discord] Token retrieval failed for ${connId}:`, msg);
+            continue;
+          }
+
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10_000);
+
+          try {
+            const discordRes = await fetch(
+              `https://discord.com/api/v10/guilds/${serverId}/channels`,
               {
-                method: "POST",
-                headers: {
-                  "x-api-key": COMPOSIO_API_KEY,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  connected_account_id: connId,
-                  arguments: { guild_id: serverId },
-                }),
+                headers: { Authorization: creds.authHeader },
+                signal: controller.signal,
               }
             );
+            clearTimeout(timeout);
 
-            const execText = await execRes.text();
-            console.log(`[Discord] Composio channel exec status: ${execRes.status} (conn: ${connId}), body: ${execText.substring(0, 500)}`);
+            const body = await discordRes.text();
+            lastStatus = discordRes.status;
+            console.log(`[Discord] Channels API status: ${discordRes.status} (conn: ${connId}), body: ${body.substring(0, 500)}`);
 
-            if (!execRes.ok) continue;
+            if (discordRes.status === 429) {
+              const retryAfter = discordRes.headers.get("Retry-After") || "a few";
+              return new Response(JSON.stringify({
+                error: "Rate limited by Discord",
+                details: `Try again in ${retryAfter} seconds`,
+                channels: [],
+              }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
 
-            const execData = JSON.parse(execText);
-            const channelList = execData?.data?.response_data || execData?.response_data || execData?.data || [];
-            const allChannels = Array.isArray(channelList) ? channelList : [];
+            if (discordRes.status === 401) {
+              console.warn(`[Discord] Connection ${connId} returned 401, trying next...`);
+              continue;
+            }
 
-            const textChannels = allChannels
-              .filter((c: any) => c.type === 0 || c.type === 5)
-              .map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
+            if (discordRes.status === 403) {
+              console.warn(`[Discord] Connection ${connId} returned 403 (bot not in server or missing permissions)`);
+              continue;
+            }
+
+            if (!discordRes.ok) {
+              return new Response(JSON.stringify({
+                error: "Failed to load channels",
+                details: `Discord API error (HTTP ${discordRes.status})`,
+                channels: [],
+              }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const allChannels = JSON.parse(body);
+            const textChannels = Array.isArray(allChannels)
+              ? allChannels
+                  .filter((c: any) => c.type === 0 || c.type === 5)
+                  .map((c: any) => ({ id: c.id, name: c.name, type: c.type }))
+              : [];
 
             return new Response(JSON.stringify({ channels: textChannels }), {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           } catch (e) {
-            console.error(`[Discord] Composio channel exec failed for ${connId}:`, e);
+            clearTimeout(timeout);
+            const msg = e instanceof Error ? e.message : "Unknown error";
+            console.error(`[Discord] Channel listing failed for ${connId}:`, msg);
             continue;
           }
         }
 
+        // All connections failed — differentiate 403 (permissions) from 401 (auth)
+        const is403 = lastStatus === 403;
         return new Response(JSON.stringify({
-          error: "Failed to load channels",
-          details: "All Discord connections failed. Please reconnect Discord.",
+          error: is403
+            ? "Bot does not have access to this server. Please add the bot to the server or choose a different one."
+            : "Discord connection expired. Please reconnect Discord.",
+          details: is403
+            ? "The bot lacks permissions for this server's channels."
+            : "All available Discord connections failed to list channels.",
           channels: [],
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
