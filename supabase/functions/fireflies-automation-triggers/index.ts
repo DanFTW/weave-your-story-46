@@ -199,15 +199,29 @@ function generateToken(length = 32): string {
 async function getAccessToken(connectionId: string): Promise<string | null> {
   try {
     const connResponse = await fetch(
-      `https://backend.composio.dev/api/v1/connected_accounts/${connectionId}`,
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
       { headers: { "x-api-key": COMPOSIO_API_KEY } }
     );
-    if (!connResponse.ok) return null;
+    if (!connResponse.ok) {
+      console.error(`[Fireflies] Failed to fetch connected account: ${connResponse.status}`);
+      return null;
+    }
     const connData = await connResponse.json();
-    return connData?.connectionParams?.access_token ||
-      connData?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
+    const data = connData?.data || connData;
+
+    const accessToken =
+      data?.connection_params?.access_token ||
+      data?.access_token ||
+      data?.connectionParams?.access_token ||
+      data?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
       null;
-  } catch {
+
+    if (!accessToken) {
+      console.error("[Fireflies] No access token found in Composio response. Keys:", Object.keys(data || {}));
+    }
+    return accessToken;
+  } catch (err) {
+    console.error("[Fireflies] Error fetching access token:", err);
     return null;
   }
 }
@@ -288,76 +302,40 @@ async function syncFirefliesTranscripts(
 ): Promise<{ newTranscripts: number; totalSaved: number }> {
   console.log(`[Fireflies Sync] Fetching transcripts for user ${userId}`);
 
-  // Try Composio tool first
   let transcripts: any[] = [];
 
-  const toolResponse = await fetch(
-    "https://backend.composio.dev/api/v3/tools/execute/FIREFLIES_LIST_TRANSCRIPTS",
-    {
+  // Go directly to Fireflies GraphQL API (FIREFLIES_LIST_TRANSCRIPTS Composio tool no longer exists)
+  const accessToken = await getAccessToken(connectionId);
+  if (!accessToken) {
+    console.error("[Fireflies Sync] No access token available -- cannot fetch transcripts");
+    await supabaseClient
+      .from("fireflies_automation_config")
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq("user_id", userId);
+    return { newTranscripts: 0, totalSaved: 0 };
+  }
+
+  try {
+    const gqlResponse = await fetch("https://api.fireflies.ai/graphql", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": COMPOSIO_API_KEY,
+        "Authorization": `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
-        connected_account_id: connectionId,
-        arguments: {},
+        query: "{ transcripts { id title date duration participants organizer_email sentences { text speaker_name } summary { overview action_items keywords } } }",
       }),
+    });
+
+    if (gqlResponse.ok) {
+      const gqlData = await gqlResponse.json();
+      transcripts = gqlData?.data?.transcripts || [];
+    } else {
+      const errText = await gqlResponse.text();
+      console.error("[Fireflies Sync] GraphQL query failed:", gqlResponse.status, errText.slice(0, 500));
     }
-  );
-
-  const toolText = await toolResponse.text();
-  console.log(`[Fireflies Sync] Composio response status: ${toolResponse.status}`);
-
-  if (toolResponse.ok) {
-    const toolData = safeJsonParse(toolText);
-    if (toolData) {
-      // Extract transcripts defensively from nested Composio response
-      if (Array.isArray(toolData.data?.response_data?.transcripts)) {
-        transcripts = toolData.data.response_data.transcripts;
-      } else if (Array.isArray(toolData.data?.response_data)) {
-        transcripts = toolData.data.response_data;
-      } else if (Array.isArray(toolData.data?.transcripts)) {
-        transcripts = toolData.data.transcripts;
-      } else if (Array.isArray(toolData.data)) {
-        transcripts = toolData.data;
-      } else if (Array.isArray(toolData.response_data?.transcripts)) {
-        transcripts = toolData.response_data.transcripts;
-      } else if (Array.isArray(toolData.response_data)) {
-        transcripts = toolData.response_data;
-      } else if (Array.isArray(toolData.transcripts)) {
-        transcripts = toolData.transcripts;
-      }
-    }
-  } else {
-    console.warn("[Fireflies Sync] Composio tool failed, trying direct GraphQL fallback");
-    console.warn("[Fireflies Sync] Composio error:", toolText.slice(0, 500));
-
-    // Fallback: get the access token from Composio connection metadata
-    const accessToken = await getAccessToken(connectionId);
-    if (accessToken) {
-      try {
-        const gqlResponse = await fetch("https://api.fireflies.ai/graphql", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            query: "{ transcripts { id title date duration participants organizer_email sentences { text speaker_name } summary { overview action_items keywords } } }",
-          }),
-        });
-
-        if (gqlResponse.ok) {
-          const gqlData = await gqlResponse.json();
-          transcripts = gqlData?.data?.transcripts || [];
-        } else {
-          console.error("[Fireflies Sync] GraphQL fallback failed:", gqlResponse.status);
-        }
-      } catch (fallbackErr) {
-        console.error("[Fireflies Sync] Fallback error:", fallbackErr);
-      }
-    }
+  } catch (fetchErr) {
+    console.error("[Fireflies Sync] GraphQL fetch error:", fetchErr);
   }
 
   console.log(`[Fireflies Sync] Found ${transcripts.length} total transcripts`);
