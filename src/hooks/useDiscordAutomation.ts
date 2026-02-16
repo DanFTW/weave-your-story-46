@@ -117,10 +117,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       );
       if (error) throw error;
       if (data.error) {
-        // Detect "all connections failed" → user needs to reconnect
-        const isAuthFailure =
-          data.details?.includes("All available Discord connections failed") ||
-          data.error?.includes("reconnect");
+        const isAuthFailure = data.requiresReconnect === true;
         if (isAuthFailure) {
           setNeedsReconnect(true);
         }
@@ -229,10 +226,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
         if (channelError) throw channelError;
         if (channelData.error) {
           const errorMsg = extractErrorMessage(channelData);
-          const isChannelAuthFailure =
-            channelData.details?.includes("All Discord connections failed") ||
-            channelData.error?.includes("reconnect") ||
-            errorMsg.includes("reconnect");
+          const isChannelAuthFailure = channelData.requiresReconnect === true;
 
           if (isChannelAuthFailure) {
             setNeedsReconnect(true);
