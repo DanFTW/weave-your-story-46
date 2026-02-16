@@ -12,12 +12,16 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const COMPOSIO_API_BASE = "https://backend.composio.dev/api/v3";
 
+type DiscordAuthScheme = "Bot" | "Bearer";
+
 /**
  * Fetch the Discord access token and its type from Composio connected-account metadata.
- * Returns { token, authHeader } where authHeader is the full Authorization header value
- * (e.g. "Bot xxx" for bot tokens, "Bearer xxx" for OAuth user tokens).
+ * Optionally accepts an overrideScheme to retry with the opposite auth scheme on 401.
  */
-async function getDiscordCredentials(connectionId: string): Promise<{ token: string; authHeader: string }> {
+async function getDiscordCredentials(
+  connectionId: string,
+  overrideScheme?: DiscordAuthScheme,
+): Promise<{ token: string; authHeader: string; scheme: DiscordAuthScheme }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
@@ -45,17 +49,16 @@ async function getDiscordCredentials(connectionId: string): Promise<{ token: str
       throw new Error("No access_token in Composio metadata. Please reconnect Discord.");
     }
 
-    // Detect bot vs user OAuth token:
-    // Bot tokens from Discord are base64-encoded and start with the bot's user ID
-    // The metadata also exposes toolkit.slug ("discordbot" vs "discord") and token_type
+    // Trust the token_type from Composio metadata rather than inferring from toolkit slug
     const tokenType = meta?.connectionParams?.token_type || meta?.data?.token_type || "Bearer";
     const toolkitSlug = meta?.toolkit?.slug || meta?.auth_config?.toolkit_slug || "";
-    const isBot = toolkitSlug === "discordbot" || tokenType === "Bot";
+    const inferredScheme: DiscordAuthScheme = tokenType === "Bot" ? "Bot" : "Bearer";
+    const scheme = overrideScheme ?? inferredScheme;
 
-    const authHeader = isBot ? `Bot ${token}` : `Bearer ${token}`;
-    console.log(`[Discord] Token type resolved: ${isBot ? "Bot" : "Bearer"} (toolkit: ${toolkitSlug}, tokenType: ${tokenType})`);
+    const authHeader = `${scheme} ${token}`;
+    console.log(`[Discord] Token type resolved: ${scheme} (toolkit: ${toolkitSlug}, tokenType: ${tokenType}, override: ${overrideScheme ?? "none"})`);
 
-    return { token, authHeader };
+    return { token, authHeader, scheme };
   } catch (e) {
     clearTimeout(timeout);
     throw e;
@@ -247,7 +250,7 @@ serve(async (req) => {
 
         let lastStatus = 0;
         for (const connId of uniqueChannelConnIds) {
-          let creds: { token: string; authHeader: string };
+          let creds: { token: string; authHeader: string; scheme: DiscordAuthScheme };
           try {
             creds = await getDiscordCredentials(connId);
           } catch (e) {
@@ -256,22 +259,46 @@ serve(async (req) => {
             continue;
           }
 
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 10_000);
+          const channelUrl = `https://discord.com/api/v10/guilds/${serverId}/channels`;
+
+          const attemptFetch = async (authHeader: string) => {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 10_000);
+            try {
+              const r = await fetch(channelUrl, {
+                headers: { Authorization: authHeader },
+                signal: ctrl.signal,
+              });
+              clearTimeout(t);
+              return r;
+            } catch (e) {
+              clearTimeout(t);
+              throw e;
+            }
+          };
 
           try {
-            const discordRes = await fetch(
-              `https://discord.com/api/v10/guilds/${serverId}/channels`,
-              {
-                headers: { Authorization: creds.authHeader },
-                signal: controller.signal,
-              }
-            );
-            clearTimeout(timeout);
-
-            const body = await discordRes.text();
+            let discordRes = await attemptFetch(creds.authHeader);
+            let body = await discordRes.text();
             lastStatus = discordRes.status;
-            console.log(`[Discord] Channels API status: ${discordRes.status} (conn: ${connId}), body: ${body.substring(0, 500)}`);
+            console.log(`[Discord] Channels API status: ${discordRes.status} (conn: ${connId}, scheme: ${creds.scheme}), body: ${body.substring(0, 500)}`);
+
+            // On 401, retry once with the opposite auth scheme for this connection
+            if (discordRes.status === 401) {
+              const opposite: DiscordAuthScheme = creds.scheme === "Bot" ? "Bearer" : "Bot";
+              console.log(`[Discord] Retrying ${connId} with opposite scheme: ${opposite}`);
+              let retryCreds: { token: string; authHeader: string; scheme: DiscordAuthScheme };
+              try {
+                retryCreds = await getDiscordCredentials(connId, opposite);
+              } catch {
+                console.warn(`[Discord] Retry creds failed for ${connId}, skipping`);
+                continue;
+              }
+              discordRes = await attemptFetch(retryCreds.authHeader);
+              body = await discordRes.text();
+              lastStatus = discordRes.status;
+              console.log(`[Discord] Channels API retry status: ${discordRes.status} (conn: ${connId}, scheme: ${opposite}), body: ${body.substring(0, 500)}`);
+            }
 
             if (discordRes.status === 429) {
               const retryAfter = discordRes.headers.get("Retry-After") || "a few";
@@ -283,7 +310,7 @@ serve(async (req) => {
             }
 
             if (discordRes.status === 401) {
-              console.warn(`[Discord] Connection ${connId} returned 401, trying next...`);
+              console.warn(`[Discord] Connection ${connId} returned 401 after retry, trying next...`);
               continue;
             }
 
@@ -311,7 +338,6 @@ serve(async (req) => {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           } catch (e) {
-            clearTimeout(timeout);
             const msg = e instanceof Error ? e.message : "Unknown error";
             console.error(`[Discord] Channel listing failed for ${connId}:`, msg);
             continue;
