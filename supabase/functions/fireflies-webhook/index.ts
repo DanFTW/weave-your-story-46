@@ -104,15 +104,29 @@ async function getAutomationConfigByToken(supabase: any, token: string) {
 async function getAccessToken(connectionId: string): Promise<string | null> {
   try {
     const connResponse = await fetch(
-      `https://backend.composio.dev/api/v1/connected_accounts/${connectionId}`,
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
       { headers: { "x-api-key": COMPOSIO_API_KEY } }
     );
-    if (!connResponse.ok) return null;
+    if (!connResponse.ok) {
+      console.error(`[Fireflies Webhook] Failed to fetch connected account: ${connResponse.status}`);
+      return null;
+    }
     const connData = await connResponse.json();
-    return connData?.connectionParams?.access_token ||
-      connData?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
+    const data = connData?.data || connData;
+
+    const accessToken =
+      data?.connection_params?.access_token ||
+      data?.access_token ||
+      data?.connectionParams?.access_token ||
+      data?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
       null;
-  } catch {
+
+    if (!accessToken) {
+      console.error("[Fireflies Webhook] No access token found. Keys:", Object.keys(data || {}));
+    }
+    return accessToken;
+  } catch (err) {
+    console.error("[Fireflies Webhook] Error fetching access token:", err);
     return null;
   }
 }
