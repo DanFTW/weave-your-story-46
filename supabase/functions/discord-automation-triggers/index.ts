@@ -439,8 +439,8 @@ serve(async (req) => {
       }
 
       case "reconnect": {
-        // Initiate a fresh Discord OAuth connection using the regular Discord auth config
-        const DISCORD_AUTH_CONFIG_ID = "ac_BOCrE-Q-yqJu";
+        // Initiate a fresh Discord Bot connection using the discordbot auth config
+        const DISCORD_AUTH_CONFIG_ID = "ac_m8FL09HNW-yx";
         const redirectUrl = `${SUPABASE_URL}/functions/v1/composio-callback`;
 
         const initiateRes = await fetch(
