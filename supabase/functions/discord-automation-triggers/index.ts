@@ -65,6 +65,45 @@ async function getDiscordCredentials(
   }
 }
 
+/**
+ * Fetch guilds for a given connection ID from Discord API.
+ * Returns array of { id, name, icon } or null on failure.
+ */
+async function fetchGuildsForConnection(connId: string): Promise<{ id: string; name: string; icon: string | null }[] | null> {
+  let creds;
+  try {
+    creds = await getDiscordCredentials(connId);
+  } catch (e) {
+    console.error(`[Discord] Token retrieval failed for ${connId}:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const res = await fetch("https://discord.com/api/v10/users/@me/guilds", {
+      headers: { Authorization: creds.authHeader },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const body = await res.text();
+    console.log(`[Discord] Guilds API status: ${res.status} (conn: ${connId}), body length: ${body.length}`);
+
+    if (!res.ok) return null;
+
+    const guilds = JSON.parse(body);
+    return Array.isArray(guilds)
+      ? guilds.map((g: any) => ({ id: g.id, name: g.name, icon: g.icon || null }))
+      : null;
+  } catch (e) {
+    clearTimeout(timeout);
+    console.error(`[Discord] Guild listing failed for ${connId}:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -150,84 +189,66 @@ serve(async (req) => {
 
     switch (action) {
       case "get-servers": {
-        // Try primary connection, then fallback if 401
-        const connectionIdsToTry = connectionIdsToUse;
-        console.log(`[Discord] Fetching servers, connections to try: ${connectionIdsToTry.join(", ")}`);
+        // Fetch guilds from BOTH user OAuth and bot connections, return intersection
+        const userConnId = discordIntegration?.composio_connection_id;
+        const botConnId = botIntegration?.composio_connection_id;
 
-        for (const connId of connectionIdsToTry) {
-          let creds: { token: string; authHeader: string };
-          try {
-            creds = await getDiscordCredentials(connId);
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : "Unknown error";
-            console.error(`[Discord] Token retrieval failed for ${connId}:`, msg);
-            continue; // try next connection
-          }
+        console.log(`[Discord] get-servers: userConn=${userConnId}, botConn=${botConnId}`);
 
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 10_000);
-
-          try {
-            const discordRes = await fetch(
-              "https://discord.com/api/v10/users/@me/guilds",
-              {
-                headers: { Authorization: creds.authHeader },
-                signal: controller.signal,
-              }
-            );
-            clearTimeout(timeout);
-
-            const body = await discordRes.text();
-            console.log(`[Discord] Guilds API status: ${discordRes.status} (conn: ${connId}), body: ${body.substring(0, 500)}`);
-
-            if (discordRes.status === 429) {
-              const retryAfter = discordRes.headers.get("Retry-After") || "a few";
-              return new Response(JSON.stringify({
-                error: "Rate limited by Discord",
-                details: `Try again in ${retryAfter} seconds`,
-                servers: [],
-              }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-            }
-
-            if (discordRes.status === 401 || discordRes.status === 403) {
-              console.warn(`[Discord] Connection ${connId} returned ${discordRes.status}, trying next...`);
-              continue; // try fallback connection
-            }
-
-            if (!discordRes.ok) {
-              return new Response(JSON.stringify({
-                error: "Failed to load servers",
-                details: `Discord API error (HTTP ${discordRes.status})`,
-                servers: [],
-              }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-            }
-
-            const guilds = JSON.parse(body);
-
-            return new Response(JSON.stringify({
-              servers: Array.isArray(guilds)
-                ? guilds.map((g: any) => ({
-                    id: g.id,
-                    name: g.name,
-                    icon: g.icon || null,
-                  }))
-                : [],
-            }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          } catch (e) {
-            clearTimeout(timeout);
-            const msg = e instanceof Error ? e.message : "Unknown error";
-            console.error(`[Discord] Guild listing failed for ${connId}:`, msg);
-            continue; // try next connection
-          }
+        // Fetch bot guilds first (required for intersection)
+        let botGuilds: { id: string; name: string; icon: string | null }[] | null = null;
+        if (botConnId) {
+          botGuilds = await fetchGuildsForConnection(botConnId);
+          console.log(`[Discord] Bot guilds: ${botGuilds ? botGuilds.length : "failed"}`);
         }
 
-        // All connections failed — return 200 so frontend can read the error body
+        // Fetch user guilds (for display names / broader list)
+        let userGuilds: { id: string; name: string; icon: string | null }[] | null = null;
+        if (userConnId && userConnId !== botConnId) {
+          userGuilds = await fetchGuildsForConnection(userConnId);
+          console.log(`[Discord] User guilds: ${userGuilds ? userGuilds.length : "failed"}`);
+        }
+
+        // If bot guilds available, return intersection (or just bot guilds if no separate user conn)
+        if (botGuilds && botGuilds.length > 0) {
+          if (userGuilds && userGuilds.length > 0) {
+            // Intersection: only servers where both user AND bot are present
+            const botGuildIds = new Set(botGuilds.map(g => g.id));
+            const intersected = userGuilds.filter(g => botGuildIds.has(g.id));
+            console.log(`[Discord] Intersection: ${intersected.length} servers`);
+
+            if (intersected.length > 0) {
+              return new Response(JSON.stringify({ servers: intersected }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+            // No intersection — bot is in servers the user isn't in (unusual), return bot guilds
+            return new Response(JSON.stringify({ servers: botGuilds }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          // No separate user connection or user guild fetch failed — just return bot guilds
+          return new Response(JSON.stringify({ servers: botGuilds }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Bot guilds failed or empty — fall back to user guilds with a warning
+        if (userGuilds && userGuilds.length > 0) {
+          return new Response(JSON.stringify({
+            servers: userGuilds,
+            warning: "The Discord bot is not in any of your servers. Channel listing may fail. Please add the bot to the server you want to monitor.",
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Everything failed
         return new Response(JSON.stringify({
-          error: "Discord connection missing required scopes (guilds). Please reconnect Discord.",
+          error: "Could not load Discord servers. Please reconnect Discord.",
           details: "All available Discord connections failed to list servers.",
           servers: [],
+          requiresReconnect: true,
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -261,12 +282,12 @@ serve(async (req) => {
 
           const channelUrl = `https://discord.com/api/v10/guilds/${serverId}/channels`;
 
-          const attemptFetch = async (authHeader: string) => {
+          const attemptFetch = async (authHeaderVal: string) => {
             const ctrl = new AbortController();
             const t = setTimeout(() => ctrl.abort(), 10_000);
             try {
               const r = await fetch(channelUrl, {
-                headers: { Authorization: authHeader },
+                headers: { Authorization: authHeaderVal },
                 signal: ctrl.signal,
               });
               clearTimeout(t);
@@ -306,6 +327,7 @@ serve(async (req) => {
                 error: "Rate limited by Discord",
                 details: `Try again in ${retryAfter} seconds`,
                 channels: [],
+                requiresReconnect: false,
               }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
             }
 
@@ -324,6 +346,7 @@ serve(async (req) => {
                 error: "Failed to load channels",
                 details: `Discord API error (HTTP ${discordRes.status})`,
                 channels: [],
+                requiresReconnect: false,
               }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
             }
 
@@ -334,7 +357,7 @@ serve(async (req) => {
                   .map((c: any) => ({ id: c.id, name: c.name, type: c.type }))
               : [];
 
-            return new Response(JSON.stringify({ channels: textChannels }), {
+            return new Response(JSON.stringify({ channels: textChannels, requiresReconnect: false }), {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           } catch (e) {
@@ -354,6 +377,7 @@ serve(async (req) => {
             ? "The bot lacks permissions for this server's channels."
             : "All available Discord connections failed to list channels.",
           channels: [],
+          requiresReconnect: !is403, // Only true for genuine auth failures, not permission issues
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
@@ -439,8 +463,8 @@ serve(async (req) => {
       }
 
       case "reconnect": {
-        // Use Composio v3 /link endpoint (same pattern as composio-connect)
-        const DISCORD_AUTH_CONFIG_ID = "ac_m8FL09HNW-yx";
+        // Use the correct discordbot auth config (matching composio-connect)
+        const DISCORD_AUTH_CONFIG_ID = "ac_jECZy5E0ycKY";
         // Build a callback URL the user returns to after OAuth
         const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "";
         const callbackUrl = `${origin}/oauth-complete?toolkit=discordbot`;
