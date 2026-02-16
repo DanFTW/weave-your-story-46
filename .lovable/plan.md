@@ -1,177 +1,85 @@
-&nbsp;
 
----
 
-# Fix: Discord Channel Listing Returns 401
+# Fix: Discord Channel Listing Fails After Server Selection
 
-## Root Cause
+## Root Cause Analysis
 
-The `getDiscordCredentials()` function in `discord-automation-triggers/index.ts` has a flawed token type detection on **line 53**:
+After tracing through the full code path and inspecting the actual network responses, the root cause is now clear:
 
-```typescript
-const isBot = toolkitSlug === "discordbot" || tokenType === "Bot";
+1. **Server listing uses `GET /users/@me/guilds`** -- a user-scoped endpoint that works with OAuth2 Bearer tokens. This succeeds and returns 90+ servers the user is in.
 
+2. **Channel listing uses `GET /guilds/{guild_id}/channels`** -- a bot-scoped endpoint. This endpoint is **not accessible via user OAuth2 tokens**. It requires a **bot token** where the bot is a member of the guild.
+
+3. **The bot is only in servers the user added it to during the Composio OAuth flow** (likely just 1 server). When the user selects any other server, the bot has no access, and Discord returns 401/403 for both token schemes.
+
+4. **The reconnect case uses auth config `ac_m8FL09HNW-yx`**, but the `composio-connect` function uses `ac_jECZy5E0ycKY` for `discordbot`. This mismatch causes the reconnect to fail with HTTP 400.
+
+## Solution
+
+### 1. Server List Intersection (Primary Fix)
+
+In the `get-servers` handler, fetch guilds from **both** the user OAuth token and the bot token. Return only the **intersection** -- servers where both the user and bot are present. This guarantees that any server the user selects will allow channel listing.
+
+If the bot has no accessible servers, return all user servers with a clear error indicating the bot needs to be added.
+
+### 2. Fix Reconnect Auth Config
+
+Change the `reconnect` case to use `ac_jECZy5E0ycKY` (matching `composio-connect`) instead of `ac_m8FL09HNW-yx`.
+
+### 3. Improve Error Messages for 403/401 on Channel Listing
+
+When channel listing fails because the bot is not in the server:
+- Do NOT prompt "Reconnect Discord"
+- Show a clear message: "The bot is not in this server. Please pick a server the bot has been added to." with a "Pick a different server" option
+- Only show reconnect for genuinely expired/invalid tokens (verified by checking if the bot can list ANY guilds)
+
+### 4. Frontend: Tighten `needsReconnect` Detection
+
+In `useDiscordAutomation.ts`, stop detecting "reconnect" by substring matching on error messages. Instead, check for an explicit `requiresReconnect` boolean field in the response body.
+
+## Files to Change
+
+| File | Change |
+|------|--------|
+| `supabase/functions/discord-automation-triggers/index.ts` | `get-servers`: intersect user + bot guilds. `get-channels`: return explicit `requiresReconnect` field. `reconnect`: fix auth config ID. |
+| `src/hooks/useDiscordAutomation.ts` | Use `channelData.requiresReconnect` boolean instead of substring matching for reconnect detection. |
+
+## Detailed Changes
+
+### Edge Function (`discord-automation-triggers/index.ts`)
+
+**`get-servers` case:**
+- After fetching user guilds (existing logic), also fetch bot guilds using the bot connection
+- Compute intersection by guild ID
+- Return only intersected servers
+- If no intersection, return all user servers with a warning flag
+
+**`get-channels` case:**
+- Add explicit `requiresReconnect: true/false` to every response
+- On 403: set `requiresReconnect: false` (bot not in server, not an auth issue)
+- On 401 after retry: set `requiresReconnect: true` (genuine token issue)
+
+**`reconnect` case:**
+- Change auth config from `ac_m8FL09HNW-yx` to `ac_jECZy5E0ycKY`
+
+### Frontend Hook (`useDiscordAutomation.ts`)
+
+**`selectServer` callback (lines 230-239):**
+```
+// Before (fragile substring matching):
+const isChannelAuthFailure =
+  channelData.details?.includes("All Discord connections failed") ||
+  channelData.error?.includes("reconnect") ||
+  errorMsg.includes("reconnect");
+
+// After (explicit boolean):
+const isChannelAuthFailure = channelData.requiresReconnect === true;
 ```
 
-The Composio `discordbot` connection returns `token_type: "Bearer"` (an OAuth Bearer token), but the code overrides this to `Bot` based on the toolkit slug. This sends `Bot <oauth_bearer_token>` to Discord, which returns **401 Unauthorized** for every request.
+## What This Does NOT Change
 
-Edge function logs confirm this:
+- No UI/visual changes to ChannelPicker, ServerPicker, or other components
+- No changes to the activate/deactivate/webhook flows
+- The `DISCORD_NEW_MESSAGE_TRIGGER` slug (already correct in the activate case)
+- No unrelated refactors
 
-- `ca_seifjoPKRVN6` (discordbot): `tokenType: Bearer` but resolved as `Bot`
-- Both connections fail with 401, triggering the "reconnect" prompt
-
-## Fix
-
-**File:** `supabase/functions/discord-automation-triggers/index.ts`
-
-Change line 53 to trust the `token_type` field from Composio metadata instead of inferring from the toolkit slug:
-
-```typescript
-// Before (broken):
-const isBot = toolkitSlug === "discordbot" || tokenType === "Bot";
-
-// After (fixed):
-const isBot = tokenType === "Bot";
-
-```
-
-This ensures the Authorization header matches what Composio actually issued. If Composio says `Bearer`, we use `Bearer`. If it says `Bot`, we use `Bot`.
-
-**Deploy:** Redeploy the `discord-automation-triggers` edge function.
-
-## Files Modified
-
-
-| File                                                      | Change                                                            |
-| --------------------------------------------------------- | ----------------------------------------------------------------- |
-| `supabase/functions/discord-automation-triggers/index.ts` | Line 53: remove `toolkitSlug === "discordbot"` from `isBot` check |
-
-
-No frontend changes needed.
-
-**Suggestion:** the console `net::ERR_BLOCKED_BY_CLIENT` errors you screenshotted are from an ad/tracker blocker and are unrelated to the Discord channel listing failure.
-
-**Suggestion:** if the channel listing endpoint still fails after this (because Discord may require a true Bot token for `/guilds/{guild_id}/channels`), add a single retry fallback: on 401, retry the same request once with the opposite scheme (`Bearer` ↔ `Bot`) **only for the** `discordbot` **connection**, then proceed. This makes the integration resilient to Composio reporting `token_type` inconsistently without adding user-visible delay in the success path.
-
-**Suggestion:** ensure trigger creation uses the correct Composio trigger slug `DISCORD_NEW_MESSAGE_TRIGGER` wherever you create the polling trigger instance (this is separate from listing channels, but required for the tracker to actually run).
-
----
-
-## Exact code change to apply (minimal)
-
-### 1) Fix the token type detection (the plan’s fix)
-
-In `supabase/functions/discord-automation-triggers/index.ts`, locate the line:
-
-```ts
-const isBot = toolkitSlug === "discordbot" || tokenType === "Bot";
-
-```
-
-Replace with:
-
-```ts
-const isBot = tokenType === "Bot";
-
-```
-
-That’s the exact change Lovable proposes.
-
----
-
-## Recommended hardening change (still minimal, but makes it “just work”)
-
-If you want this to survive Composio weirdness (token_type mismatch) and avoid your UI incorrectly forcing “Reconnect Discord”, do **this small addition**:
-
-### 2) Add an optional override to `getDiscordCredentials()`
-
-Find `getDiscordCredentials()` and adjust it to accept an optional override scheme.
-
-Example pattern (drop-in style):
-
-```ts
-type DiscordAuthScheme = "Bot" | "Bearer";
-
-function buildDiscordAuthHeader(scheme: DiscordAuthScheme, token: string) {
-  return `${scheme} ${token}`;
-}
-
-// Change signature to accept override
-async function getDiscordCredentials(connId: string, overrideScheme?: DiscordAuthScheme) {
-  // ...existing lookup logic...
-  const tokenType = metadata?.token_type ?? "Bearer";
-  const accessToken = metadata?.access_token;
-
-  // Lovable fix (trust token_type)
-  const inferredScheme: DiscordAuthScheme = tokenType === "Bot" ? "Bot" : "Bearer";
-
-  const schemeToUse = overrideScheme ?? inferredScheme;
-
-  return {
-    headers: {
-      Authorization: buildDiscordAuthHeader(schemeToUse, accessToken),
-    },
-    scheme: schemeToUse,
-    accessToken, // optional but helpful for debug
-  };
-}
-
-```
-
-### 3) In your `get-channels` handler, retry once on 401 with the opposite scheme
-
-Where you fetch:
-
-`https://discord.com/api/v10/guilds/${serverId}/channels`
-
-Do:
-
-- First attempt: `getDiscordCredentials(connId)` (normal)
-- If response is 401: retry once using the opposite scheme **for that same connection**
-- Only show “Reconnect Discord” after exhausting all connections *and* you’re still getting 401s
-
-Pseudo-drop-in:
-
-```ts
-const url = `https://discord.com/api/v10/guilds/${serverId}/channels`;
-
-for (const connId of connectionIdsToUse) {
-  const cred1 = await getDiscordCredentials(connId);
-  let res = await fetch(url, { headers: cred1.headers });
-
-  if (res.status === 401) {
-    const opposite = cred1.scheme === "Bot" ? "Bearer" : "Bot";
-    const cred2 = await getDiscordCredentials(connId, opposite);
-    res = await fetch(url, { headers: cred2.headers });
-  }
-
-  if (res.ok) {
-    const channels = await res.json();
-    const filtered = channels.filter((c: any) => c.type === 0 || c.type === 5);
-    return json({ channels: filtered, requiresReconnect: false });
-  }
-
-  // Optional: treat 403 as permissions/bot-not-in-guild (NOT reconnect)
-  if (res.status === 403) {
-    continue; // try next connection
-  }
-}
-
-// If we got here, everything failed
-return json({ error: "All available Discord connections failed to list channels.", requiresReconnect: true }, 401);
-
-```
-
----
-
-## Trigger slug note (you asked explicitly)
-
-Listing channels is step 2. After that, when you create the poll trigger, make sure the slug used is exactly:
-
-`DISCORD_NEW_MESSAGE_TRIGGER`
-
-Search for any older slug usage and replace only if needed.
-
----
-
-If you paste the `getDiscordCredentials()` function body here (or the relevant section around line ~53), I’ll rewrite it **exactly** in your project’s current style so you can paste it in with zero guesswork.
