@@ -439,12 +439,16 @@ serve(async (req) => {
       }
 
       case "reconnect": {
-        // Initiate a fresh Discord Bot connection using the discordbot auth config
+        // Use Composio v3 /link endpoint (same pattern as composio-connect)
         const DISCORD_AUTH_CONFIG_ID = "ac_m8FL09HNW-yx";
-        const redirectUrl = `${SUPABASE_URL}/functions/v1/composio-callback`;
+        // Build a callback URL the user returns to after OAuth
+        const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/+$/, "") || "";
+        const callbackUrl = `${origin}/oauth-complete?toolkit=discordbot`;
+
+        console.log("[Discord] Reconnect: using v3 /link endpoint, auth_config_id:", DISCORD_AUTH_CONFIG_ID);
 
         const initiateRes = await fetch(
-          `${COMPOSIO_API_BASE}/connected_accounts`,
+          `${COMPOSIO_API_BASE}/connected_accounts/link`,
           {
             method: "POST",
             headers: {
@@ -453,8 +457,9 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               auth_config_id: DISCORD_AUTH_CONFIG_ID,
-              redirect_url: redirectUrl,
-              entity_id: user.id,
+              user_id: user.id,
+              callback_url: callbackUrl,
+              force_reauth: true,
             }),
           }
         );
@@ -462,10 +467,10 @@ serve(async (req) => {
         const initiateData = await safeJsonParse(initiateRes);
         console.log("[Discord] Reconnect initiate response:", JSON.stringify(initiateData));
 
-        if (!initiateRes.ok || !initiateData?.redirectUrl) {
+        if (!initiateRes.ok || !(initiateData?.redirect_url || initiateData?.redirectUrl)) {
           return new Response(JSON.stringify({
             error: "Failed to initiate Discord reconnection",
-            details: initiateData?.message || `HTTP ${initiateRes.status}`,
+            details: initiateData?.message || initiateData?.error?.message || `HTTP ${initiateRes.status}`,
           }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -473,7 +478,7 @@ serve(async (req) => {
         }
 
         return new Response(JSON.stringify({
-          redirectUrl: initiateData.redirectUrl,
+          redirectUrl: initiateData.redirect_url || initiateData.redirectUrl,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
