@@ -1,85 +1,173 @@
-
-
-# Fix: Discord Channel Listing Fails After Server Selection
+# Fix: Fireflies Transcript Detection Returns 0 Results
 
 ## Root Cause Analysis
 
-After tracing through the full code path and inspecting the actual network responses, the root cause is now clear:
+The edge function logs tell the whole story in three lines:
 
-1. **Server listing uses `GET /users/@me/guilds`** -- a user-scoped endpoint that works with OAuth2 Bearer tokens. This succeeds and returns 90+ servers the user is in.
+```
+[Fireflies Sync] Composio response status: 404
+[Fireflies Sync] Composio error: "Tool FIREFLIES_LIST_TRANSCRIPTS not found"
+[Fireflies Sync] Composio tool failed, trying direct GraphQL fallback
+[Fireflies Sync] Found 0 total transcripts
 
-2. **Channel listing uses `GET /guilds/{guild_id}/channels`** -- a bot-scoped endpoint. This endpoint is **not accessible via user OAuth2 tokens**. It requires a **bot token** where the bot is a member of the guild.
+```
 
-3. **The bot is only in servers the user added it to during the Composio OAuth flow** (likely just 1 server). When the user selects any other server, the bot has no access, and Discord returns 401/403 for both token schemes.
+There are **two cascading failures**:
 
-4. **The reconnect case uses auth config `ac_m8FL09HNW-yx`**, but the `composio-connect` function uses `ac_jECZy5E0ycKY` for `discordbot`. This mismatch causes the reconnect to fail with HTTP 400.
+### Prerequisite issue (from the provided console screenshot): Composio Connect is blocked because it is being framed
+
+Your console shows:
+
+```
+Framing "https://connect.composio.dev/" violates the following Content Security Policy directive: "frame-ancestors 'none'". The request has been blocked.
+
+```
+
+This means the app is attempting to load Composio Connect in an iframe/modal. Composio explicitly blocks embedding (`frame-ancestors 'none'`). If the Connect UI cannot load, users may never complete the Fireflies connection successfully, which results in missing/invalid connected account tokens and ultimately 0 transcripts detected.
+
+(Other `net::ERR_BLOCKED_BY_CLIENT` errors in the console are caused by browser extensions blocking analytics/pixels and are not relevant to transcript detection.)
+
+### Failure 1: Composio tool slug no longer exists
+
+`FIREFLIES_LIST_TRANSCRIPTS` returns HTTP 404 from Composio ("Tool not found"). This slug has been removed or renamed in the Composio tooling catalog. The code correctly falls back to direct GraphQL, but...
+
+### Failure 2: GraphQL fallback silently fails because `getAccessToken()` uses outdated Composio v1 API
+
+The `getAccessToken()` function (line 199-213) calls:
+
+```
+GET /api/v1/connected_accounts/{connectionId}
+
+```
+
+and extracts `connectionParams.access_token`.
+
+But Composio now uses **v3**, where the token is stored at different paths:
+
+- `data.connection_params.access_token`
+- `data.access_token`
+
+The v1 endpoint either returns a different structure or fails entirely, causing `getAccessToken()` to return `null`. When the token is null, the GraphQL fallback is **silently skipped** (no log message), and the function returns 0 transcripts.
+
+**Evidence**: Other working integrations (LinkedIn, HubSpot) already use v3:
+
+```typescript
+// LinkedIn (working):
+fetch(`https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`)
+const accessToken = data?.data?.connection_params?.access_token || data?.data?.access_token || ...
+
+```
+
+### Secondary issue: `fetchFullTranscript()` uses the same broken `getAccessToken()`
+
+Even if we fix the list query, the per-transcript detail fetch (for sentences/summary) would also fail via the same broken token extraction path.
 
 ## Solution
 
-### 1. Server List Intersection (Primary Fix)
+### Change 0: Stop embedding Composio Connect in an iframe/modal (CSP `frame-ancestors 'none'`)
 
-In the `get-servers` handler, fetch guilds from **both** the user OAuth token and the bot token. Return only the **intersection** -- servers where both the user and bot are present. This guarantees that any server the user selects will allow channel listing.
+Wherever the app opens Composio Connect, do not render it in an iframe. Launch it as a top-level navigation (or a new tab) so the connection flow can complete and produce a valid connected account token.
 
-If the bot has no accessible servers, return all user servers with a clear error indicating the bot needs to be added.
+Example implementation approach:
 
-### 2. Fix Reconnect Auth Config
+- Replace iframe/modal embedding with `window.location.href = connectUrl`, or
+- `window.open(connectUrl, "_blank", "noopener,noreferrer")`
 
-Change the `reconnect` case to use `ac_jECZy5E0ycKY` (matching `composio-connect`) instead of `ac_m8FL09HNW-yx`.
+### Change 1: Update `getAccessToken()` to use Composio v3 API with robust token extraction
 
-### 3. Improve Error Messages for 403/401 on Channel Listing
+Replace the v1 call with v3 and try multiple token paths (matching the pattern used by LinkedIn/HubSpot). Add logging when no token is found.
 
-When channel listing fails because the bot is not in the server:
-- Do NOT prompt "Reconnect Discord"
-- Show a clear message: "The bot is not in this server. Please pick a server the bot has been added to." with a "Pick a different server" option
-- Only show reconnect for genuinely expired/invalid tokens (verified by checking if the bot can list ANY guilds)
+```text
+Before (broken):
+  GET /api/v1/connected_accounts/{connectionId}
+  extract: connectionParams.access_token
 
-### 4. Frontend: Tighten `needsReconnect` Detection
+After (fixed):
+  GET /api/v3/connected_accounts/{connectionId}
+  extract: data?.connection_params?.access_token
+        || data?.access_token
+        || connectionParams.access_token (legacy fallback)
+  + log warning when no token found
 
-In `useDiscordAutomation.ts`, stop detecting "reconnect" by substring matching on error messages. Instead, check for an explicit `requiresReconnect` boolean field in the response body.
+```
+
+### Change 2: Remove dead `FIREFLIES_LIST_TRANSCRIPTS` Composio tool call
+
+Since this tool no longer exists in Composio, the code wastes a network round-trip and always falls through to GraphQL. Remove the Composio tool attempt entirely and go directly to the Fireflies GraphQL API. This eliminates one unnecessary failure + 404 log noise on every sync.
+
+### Change 3: Add missing log when `getAccessToken` returns null in the fallback path
+
+Currently, if `getAccessToken` returns null at line 338, the entire GraphQL branch is silently skipped. Add a warning log so future debugging is easier.
 
 ## Files to Change
 
-| File | Change |
-|------|--------|
-| `supabase/functions/discord-automation-triggers/index.ts` | `get-servers`: intersect user + bot guilds. `get-channels`: return explicit `requiresReconnect` field. `reconnect`: fix auth config ID. |
-| `src/hooks/useDiscordAutomation.ts` | Use `channelData.requiresReconnect` boolean instead of substring matching for reconnect detection. |
 
-## Detailed Changes
+| File                                                                                   | Change                                                                                                                               |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `supabase/functions/fireflies-automation-triggers/index.ts`                            | Fix `getAccessToken()` to use v3 API; remove dead `FIREFLIES_LIST_TRANSCRIPTS` call in `syncFirefliesTranscripts()`; add missing log |
+| Frontend file that currently embeds `https://connect.composio.dev/` in an iframe/modal | Replace iframe/modal embedding with a full-page redirect or new-tab launch so Connect can complete                                   |
 
-### Edge Function (`discord-automation-triggers/index.ts`)
 
-**`get-servers` case:**
-- After fetching user guilds (existing logic), also fetch bot guilds using the bot connection
-- Compute intersection by guild ID
-- Return only intersected servers
-- If no intersection, return all user servers with a warning flag
+No frontend changes needed. **(Exception: Composio Connect must not be embedded in an iframe due to CSP; open it as a full-page redirect/new tab.)** No database changes needed.
 
-**`get-channels` case:**
-- Add explicit `requiresReconnect: true/false` to every response
-- On 403: set `requiresReconnect: false` (bot not in server, not an auth issue)
-- On 401 after retry: set `requiresReconnect: true` (genuine token issue)
+## Technical Details
 
-**`reconnect` case:**
-- Change auth config from `ac_m8FL09HNW-yx` to `ac_jECZy5E0ycKY`
+### `getAccessToken()` (lines 199-213) -- rewrite:
 
-### Frontend Hook (`useDiscordAutomation.ts`)
+```typescript
+async function getAccessToken(connectionId: string): Promise<string | null> {
+  try {
+    const connResponse = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      { headers: { "x-api-key": COMPOSIO_API_KEY } }
+    );
+    if (!connResponse.ok) {
+      console.error(`[Fireflies] Failed to fetch connected account: ${connResponse.status}`);
+      return null;
+    }
+    const connData = await connResponse.json();
+    const data = connData?.data || connData;
 
-**`selectServer` callback (lines 230-239):**
+    const accessToken =
+      data?.connection_params?.access_token ||
+      data?.access_token ||
+      data?.connectionParams?.access_token ||
+      data?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
+      null;
+
+    if (!accessToken) {
+      console.error("[Fireflies] No access token found in Composio response. Keys:", Object.keys(data));
+    }
+    return accessToken;
+  } catch (err) {
+    console.error("[Fireflies] Error fetching access token:", err);
+    return null;
+  }
+}
+
 ```
-// Before (fragile substring matching):
-const isChannelAuthFailure =
-  channelData.details?.includes("All Discord connections failed") ||
-  channelData.error?.includes("reconnect") ||
-  errorMsg.includes("reconnect");
 
-// After (explicit boolean):
-const isChannelAuthFailure = channelData.requiresReconnect === true;
+### `syncFirefliesTranscripts()` (lines 284-453) -- simplify:
+
+Remove the `FIREFLIES_LIST_TRANSCRIPTS` Composio tool call (lines 294-331). Go directly to the GraphQL API using `getAccessToken()`. This is the only reliable path since the Composio tool slug no longer exists.
+
+Add a warning log when `getAccessToken` returns null so the failure is visible:
+
+```typescript
+const accessToken = await getAccessToken(connectionId);
+if (!accessToken) {
+  console.error("[Fireflies Sync] No access token available -- cannot fetch transcripts");
+  return { newTranscripts: 0, totalSaved: 0 };
+}
+
 ```
 
-## What This Does NOT Change
+### `fetchFullTranscript()` (lines 215-280) -- no structural change
 
-- No UI/visual changes to ChannelPicker, ServerPicker, or other components
-- No changes to the activate/deactivate/webhook flows
-- The `DISCORD_NEW_MESSAGE_TRIGGER` slug (already correct in the activate case)
-- No unrelated refactors
+This function already calls `getAccessToken()` for its GraphQL fallback, so fixing `getAccessToken()` automatically fixes this path too. The Composio `FIREFLIES_GET_TRANSCRIPT_BY_ID` call (lines 217-239) may also 404, but the function already handles that gracefully and falls through to GraphQL.
 
+## Deployment
+
+Redeploy the `fireflies-automation-triggers` edge function after the changes.
+
+Perform a rubber duck analysis and go through the relevant code to identify errors and logic gaps. Please also use modern-day 2026 best practices to implement your well-thought-out solution. Do not make any other changes to the codebase that are not directly related to the problems identified, etc.
