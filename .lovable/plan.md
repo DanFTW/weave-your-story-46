@@ -1,73 +1,48 @@
-# Fix Slack Integration: Icon + OAuth Connection
+# Fix: Discord Channel Listing (Tool Slug Not Found)
 
-## Problem 1: Missing Slack Icon on /integrations
+## Root Cause
 
-`IntegrationIcon.tsx` imports the `slack.png` asset but **never adds it to the** `iconImages` **map**. The lookup `iconImages["slack"]` returns `undefined`, triggering the fallback "S" letter placeholder.
+The Composio action slug `DISCORD_LIST_GUILD_CHANNELS` does not exist in the Composio tool registry. Every call returns HTTP 404:
 
-### Fix
-
-Add `slack: slackIcon` to the `iconImages` map in `IntegrationIcon.tsx` (after `googledrive` on line 106).
-
----
-
-## Problem 2: OAuth Redirect Blocked in Iframe
-
-The Composio API call succeeds and returns a valid redirect URL. However, Slack's OAuth page sets `X-Frame-Options: DENY`, which prevents it from loading inside the Lovable preview iframe.
-
-The current `useComposio.ts` desktop flow:
-
-1. Tries `window.open(url, '_blank', 'width=600,height=700')` -- this can be blocked by browsers when called from within an iframe
-2. If popup fails, falls back to `window.top.location.assign(url)` -- this navigates the top-level Lovable editor away, which is undesirable, or gets blocked by frame security
-
-### Fix
-
-Update the desktop popup fallback in `useComposio.ts` to always attempt `window.open` without popup dimensions first (which opens a new tab instead of a popup window -- less likely to be blocked), and only fall back to `window.top` navigation as last resort.
-
-**File:** `src/hooks/useComposio.ts` (lines 204-’215)
-
-Change the desktop branch to:
-
-```typescript
-} else {
-  // Desktop - try new tab first (less likely to be blocked than popup)
-  const popup = window.open(data.redirectUrl, '_blank');
-
-  if (!popup || popup.closed) {
-    console.log("New tab blocked, trying popup window...");
-    const popupWindow = window.open(
-      data.redirectUrl, 'oauth_popup', 'width=600,height=700'
-    );
-
-    if (!popupWindow || popupWindow.closed) {
-      console.log("All popups blocked, using top-level redirect");
-      stopPolling();
-      const targetWindow = window.top || window;
-      targetWindow.location.assign(data.redirectUrl);
-    }
-  }
-}
+```
+Tool DISCORD_LIST_GUILD_CHANNELS not found
 
 ```
 
-This tries a plain new tab first (which browsers are more permissive about), then falls back to a sized popup, then finally to top-level navigation.
+Both connected accounts (`ca_ObvSuQAV8UZW` for user OAuth, `ca_seifjoPKRVN6` for bot) fail identically.
 
----
+**Additional logic gap (still causes “failed to load channels” even after fixing the slug):** server listing can succeed via user OAuth (shows guilds the user is in), but channel listing requires bot authorization. If the user selects a server the bot is not in (or lacks permissions for), `GET /guilds/{guild_id}/channels` will return 403/404 and the UI may incorrectly prompt to reconnect.
 
-## Files Modified
+## Solution
 
+Replace the Composio Tool Execution approach with a **direct Discord REST API call** using the bot token retrieved via `getDiscordCredentials()`. This is the same proven pattern already used successfully for server listing (`GET /users/@me/guilds`).
 
-| File                                              | Change                                                      |
-| ------------------------------------------------- | ----------------------------------------------------------- |
-| `src/components/integrations/IntegrationIcon.tsx` | Add `slack: slackIcon` to iconImages map                    |
-| `src/hooks/useComposio.ts`                        | Improve desktop OAuth redirect to prefer new tab over popup |
+The endpoint `GET /guilds/{guild_id}/channels` requires Bot authorization, which the `discordbot` connection provides.
 
+**Suggestion:** ensure server selection and channel listing use consistent authorization (bot-first), and only prompt “reconnect” for true auth failures (401). Treat 403 as missing access/permissions (not reconnect).
 
-No backend or edge function changes needed. The Composio connect flow and auth config (`ac_H9kYZsVaw_gS`) are working correctly.
+## Change
 
----
+### File: `supabase/functions/discord-automation-triggers/index.ts`
 
-## Suggestion (only)
+**Replace** the `get-channels` case (lines 231-285) to use direct Discord API calls instead of Composio tool execution:
 
-Replace the last line with the correct Slack auth config id you provided earlier:
+- Loop through `connectionIdsToUse` (bot connection is included, and should be tried first)
+- Call `getDiscordCredentials(connId)` to get the auth header
+- Fetch `https://discord.com/api/v10/guilds/{serverId}/channels`
+- Filter for text channels (type 0) and announcement channels (type 5)
+- Handle 401/403 by trying the next connection, 429 with rate-limit messaging
+- **Suggestion:** only fall back to "reconnect" messaging for 401 after all connections fail; treat 403 as “missing access / bot not in server / insufficient permissions” (do not prompt reconnect)
+- Fall back to "reconnect" messaging only if all connections fail
 
-- Replace `ac_H9kYZsVaw_gS` with `ac_BOCrE-Q-yqJu`
+This mirrors the `get-servers` case logic exactly, just targeting a different Discord endpoint.
+
+**Suggestion (recommended to prevent step-2 failures):** update the `get-servers` case to prefer bot authorization (or filter/intersect servers to those the bot can access) so the user can’t select a server that will inevitably 403 on channel listing.
+
+### Deploy
+
+Redeploy the `discord-automation-triggers` edge function after the change.
+
+### No frontend changes needed
+
+The frontend `ChannelPicker` component already handles the `{ channels: [...] }` response format and the error/reconnect flow correctly.
