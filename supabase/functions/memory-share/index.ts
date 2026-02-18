@@ -46,7 +46,8 @@ Deno.serve(async (req) => {
         global: { headers: { authorization: authHeader } },
       });
 
-      const { data: { user }, error: userError } = await userClient.auth.getUser();
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error: userError } = await userClient.auth.getUser(token);
       if (userError || !user) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired session." }),
