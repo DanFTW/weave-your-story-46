@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check, Share2 } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { MemoryCard, getCategoryConfig } from "./MemoryCard";
 import { cn } from "@/lib/utils";
@@ -10,9 +10,10 @@ interface MemoryStackProps {
   memories: Memory[];
   category: string;
   index: number;
+  onShare?: (memory: Memory) => void;
 }
 
-export function MemoryStack({ memories, category, index }: MemoryStackProps) {
+export function MemoryStack({ memories, category, index, onShare }: MemoryStackProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const config = getCategoryConfig(category);
   const Icon = config.icon;
@@ -32,7 +33,7 @@ export function MemoryStack({ memories, category, index }: MemoryStackProps) {
   })();
 
   if (count === 1) {
-    return <MemoryCard memory={memories[0]} index={index} />;
+    return <MemoryCard memory={memories[0]} index={index} onShare={onShare} />;
   }
 
   return (
@@ -94,14 +95,29 @@ export function MemoryStack({ memories, category, index }: MemoryStackProps) {
             </p>
             
             <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                 <Check className="h-2.5 w-2.5" />
                 Synced
               </span>
               
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <span className="text-xs">Tap to expand</span>
-                <ChevronDown className="h-3.5 w-3.5" />
+              <div className="flex items-center gap-2">
+                {onShare && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShare(previewMemory);
+                    }}
+                    className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    aria-label="Share memory"
+                  >
+                    <Share2 className="h-3 w-3" />
+                    Share
+                  </button>
+                )}
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <span className="text-xs">Tap to expand</span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </div>
               </div>
             </div>
           </div>
@@ -128,7 +144,7 @@ export function MemoryStack({ memories, category, index }: MemoryStackProps) {
               animate={{ opacity: 1, height: "auto" }}
               transition={{ duration: 0.15, delay: i * 0.03 }}
             >
-              <MemoryCard memory={memory} index={i} isStacked />
+              <MemoryCard memory={memory} index={i} isStacked onShare={onShare} />
             </motion.div>
           ))}
         </div>

@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram, Twitter, Mic } from "lucide-react";
+import { Users, Briefcase, Utensils, ShoppingBag, Heart, NotebookPen, Coffee, Check, Loader2, Mail, Receipt, ArrowDownLeft, ArrowUpRight, Instagram, Twitter, Mic, Share2 } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -9,6 +9,7 @@ interface MemoryCardProps {
   memory: Memory;
   index: number;
   isStacked?: boolean;
+  onShare?: (memory: Memory) => void;
 }
 
 // Parse email content into structured parts
@@ -250,7 +251,7 @@ function EmailCardContent({ content }: { content: string }) {
   );
 }
 
-export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps) {
+export function MemoryCard({ memory, index, isStacked = false, onShare }: MemoryCardProps) {
   const navigate = useNavigate();
   const config = getCategoryConfig(memory.category, memory.tag, memory.content);
   const Icon = config.icon;
@@ -358,12 +359,12 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
         )}
         
         {/* Footer */}
-        <div className="flex items-center justify-start">
+        <div className="flex items-center justify-between">
           <span className={cn(
             "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
             isSynced 
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" 
-              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+              ? "bg-primary/10 text-primary" 
+              : "bg-muted text-muted-foreground"
           )}>
             {isSynced ? (
               <>
@@ -377,8 +378,23 @@ export function MemoryCard({ memory, index, isStacked = false }: MemoryCardProps
               </>
             )}
           </span>
+
+          {onShare && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare(memory);
+              }}
+              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Share memory"
+            >
+              <Share2 className="h-3 w-3" />
+              Share
+            </button>
+          )}
         </div>
       </div>
     </motion.div>
   );
 }
+

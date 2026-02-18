@@ -6,6 +6,7 @@ import { MemoryCard } from "./MemoryCard";
 interface MemoryDateGroupProps {
   group: GroupedMemories;
   startIndex: number;
+  onShare?: (memory: Memory) => void;
 }
 
 interface CategoryGroup {
@@ -32,7 +33,7 @@ function groupByCategory(memories: Memory[]): CategoryGroup[] {
   }));
 }
 
-export function MemoryDateGroup({ group, startIndex }: MemoryDateGroupProps) {
+export function MemoryDateGroup({ group, startIndex, onShare }: MemoryDateGroupProps) {
   const categoryGroups = useMemo(() => groupByCategory(group.memories), [group.memories]);
   
   let runningIndex = startIndex;
@@ -54,6 +55,7 @@ export function MemoryDateGroup({ group, startIndex }: MemoryDateGroupProps) {
                 memories={catGroup.memories}
                 category={catGroup.category}
                 index={groupIndex}
+                onShare={onShare}
               />
             );
           }
@@ -63,6 +65,7 @@ export function MemoryDateGroup({ group, startIndex }: MemoryDateGroupProps) {
               key={catGroup.memories[0].id}
               memory={catGroup.memories[0]}
               index={groupIndex}
+              onShare={onShare}
             />
           );
         })}

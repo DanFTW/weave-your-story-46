@@ -644,6 +644,77 @@ export type Database = {
         }
         Relationships: []
       }
+      memory_share_recipients: {
+        Row: {
+          created_at: string
+          id: string
+          recipient_email: string
+          recipient_user_id: string | null
+          share_id: string
+          viewed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          recipient_email: string
+          recipient_user_id?: string | null
+          share_id: string
+          viewed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          recipient_email?: string
+          recipient_user_id?: string | null
+          share_id?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_share_recipients_share_id_fkey"
+            columns: ["share_id"]
+            isOneToOne: false
+            referencedRelation: "memory_shares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      memory_shares: {
+        Row: {
+          created_at: string
+          custom_condition: string | null
+          expires_at: string | null
+          id: string
+          memory_id: string
+          owner_user_id: string
+          share_scope: string
+          share_token: string
+          thread_tag: string | null
+        }
+        Insert: {
+          created_at?: string
+          custom_condition?: string | null
+          expires_at?: string | null
+          id?: string
+          memory_id: string
+          owner_user_id: string
+          share_scope?: string
+          share_token?: string
+          thread_tag?: string | null
+        }
+        Update: {
+          created_at?: string
+          custom_condition?: string | null
+          expires_at?: string | null
+          id?: string
+          memory_id?: string
+          owner_user_id?: string
+          share_scope?: string
+          share_token?: string
+          thread_tag?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

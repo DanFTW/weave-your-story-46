@@ -20,6 +20,7 @@ import ApiKeyConfig from "./pages/ApiKeyConfig";
 import Login from "./pages/Login";
 import OAuthComplete from "./pages/OAuthComplete";
 import NotFound from "./pages/NotFound";
+import SharedMemory from "./pages/SharedMemory";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/oauth-complete" element={<OAuthComplete />} />
+            <Route path="/shared/:token" element={<SharedMemory />} />
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/" element={<Home />} />
               <Route path="/threads" element={<Threads />} />
