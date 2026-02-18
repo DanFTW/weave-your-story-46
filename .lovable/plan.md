@@ -1,173 +1,164 @@
-# Fix: Fireflies Transcript Detection Returns 0 Results
 
-## Root Cause Analysis
+# Memory Sharing Feature
 
-The edge function logs tell the whole story in three lines:
+## Architecture Overview
 
-```
-[Fireflies Sync] Composio response status: 404
-[Fireflies Sync] Composio error: "Tool FIREFLIES_LIST_TRANSCRIPTS not found"
-[Fireflies Sync] Composio tool failed, trying direct GraphQL fallback
-[Fireflies Sync] Found 0 total transcripts
+The sharing feature needs:
+1. A **database layer** — two new tables: `memory_shares` (share records) and `memory_share_recipients` (per-recipient rows)
+2. A **backend edge function** — `memory-share` for secure share creation and recipient email lookup
+3. A **share modal** — bottom-sheet style popup triggered from the MemoryCard's share button
+4. A **shared memory view** — a public `/shared/:token` route that resolves the token and displays the memory
+5. **MemoryCard + MemoryStack wiring** — add a share icon/button without breaking existing click-to-navigate behavior
 
-```
+---
 
-There are **two cascading failures**:
+## Database Schema (2 new tables)
 
-### Prerequisite issue (from the provided console screenshot): Composio Connect is blocked because it is being framed
+### `memory_shares`
+Stores one record per share action:
 
-Your console shows:
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` |
+| `owner_user_id` | uuid | sharer's auth UID |
+| `memory_id` | text | LIAM memory ID (or thread tag for all-from-thread) |
+| `share_scope` | text | `'single'` \| `'thread'` \| `'custom'` |
+| `share_token` | text UNIQUE | random URL-safe token for the link |
+| `custom_condition` | text nullable | free-text custom condition (trigger word, person, time, place) |
+| `thread_tag` | text nullable | for thread-scope shares |
+| `expires_at` | timestamptz nullable | optional expiry |
+| `created_at` | timestamptz | `now()` |
 
-```
-Framing "https://connect.composio.dev/" violates the following Content Security Policy directive: "frame-ancestors 'none'". The request has been blocked.
+### `memory_share_recipients`
+One row per recipient per share:
 
-```
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `share_id` | uuid FK → `memory_shares.id` ON DELETE CASCADE |
+| `recipient_email` | text | lowercased email |
+| `recipient_user_id` | uuid nullable | resolved if they have an account |
+| `viewed_at` | timestamptz nullable | set on first view |
+| `created_at` | timestamptz | `now()` |
 
-This means the app is attempting to load Composio Connect in an iframe/modal. Composio explicitly blocks embedding (`frame-ancestors 'none'`). If the Connect UI cannot load, users may never complete the Fireflies connection successfully, which results in missing/invalid connected account tokens and ultimately 0 transcripts detected.
+### RLS Policies
+- `memory_shares`: owner can SELECT/INSERT/DELETE where `owner_user_id = auth.uid()`
+- `memory_share_recipients`: owner can SELECT/INSERT/DELETE via join on `memory_shares`
+- Public SELECT on `memory_shares` by `share_token` (for the shared link view — service role reads via edge function)
+- No UPDATE needed for either table
 
-(Other `net::ERR_BLOCKED_BY_CLIENT` errors in the console are caused by browser extensions blocking analytics/pixels and are not relevant to transcript detection.)
+---
 
-### Failure 1: Composio tool slug no longer exists
+## Edge Function: `memory-share`
 
-`FIREFLIES_LIST_TRANSCRIPTS` returns HTTP 404 from Composio ("Tool not found"). This slug has been removed or renamed in the Composio tooling catalog. The code correctly falls back to direct GraphQL, but...
+Single function with two actions dispatched by `action` field in POST body:
 
-### Failure 2: GraphQL fallback silently fails because `getAccessToken()` uses outdated Composio v1 API
+### Action: `create`
+- Auth required (reads JWT)
+- Validates: memory_id, scope, recipients (array of emails, max 50, valid email format)
+- Generates a `share_token` using `crypto.randomUUID()` (URL-safe, 36 chars)
+- Inserts into `memory_shares`
+- For each recipient email:
+  - Looks up `auth.users` via admin client to find if they have an account → sets `recipient_user_id`
+  - Inserts into `memory_share_recipients`
+- Returns `{ share_token, share_url }`
 
-The `getAccessToken()` function (line 199-213) calls:
+### Action: `resolve`
+- No auth required
+- Takes `{ share_token }`
+- Looks up `memory_shares` by token using service role
+- Returns share metadata: `{ memory_id, share_scope, custom_condition, thread_tag, owner_user_id }`
+- Does NOT return the memory content (the client then fetches that separately, maintaining the LIAM memory API as the single source of truth)
+- Records `viewed_at` on the first recipient row that matches the caller's IP (best-effort, not critical)
 
-```
-GET /api/v1/connected_accounts/{connectionId}
+---
 
-```
+## New Frontend Components
 
-and extracts `connectionParams.access_token`.
+### 1. `src/components/memories/ShareMemoryModal.tsx`
 
-But Composio now uses **v3**, where the token is stored at different paths:
+A bottom-sheet (`vaul` Drawer — already installed) with three steps:
 
-- `data.connection_params.access_token`
-- `data.access_token`
+**Step 1 — Scope selection**
+- "Just this memory" (single)
+- "All memories from this thread / tag" (thread) — shows a tag picker if selected
+- "Custom condition" (custom) — reveals a text input for the trigger word/person/time/place
 
-The v1 endpoint either returns a different structure or fails entirely, causing `getAccessToken()` to return `null`. When the token is null, the GraphQL fallback is **silently skipped** (no log message), and the function returns 0 transcripts.
+**Step 2 — Add recipients**
+- Search input: type an email address
+- "Add" button validates email format with zod before adding
+- Recipient chips displayed below input (each removable with ×)
+- Max 20 recipients enforced client-side with a friendly message
 
-**Evidence**: Other working integrations (LinkedIn, HubSpot) already use v3:
+**Step 3 — Confirm & copy**
+- Summary card showing: scope, condition (if custom), recipient count
+- "Create share link" button → calls `memory-share` edge function action `create`
+- On success: shows the share URL in a read-only input with a "Copy link" button (uses `navigator.clipboard.writeText`)
+- Success state shows a checkmark and "Link copied!" toast
 
-```typescript
-// LinkedIn (working):
-fetch(`https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`)
-const accessToken = data?.data?.connection_params?.access_token || data?.data?.access_token || ...
+### 2. `src/pages/SharedMemory.tsx`
 
-```
+Public route `/shared/:token` — no auth required:
 
-### Secondary issue: `fetchFullTranscript()` uses the same broken `getAccessToken()`
+- Calls `memory-share` edge function action `resolve` with the token
+- Displays: a minimal read-only view of the memory's `memory_id` content preview, the sharer's display name (from `profiles`), and share scope / custom condition
+- Since the actual memory content lives in LIAM API (auth-gated), this page shows:
+  - The share metadata (scope, custom condition, tag)
+  - A CTA: "View this memory in the app" → deep-link to `/memory/:id` (requires login)
+  - If the viewer is already logged in and is a listed recipient → show full content by calling LIAM API on their behalf (handled inside the component with `useAuth`)
+- If token not found → "This share link is invalid or has expired"
 
-Even if we fix the list query, the per-transcript detail fetch (for sentences/summary) would also fail via the same broken token extraction path.
+---
 
-## Solution
+## Wiring into Existing Components
 
-### Change 0: Stop embedding Composio Connect in an iframe/modal (CSP `frame-ancestors 'none'`)
+### `MemoryCard.tsx`
+- Add a `Share` (`lucide-react`) icon button in the card footer area (right-aligned, next to "Synced" badge)
+- Clicking the share icon calls `onShare(memory)` prop (stops propagation so the card click-to-navigate doesn't fire)
+- `onShare` is optional prop — when not provided, the button is hidden
 
-Wherever the app opens Composio Connect, do not render it in an iframe. Launch it as a top-level navigation (or a new tab) so the connection flow can complete and produce a valid connected account token.
+### `MemoryDateGroup.tsx` + `MemoryStack.tsx`
+- Pass `onShare` down from `MemoryList` → `MemoryDateGroup` → `MemoryCard` / `MemoryStack`
+- `MemoryStack` exposes the share button on the collapsed stack header
 
-Example implementation approach:
+### `MemoryList.tsx`
+- Accepts `onShare?: (memory: Memory) => void` prop
+- Passes it through to date groups
 
-- Replace iframe/modal embedding with `window.location.href = connectUrl`, or
-- `window.open(connectUrl, "_blank", "noopener,noreferrer")`
+### `Memories.tsx` (page)
+- Adds `sharingMemory: Memory | null` state
+- Passes `onShare={(m) => setSharingMemory(m)}` to `MemoryList`
+- Renders `<ShareMemoryModal memory={sharingMemory} open={!!sharingMemory} onOpenChange={(open) => !open && setSharingMemory(null)} />`
 
-### Change 1: Update `getAccessToken()` to use Composio v3 API with robust token extraction
+### `App.tsx`
+- Adds `<Route path="/shared/:token" element={<SharedMemory />} />` as a public route (outside `ProtectedRoute`)
 
-Replace the v1 call with v3 and try multiple token paths (matching the pattern used by LinkedIn/HubSpot). Add logging when no token is found.
+---
 
-```text
-Before (broken):
-  GET /api/v1/connected_accounts/{connectionId}
-  extract: connectionParams.access_token
+## Files to Create / Modify
 
-After (fixed):
-  GET /api/v3/connected_accounts/{connectionId}
-  extract: data?.connection_params?.access_token
-        || data?.access_token
-        || connectionParams.access_token (legacy fallback)
-  + log warning when no token found
+| File | Action |
+|---|---|
+| `supabase/migrations/XXXX_memory_shares.sql` | Create `memory_shares` + `memory_share_recipients` tables with RLS |
+| `supabase/functions/memory-share/index.ts` | New edge function (create + resolve actions) |
+| `src/components/memories/ShareMemoryModal.tsx` | New component — bottom drawer with 3-step share flow |
+| `src/pages/SharedMemory.tsx` | New public page for viewing shared memory links |
+| `src/components/memories/MemoryCard.tsx` | Add optional `onShare` prop + share icon button |
+| `src/components/memories/MemoryStack.tsx` | Thread-through `onShare` prop |
+| `src/components/memories/MemoryDateGroup.tsx` | Thread-through `onShare` prop |
+| `src/components/memories/MemoryList.tsx` | Thread-through `onShare` prop |
+| `src/pages/Memories.tsx` | Wire up `sharingMemory` state + `ShareMemoryModal` |
+| `src/App.tsx` | Add `/shared/:token` public route |
 
-```
+---
 
-### Change 2: Remove dead `FIREFLIES_LIST_TRANSCRIPTS` Composio tool call
+## Key Technical Decisions & 2026 Best Practices
 
-Since this tool no longer exists in Composio, the code wastes a network round-trip and always falls through to GraphQL. Remove the Composio tool attempt entirely and go directly to the Fireflies GraphQL API. This eliminates one unnecessary failure + 404 log noise on every sync.
-
-### Change 3: Add missing log when `getAccessToken` returns null in the fallback path
-
-Currently, if `getAccessToken` returns null at line 338, the entire GraphQL branch is silently skipped. Add a warning log so future debugging is easier.
-
-## Files to Change
-
-
-| File                                                                                   | Change                                                                                                                               |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `supabase/functions/fireflies-automation-triggers/index.ts`                            | Fix `getAccessToken()` to use v3 API; remove dead `FIREFLIES_LIST_TRANSCRIPTS` call in `syncFirefliesTranscripts()`; add missing log |
-| Frontend file that currently embeds `https://connect.composio.dev/` in an iframe/modal | Replace iframe/modal embedding with a full-page redirect or new-tab launch so Connect can complete                                   |
-
-
-No frontend changes needed. **(Exception: Composio Connect must not be embedded in an iframe due to CSP; open it as a full-page redirect/new tab.)** No database changes needed.
-
-## Technical Details
-
-### `getAccessToken()` (lines 199-213) -- rewrite:
-
-```typescript
-async function getAccessToken(connectionId: string): Promise<string | null> {
-  try {
-    const connResponse = await fetch(
-      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
-      { headers: { "x-api-key": COMPOSIO_API_KEY } }
-    );
-    if (!connResponse.ok) {
-      console.error(`[Fireflies] Failed to fetch connected account: ${connResponse.status}`);
-      return null;
-    }
-    const connData = await connResponse.json();
-    const data = connData?.data || connData;
-
-    const accessToken =
-      data?.connection_params?.access_token ||
-      data?.access_token ||
-      data?.connectionParams?.access_token ||
-      data?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
-      null;
-
-    if (!accessToken) {
-      console.error("[Fireflies] No access token found in Composio response. Keys:", Object.keys(data));
-    }
-    return accessToken;
-  } catch (err) {
-    console.error("[Fireflies] Error fetching access token:", err);
-    return null;
-  }
-}
-
-```
-
-### `syncFirefliesTranscripts()` (lines 284-453) -- simplify:
-
-Remove the `FIREFLIES_LIST_TRANSCRIPTS` Composio tool call (lines 294-331). Go directly to the GraphQL API using `getAccessToken()`. This is the only reliable path since the Composio tool slug no longer exists.
-
-Add a warning log when `getAccessToken` returns null so the failure is visible:
-
-```typescript
-const accessToken = await getAccessToken(connectionId);
-if (!accessToken) {
-  console.error("[Fireflies Sync] No access token available -- cannot fetch transcripts");
-  return { newTranscripts: 0, totalSaved: 0 };
-}
-
-```
-
-### `fetchFullTranscript()` (lines 215-280) -- no structural change
-
-This function already calls `getAccessToken()` for its GraphQL fallback, so fixing `getAccessToken()` automatically fixes this path too. The Composio `FIREFLIES_GET_TRANSCRIPT_BY_ID` call (lines 217-239) may also 404, but the function already handles that gracefully and falls through to GraphQL.
-
-## Deployment
-
-Redeploy the `fireflies-automation-triggers` edge function after the changes.
-
-Perform a rubber duck analysis and go through the relevant code to identify errors and logic gaps. Please also use modern-day 2026 best practices to implement your well-thought-out solution. Do not make any other changes to the codebase that are not directly related to the problems identified, etc.
+- **Token generation**: `crypto.randomUUID()` in Deno edge function — cryptographically secure, no external dependency
+- **Email validation**: zod `z.string().email()` client-side before add, same schema re-validated in edge function
+- **No memory content stored in DB**: The share record only stores the `memory_id`. Content is always fetched live from the LIAM API, preserving a single source of truth and avoiding stale data
+- **Propagation stop**: Share icon `onClick` calls `e.stopPropagation()` before `onShare(memory)` — prevents navigation to memory detail page
+- **`vaul` Drawer**: Already installed. Used as a bottom sheet on mobile (matches existing app patterns like `QuickMemoryDrawer`)
+- **Service role for resolve**: The `resolve` action in the edge function uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS for token lookup — the token itself is the authorization credential
+- **Recipient lookup**: Uses Supabase admin `auth.admin.listUsers()` filtered by email to optionally link share recipients to existing accounts — purely informational, no access gate required
+- **Share scope "thread"**: Uses `memory.tag` as the thread identifier (the existing tagging system already maps memories to sources like TWITTER, INSTAGRAM, etc.) — no new data model required
