@@ -42,13 +42,21 @@ Deno.serve(async (req) => {
         );
       }
 
+      const token = authHeader.replace("Bearer ", "");
       const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { headers: { authorization: authHeader } },
       });
 
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user }, error: userError } = await userClient.auth.getUser(token);
-      if (userError || !user) {
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired session." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const userId = claimsData.claims.sub;
+      if (!userId) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired session." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -109,7 +117,7 @@ Deno.serve(async (req) => {
       const { data: shareData, error: shareError } = await userClient
         .from("memory_shares")
         .insert({
-          owner_user_id: user.id,
+          owner_user_id: userId,
           memory_id: memory_id.trim(),
           share_scope,
           share_token: shareToken,
