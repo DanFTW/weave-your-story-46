@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { MemoryFilterBar } from "@/components/memories/MemoryFilterBar";
 import { MemoryList } from "@/components/memories/MemoryList";
+import { ShareMemoryModal } from "@/components/memories/ShareMemoryModal";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { useTwitterAlphaPosts } from "@/hooks/useTwitterAlphaPosts";
@@ -50,6 +51,7 @@ export default function Memories() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [sharingMemory, setSharingMemory] = useState<Memory | null>(null);
   const { listMemories, isListing } = useLiamMemory();
   const { filterDeleted, clearAll, deletedIds } = useDeletedMemories();
   const { posts: twitterPosts, fetchPosts: fetchTwitterPosts, isLoading: isLoadingTwitter } = useTwitterAlphaPosts();
@@ -206,8 +208,16 @@ export default function Memories() {
           memories={allMemories}
           isLoading={isLoading}
           activeFilter={activeFilter}
+          onShare={(memory) => setSharingMemory(memory)}
         />
       </div>
+
+      {/* Share Modal */}
+      <ShareMemoryModal
+        memory={sharingMemory}
+        open={!!sharingMemory}
+        onOpenChange={(open) => { if (!open) setSharingMemory(null); }}
+      />
     </div>
   );
 }

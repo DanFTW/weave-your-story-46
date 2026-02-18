@@ -9,6 +9,7 @@ interface MemoryListProps {
   memories: Memory[];
   isLoading: boolean;
   activeFilter: string;
+  onShare?: (memory: Memory) => void;
 }
 
 function groupMemoriesByDate(memories: Memory[]): GroupedMemories[] {
@@ -59,7 +60,7 @@ function filterMemories(memories: Memory[], filter: string): Memory[] {
   });
 }
 
-export function MemoryList({ memories, isLoading, activeFilter }: MemoryListProps) {
+export function MemoryList({ memories, isLoading, activeFilter, onShare }: MemoryListProps) {
   // Step 1: Consolidate Instagram fragments using stable shortcode identifier
   const consolidatedMemories = useMemo(
     () => consolidateInstagramMemories(memories),
@@ -122,6 +123,7 @@ export function MemoryList({ memories, isLoading, activeFilter }: MemoryListProp
             key={group.date} 
             group={group} 
             startIndex={groupStartIndex}
+            onShare={onShare}
           />
         );
       })}

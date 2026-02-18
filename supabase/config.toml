@@ -1,5 +1,8 @@
 project_id = "yatadupadielakuenxui"
 
+[functions.memory-share]
+verify_jwt = false
+
 [functions.liam-memory]
 verify_jwt = false
 
