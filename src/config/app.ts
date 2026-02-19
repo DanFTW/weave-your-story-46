@@ -5,7 +5,7 @@
  * VITE_APP_BASE_URL environment variable — no code changes needed.
  */
 export const APP_BASE_URL =
-  ((import.meta.env.VITE_APP_BASE_URL as string | undefined) ?? "https://weave-your-story-46.lovable.app")
+  ((import.meta.env.VITE_APP_BASE_URL as string | undefined) ?? window.location.origin)
     .replace(/\/$/, "");
 
 /**
