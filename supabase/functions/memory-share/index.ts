@@ -47,21 +47,15 @@ Deno.serve(async (req) => {
         global: { headers: { authorization: authHeader } },
       });
 
-      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-      if (claimsError || !claimsData?.claims) {
+      const { data: { user }, error: userError } = await userClient.auth.getUser(token);
+      if (userError || !user) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired session." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const userId = claimsData.claims.sub;
-      if (!userId) {
-        return new Response(
-          JSON.stringify({ error: "Invalid or expired session." }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const userId = user.id;
 
       // Validate payload
       const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at } = body;
