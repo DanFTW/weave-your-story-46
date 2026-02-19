@@ -55,6 +55,7 @@ export default function Memories() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sharingMemory, setSharingMemory] = useState<Memory | null>(null);
+  const [apiKeysRequired, setApiKeysRequired] = useState(false);
   const { listMemories, isListing } = useLiamMemory();
   const { filterDeleted, clearAll, deletedIds } = useDeletedMemories();
   const { posts: twitterPosts, fetchPosts: fetchTwitterPosts, isLoading: isLoadingTwitter } = useTwitterAlphaPosts();
@@ -63,16 +64,18 @@ export default function Memories() {
 
   const fetchMemories = useCallback(async () => {
     const result = await listMemories();
-    if (result) {
-      console.log('[Memories] Raw memories from API:', result.length);
-      console.log('[Memories] Deleted IDs in cache:', Array.from(deletedIds));
-      // Filter out any memories that were deleted locally
-      // (handles LIAM API eventual consistency - list may return stale data)
-      const filteredResult = filterDeleted(result);
-      console.log('[Memories] After filtering deleted:', filteredResult.length);
-      
-      setMemories(filteredResult);
+    if (result === null) {
+      // null means the API call failed — could be missing API keys
+      // useLiamMemory already shows a toast; we surface the setup state here
+      setApiKeysRequired(true);
+      return;
     }
+    setApiKeysRequired(false);
+    console.log('[Memories] Raw memories from API:', result.length);
+    console.log('[Memories] Deleted IDs in cache:', Array.from(deletedIds));
+    const filteredResult = filterDeleted(result);
+    console.log('[Memories] After filtering deleted:', filteredResult.length);
+    setMemories(filteredResult);
   }, [listMemories, filterDeleted, deletedIds]);
 
   // Convert locally stored Twitter posts to Memory format
@@ -227,6 +230,7 @@ export default function Memories() {
             isLoading={isLoading}
             activeFilter={activeFilter}
             onShare={(memory) => setSharingMemory(memory)}
+            apiKeysRequired={apiKeysRequired}
           />
         ) : (
           <SharedWithMeList

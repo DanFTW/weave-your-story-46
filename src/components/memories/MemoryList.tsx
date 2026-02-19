@@ -2,14 +2,16 @@ import { useMemo } from "react";
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { Memory, GroupedMemories } from "@/types/memory";
 import { MemoryDateGroup } from "./MemoryDateGroup";
-import { Loader2 } from "lucide-react";
+import { Loader2, KeyRound } from "lucide-react";
 import { consolidateInstagramMemories } from "@/utils/consolidateInstagramMemories";
+import { useNavigate } from "react-router-dom";
 
 interface MemoryListProps {
   memories: Memory[];
   isLoading: boolean;
   activeFilter: string;
   onShare?: (memory: Memory) => void;
+  apiKeysRequired?: boolean;
 }
 
 function groupMemoriesByDate(memories: Memory[]): GroupedMemories[] {
@@ -60,7 +62,9 @@ function filterMemories(memories: Memory[], filter: string): Memory[] {
   });
 }
 
-export function MemoryList({ memories, isLoading, activeFilter, onShare }: MemoryListProps) {
+export function MemoryList({ memories, isLoading, activeFilter, onShare, apiKeysRequired }: MemoryListProps) {
+  const navigate = useNavigate();
+
   // Step 1: Consolidate Instagram fragments using stable shortcode identifier
   const consolidatedMemories = useMemo(
     () => consolidateInstagramMemories(memories),
@@ -84,6 +88,31 @@ export function MemoryList({ memories, isLoading, activeFilter, onShare }: Memor
       <div className="flex flex-col items-center justify-center py-16">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         <p className="mt-4 text-sm text-muted-foreground">Loading memories...</p>
+      </div>
+    );
+  }
+
+  if (apiKeysRequired) {
+    return (
+      <div className="rounded-2xl bg-card p-8 border border-border/50 text-center space-y-4">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-muted p-3">
+            <KeyRound className="h-6 w-6 text-muted-foreground" />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">API keys required</p>
+          <p className="text-xs text-muted-foreground">
+            Configure your LIAM API keys to start saving and viewing memories.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/api-key-config')}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+          Configure API Keys
+        </button>
       </div>
     );
   }
