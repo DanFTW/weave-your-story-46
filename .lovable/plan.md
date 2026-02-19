@@ -1,137 +1,112 @@
 
-# Memory Sharing Feature
+# Mine | Shared with Me Toggle — Memories Page
 
-## Architecture Overview
+## What's Being Built
 
-The sharing feature needs:
-1. A **database layer** — two new tables: `memory_shares` (share records) and `memory_share_recipients` (per-recipient rows)
-2. A **backend edge function** — `memory-share` for secure share creation and recipient email lookup
-3. A **share modal** — bottom-sheet style popup triggered from the MemoryCard's share button
-4. A **shared memory view** — a public `/shared/:token` route that resolves the token and displays the memory
-5. **MemoryCard + MemoryStack wiring** — add a share icon/button without breaking existing click-to-navigate behavior
+A segmented toggle positioned below the filter tag row that switches between two views:
+- **Mine** — the user's own memories (current default behavior)
+- **Shared with Me** — memories other users have explicitly shared with the signed-in user (resolved via `memory_share_recipients` where `recipient_email` matches the logged-in user's email)
 
----
-
-## Database Schema (2 new tables)
-
-### `memory_shares`
-Stores one record per share action:
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | `gen_random_uuid()` |
-| `owner_user_id` | uuid | sharer's auth UID |
-| `memory_id` | text | LIAM memory ID (or thread tag for all-from-thread) |
-| `share_scope` | text | `'single'` \| `'thread'` \| `'custom'` |
-| `share_token` | text UNIQUE | random URL-safe token for the link |
-| `custom_condition` | text nullable | free-text custom condition (trigger word, person, time, place) |
-| `thread_tag` | text nullable | for thread-scope shares |
-| `expires_at` | timestamptz nullable | optional expiry |
-| `created_at` | timestamptz | `now()` |
-
-### `memory_share_recipients`
-One row per recipient per share:
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | |
-| `share_id` | uuid FK → `memory_shares.id` ON DELETE CASCADE |
-| `recipient_email` | text | lowercased email |
-| `recipient_user_id` | uuid nullable | resolved if they have an account |
-| `viewed_at` | timestamptz nullable | set on first view |
-| `created_at` | timestamptz | `now()` |
-
-### RLS Policies
-- `memory_shares`: owner can SELECT/INSERT/DELETE where `owner_user_id = auth.uid()`
-- `memory_share_recipients`: owner can SELECT/INSERT/DELETE via join on `memory_shares`
-- Public SELECT on `memory_shares` by `share_token` (for the shared link view — service role reads via edge function)
-- No UPDATE needed for either table
+The screenshot shows a pill-style toggle (rounded, inset shadow on the active segment) sitting directly below the horizontal icon filter row. Shared memories display a "Shared by [Name]" attribution on the card.
 
 ---
 
-## Edge Function: `memory-share`
+## Data Flow
 
-Single function with two actions dispatched by `action` field in POST body:
+### "Mine" tab
+Exactly the current behavior — `listMemories()` from LIAM API + Twitter/Instagram local posts. No change.
 
-### Action: `create`
-- Auth required (reads JWT)
-- Validates: memory_id, scope, recipients (array of emails, max 50, valid email format)
-- Generates a `share_token` using `crypto.randomUUID()` (URL-safe, 36 chars)
-- Inserts into `memory_shares`
-- For each recipient email:
-  - Looks up `auth.users` via admin client to find if they have an account → sets `recipient_user_id`
-  - Inserts into `memory_share_recipients`
-- Returns `{ share_token, share_url }`
+### "Shared with Me" tab
+1. Query `memory_share_recipients` where `recipient_email = user.email` OR `recipient_user_id = user.id`
+2. Join `memory_shares` to get `memory_id`, `share_scope`, `custom_condition`, `thread_tag`, `owner_user_id`, `share_token`
+3. For each share, call the `memory-share` edge function `resolve` action (already implemented) to get `owner_name`
+4. Display shared memories with a "Shared by [Name]" attribution, a chain-link badge in the header, and the share scope info
 
-### Action: `resolve`
-- No auth required
-- Takes `{ share_token }`
-- Looks up `memory_shares` by token using service role
-- Returns share metadata: `{ memory_id, share_scope, custom_condition, thread_tag, owner_user_id }`
-- Does NOT return the memory content (the client then fetches that separately, maintaining the LIAM memory API as the single source of truth)
-- Records `viewed_at` on the first recipient row that matches the caller's IP (best-effort, not critical)
+The key insight: the LIAM API is auth-gated to the session owner — we **cannot** fetch another user's memory content directly. So for "Shared with Me" view, we display the share metadata (scope, condition, tag, sharer info) and a "View in app" deep link, exactly as the `/shared/:token` page already does. This is the correct architecture — content stays with its owner.
 
 ---
 
-## New Frontend Components
+## Implementation Plan
 
-### 1. `src/components/memories/ShareMemoryModal.tsx`
+### 1. New hook — `src/hooks/useSharedWithMe.ts`
 
-A bottom-sheet (`vaul` Drawer — already installed) with three steps:
+A dedicated hook that:
+- Gets the current user's email and ID from `useAuth`
+- Queries Supabase directly:
+  ```sql
+  SELECT 
+    msr.share_id, msr.recipient_email, msr.viewed_at,
+    ms.memory_id, ms.share_scope, ms.custom_condition, 
+    ms.thread_tag, ms.share_token, ms.owner_user_id, ms.created_at
+  FROM memory_share_recipients msr
+  JOIN memory_shares ms ON ms.id = msr.share_id
+  WHERE msr.recipient_email = :userEmail
+     OR msr.recipient_user_id = :userId
+  ORDER BY ms.created_at DESC
+  ```
+- Fetches owner profiles for each unique `owner_user_id` from the `profiles` table
+- Returns structured `SharedMemoryItem[]` with all metadata for display
+- Exposes `isLoading`, `refetch`
 
-**Step 1 — Scope selection**
-- "Just this memory" (single)
-- "All memories from this thread / tag" (thread) — shows a tag picker if selected
-- "Custom condition" (custom) — reveals a text input for the trigger word/person/time/place
+### 2. New type — `SharedMemoryItem`
 
-**Step 2 — Add recipients**
-- Search input: type an email address
-- "Add" button validates email format with zod before adding
-- Recipient chips displayed below input (each removable with ×)
-- Max 20 recipients enforced client-side with a friendly message
+Added to `src/types/memory.ts`:
+```typescript
+export interface SharedMemoryItem {
+  shareId: string;
+  shareToken: string;
+  memoryId: string;
+  shareScope: 'single' | 'thread' | 'custom';
+  customCondition: string | null;
+  threadTag: string | null;
+  ownerUserId: string;
+  ownerName: string | null;
+  sharedAt: string;
+  viewedAt: string | null;
+}
+```
 
-**Step 3 — Confirm & copy**
-- Summary card showing: scope, condition (if custom), recipient count
-- "Create share link" button → calls `memory-share` edge function action `create`
-- On success: shows the share URL in a read-only input with a "Copy link" button (uses `navigator.clipboard.writeText`)
-- Success state shows a checkmark and "Link copied!" toast
+### 3. New component — `src/components/memories/SharedWithMeList.tsx`
 
-### 2. `src/pages/SharedMemory.tsx`
+Renders the "Shared with Me" tab content. Each item displays as a card with:
+- Gradient header matching the share scope/tag (reuses `categoryConfig` from `MemoryCard`)
+- A chain-link icon + "Shared" badge in the top-right of the header
+- Content body: "Shared by [ownerName or 'Someone']" + scope description
+- Tag badge: scope (`single memory`, `all from [tag]`, `custom: [condition]`)
+- Tap → navigates to `/shared/[shareToken]` for full view
+- Empty state if no shares received
 
-Public route `/shared/:token` — no auth required:
+### 4. Toggle component — `src/components/memories/MemoryViewToggle.tsx`
 
-- Calls `memory-share` edge function action `resolve` with the token
-- Displays: a minimal read-only view of the memory's `memory_id` content preview, the sharer's display name (from `profiles`), and share scope / custom condition
-- Since the actual memory content lives in LIAM API (auth-gated), this page shows:
-  - The share metadata (scope, custom condition, tag)
-  - A CTA: "View this memory in the app" → deep-link to `/memory/:id` (requires login)
-  - If the viewer is already logged in and is a listed recipient → show full content by calling LIAM API on their behalf (handled inside the component with `useAuth`)
-- If token not found → "This share link is invalid or has expired"
+A minimal pill-style segmented control:
+- Two segments: "Mine" | "Shared with Me"
+- Active segment: `bg-background` with a subtle shadow (matches screenshot)
+- Container: `bg-secondary rounded-full p-1`
+- Animated with `framer-motion` `layoutId` for the sliding active indicator (consistent with existing filter bar pattern)
+- Props: `value: 'mine' | 'shared'`, `onChange: (v) => void`
 
----
+### 5. Update `src/components/memories/MemoryFilterBar.tsx`
 
-## Wiring into Existing Components
+Add `memoryView`, `onMemoryViewChange` props and render the `MemoryViewToggle` **below** the existing icon row:
 
-### `MemoryCard.tsx`
-- Add a `Share` (`lucide-react`) icon button in the card footer area (right-aligned, next to "Synced" badge)
-- Clicking the share icon calls `onShare(memory)` prop (stops propagation so the card click-to-navigate doesn't fire)
-- `onShare` is optional prop — when not provided, the button is hidden
+```tsx
+<div className="space-y-3">
+  {/* existing icon row + filter button */}
+  <div className="flex items-center gap-3"> ... </div>
+  {/* new toggle row */}
+  <MemoryViewToggle value={memoryView} onChange={onMemoryViewChange} />
+</div>
+```
 
-### `MemoryDateGroup.tsx` + `MemoryStack.tsx`
-- Pass `onShare` down from `MemoryList` → `MemoryDateGroup` → `MemoryCard` / `MemoryStack`
-- `MemoryStack` exposes the share button on the collapsed stack header
+### 6. Update `src/pages/Memories.tsx`
 
-### `MemoryList.tsx`
-- Accepts `onShare?: (memory: Memory) => void` prop
-- Passes it through to date groups
-
-### `Memories.tsx` (page)
-- Adds `sharingMemory: Memory | null` state
-- Passes `onShare={(m) => setSharingMemory(m)}` to `MemoryList`
-- Renders `<ShareMemoryModal memory={sharingMemory} open={!!sharingMemory} onOpenChange={(open) => !open && setSharingMemory(null)} />`
-
-### `App.tsx`
-- Adds `<Route path="/shared/:token" element={<SharedMemory />} />` as a public route (outside `ProtectedRoute`)
+- Add `memoryView` state: `'mine' | 'shared'`, default `'mine'`
+- Import and call `useSharedWithMe()` hook
+- Pass `memoryView` and `onMemoryViewChange` to `MemoryFilterBar`
+- Conditionally render:
+  - `memoryView === 'mine'` → existing `<MemoryList>` with `allMemories`
+  - `memoryView === 'shared'` → new `<SharedWithMeList>` with shared items
+- When `memoryView === 'shared'`, the category filter pills still work but filter by `threadTag`
 
 ---
 
@@ -139,26 +114,22 @@ Public route `/shared/:token` — no auth required:
 
 | File | Action |
 |---|---|
-| `supabase/migrations/XXXX_memory_shares.sql` | Create `memory_shares` + `memory_share_recipients` tables with RLS |
-| `supabase/functions/memory-share/index.ts` | New edge function (create + resolve actions) |
-| `src/components/memories/ShareMemoryModal.tsx` | New component — bottom drawer with 3-step share flow |
-| `src/pages/SharedMemory.tsx` | New public page for viewing shared memory links |
-| `src/components/memories/MemoryCard.tsx` | Add optional `onShare` prop + share icon button |
-| `src/components/memories/MemoryStack.tsx` | Thread-through `onShare` prop |
-| `src/components/memories/MemoryDateGroup.tsx` | Thread-through `onShare` prop |
-| `src/components/memories/MemoryList.tsx` | Thread-through `onShare` prop |
-| `src/pages/Memories.tsx` | Wire up `sharingMemory` state + `ShareMemoryModal` |
-| `src/App.tsx` | Add `/shared/:token` public route |
+| `src/types/memory.ts` | Add `SharedMemoryItem` interface |
+| `src/hooks/useSharedWithMe.ts` | New hook — queries `memory_share_recipients` joined with `memory_shares` + profiles |
+| `src/components/memories/MemoryViewToggle.tsx` | New pill-style "Mine / Shared with Me" toggle |
+| `src/components/memories/SharedWithMeList.tsx` | New list component rendering shared memory cards |
+| `src/components/memories/MemoryFilterBar.tsx` | Add `memoryView` prop + render toggle below icon row |
+| `src/pages/Memories.tsx` | Add `memoryView` state, wire hook, conditionally render |
+
+No edge function changes, no migration needed — the existing `memory_share_recipients` table already has everything required.
 
 ---
 
-## Key Technical Decisions & 2026 Best Practices
+## Key Technical Decisions
 
-- **Token generation**: `crypto.randomUUID()` in Deno edge function — cryptographically secure, no external dependency
-- **Email validation**: zod `z.string().email()` client-side before add, same schema re-validated in edge function
-- **No memory content stored in DB**: The share record only stores the `memory_id`. Content is always fetched live from the LIAM API, preserving a single source of truth and avoiding stale data
-- **Propagation stop**: Share icon `onClick` calls `e.stopPropagation()` before `onShare(memory)` — prevents navigation to memory detail page
-- **`vaul` Drawer**: Already installed. Used as a bottom sheet on mobile (matches existing app patterns like `QuickMemoryDrawer`)
-- **Service role for resolve**: The `resolve` action in the edge function uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS for token lookup — the token itself is the authorization credential
-- **Recipient lookup**: Uses Supabase admin `auth.admin.listUsers()` filtered by email to optionally link share recipients to existing accounts — purely informational, no access gate required
-- **Share scope "thread"**: Uses `memory.tag` as the thread identifier (the existing tagging system already maps memories to sources like TWITTER, INSTAGRAM, etc.) — no new data model required
+- **No new DB migration** — the existing schema already supports the "Shared with Me" query via `recipient_email` and `recipient_user_id` columns
+- **RLS-safe query** — the `memory_share_recipients` table has RLS policies; the query uses the user's anon key so only their own rows are returned
+- **Content stays with owner** — we never proxy another user's LIAM content; the shared view shows metadata + a tap-through to `/shared/:token` where the full token-based resolution happens
+- **Toggle persists category filter** — switching between Mine/Shared does not reset the active category pill (e.g., if "Instagram" is active, Shared view filters by INSTAGRAM tag)
+- **framer-motion layoutId** — the sliding toggle indicator uses `layoutId="memoryViewActive"` (distinct from `"activeFilter"` already in use)
+- **`useSharedWithMe` is lazy** — only fetches when the user taps "Shared with Me" for the first time, to avoid unnecessary queries on every page load
