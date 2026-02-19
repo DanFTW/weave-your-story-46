@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LiquidMetal } from '@paper-design/shaders-react';
 import { Button } from '@/components/ui/button';
@@ -13,13 +13,15 @@ export default function Login() {
   const [contentVisible, setContentVisible] = useState(false);
   
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') ?? '/';
   const { user, isLoading } = useAuth();
 
   useEffect(() => {
     if (!isLoading && user) {
-      navigate('/', { replace: true });
+      navigate(redirectTo, { replace: true });
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isLoading, navigate, redirectTo]);
 
   useEffect(() => {
     const timer = setTimeout(() => setContentVisible(true), 100);

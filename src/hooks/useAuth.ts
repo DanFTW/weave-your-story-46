@@ -39,8 +39,12 @@ export function useAuth(): UseAuthReturn {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
+    // If user arrived via a share link, redirect back to it after email confirmation
+    const pendingToken = localStorage.getItem('pendingShareToken');
+    const redirectUrl = pendingToken
+      ? `${window.location.origin}/s/${pendingToken}`
+      : `${window.location.origin}/`;
+
     const { error } = await supabase.auth.signUp({
       email,
       password,

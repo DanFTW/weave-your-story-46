@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Share2, ArrowRight, Clock, Tag, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,15 +30,20 @@ type ResolveState =
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-async function resolveShareToken(token: string): Promise<ShareMetadata> {
+async function resolveShareToken(token: string, accessToken?: string): Promise<ShareMetadata> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+  };
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
+
   const response = await fetch(
     `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/memory-share`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-      },
+      headers,
       body: JSON.stringify({ action: "resolve", share_token: token }),
     }
   );
@@ -78,6 +84,7 @@ function scopeDescription(data: ShareMetadata): { icon: React.ReactNode; label: 
 
 export default function SharedMemory() {
   const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
   const [state, setState] = useState<ResolveState>({ status: "loading" });
 
   useEffect(() => {
@@ -86,12 +93,29 @@ export default function SharedMemory() {
       return;
     }
 
-    resolveShareToken(token)
-      .then((data) => setState({ status: "success", data }))
-      .catch((err: Error) =>
-        setState({ status: "error", message: err.message })
-      );
-  }, [token]);
+    // Check if user is already authenticated
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        // Authenticated: resolve with auth token so edge fn registers this viewer,
+        // then redirect straight to the Shared With Me tab
+        try {
+          await resolveShareToken(token, session.access_token);
+        } catch {
+          // Even if resolve fails, still redirect — they may already be a recipient
+        }
+        navigate("/memories?view=shared", { replace: true });
+      } else {
+        // Unauthenticated: persist token for post-login/signup consumption
+        localStorage.setItem("pendingShareToken", token);
+        // Then load the landing card so they can choose to sign in / sign up
+        resolveShareToken(token)
+          .then((data) => setState({ status: "success", data }))
+          .catch((err: Error) =>
+            setState({ status: "error", message: err.message })
+          );
+      }
+    });
+  }, [token, navigate]);
 
   // ── Loading ─────────────────────────────────────────────────────────────
 
