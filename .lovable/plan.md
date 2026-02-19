@@ -1,54 +1,39 @@
 
 
-# Fix: Share Links Returning 404
+# Fix: Shared Memory "View in App" Redirects to Wrong Page
+
+## Problem
+
+When a recipient clicks "View in app" on a shared memory link, they sign in and get redirected to `/memory/<memory_id>`. This page tries to load the memory from the LIAM API using the **recipient's** credentials, but the LIAM API only returns memories owned by that user. Since the memory belongs to someone else, the page shows "Memory not found."
 
 ## Root Cause
 
-The share URL is generated **server-side** in the `memory-share` edge function (line 13), which hardcodes `APP_BASE_URL` to `https://weave-your-story-46.lovable.app`. This means every share link points to the **published site**, which may not have the latest deployed frontend code containing the `/s/:token` route.
+In `SharedMemory.tsx`, line 162 constructs a deep link pointing to the individual memory detail page:
 
-The route `/s/:token` exists in `App.tsx` (line 69) and works correctly in the preview environment. The 404 only occurs on the published site because it hasn't been re-published with the latest code.
+```
+const deepLink = `/memory/${data.memory_id}`;
+```
 
-However, even after re-publishing, this architecture is fragile: the URL is always the published URL, so testing in preview always generates links that point elsewhere.
+This is then used in the "View in app" button (line 228) as the login redirect destination. The memory detail page was never designed to display other users' memories -- it only queries the current user's LIAM memory store.
 
 ## Fix
 
-**1. `src/config/app.ts`** -- Use `window.location.origin` as the default instead of hardcoding the published URL. This ensures share links always point to the current environment (preview or published).
+**File: `src/pages/SharedMemory.tsx`**
 
-```typescript
-export const APP_BASE_URL =
-  ((import.meta.env.VITE_APP_BASE_URL as string | undefined) ?? window.location.origin)
-    .replace(/\/$/, "");
-```
+Change the "View in app" button's redirect destination from `/memory/<id>` to `/memories?view=shared`. The `pendingShareToken` is already saved to `localStorage` (line 109) before the user reaches login, and `Memories.tsx` already consumes it on mount to register the recipient and switch to the "Shared With Me" tab.
 
-**2. `src/components/memories/ShareMemoryModal.tsx`** -- Override the server-returned `share_url` with the client-side `buildShareUrl()` so the link always uses the current origin.
+Specifically:
+- Remove the `deepLink` variable (line 162) since it's no longer needed
+- Update the Link `to` prop (line 228) from `/login?redirect=/memory/...` to `/login?redirect=/memories?view=shared`
 
-On the line where `generatedUrl` is set from `result.share_url`, replace it with a client-side construction using the token extracted from the server response:
+This is a 2-line change. No other files need modification -- the existing `pendingShareToken` flow in `Memories.tsx` already handles recipient registration and tab switching correctly.
 
-```typescript
-import { buildShareUrl } from "@/config/app";
+## Why This Works
 
-// After receiving result from edge function:
-const serverUrl: string = result.share_url;
-const tokenFromUrl = serverUrl.split("/s/").pop() ?? "";
-const generatedUrl = buildShareUrl(tokenFromUrl);
-```
+The existing flow already handles everything after login:
+1. `SharedMemory.tsx` saves the token to `localStorage` (already done on line 109)
+2. `Login.tsx` redirects to the `?redirect=` param after sign-in (already working)
+3. `Memories.tsx` reads `pendingShareToken` from localStorage, calls the edge function to register the recipient, and switches to the "Shared With Me" tab (already working)
 
-This ensures the copied/shared link always uses `window.location.origin`, pointing to whichever environment the user is currently on.
-
-## What NOT to change
-
-- No edge function changes (server URL is only used for emails, which should point to the published site)
-- No route changes (the `/s/:token` route is already correctly defined)
-- No database changes
-
-## Important: Publish Required
-
-After this fix is implemented, the app **must be re-published** so the published site has the `/s/:token` route and the SPA `_redirects` catch-all takes effect.
-
-## Technical Details
-
-| File | Change |
-|---|---|
-| `src/config/app.ts` | Default `APP_BASE_URL` to `window.location.origin` instead of hardcoded published URL |
-| `src/components/memories/ShareMemoryModal.tsx` | Import `buildShareUrl`, use client-side URL instead of server-returned URL |
+The only broken piece was the redirect destination pointing to the wrong page.
 
