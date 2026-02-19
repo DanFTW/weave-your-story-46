@@ -65,6 +65,8 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/oauth-complete" element={<OAuthComplete />} />
             <Route path="/shared/:token" element={<SharedMemory />} />
+            {/* Short-link alias — same component, token param matches */}
+            <Route path="/s/:token" element={<SharedMemory />} />
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/" element={<Home />} />
               <Route path="/threads" element={<Threads />} />

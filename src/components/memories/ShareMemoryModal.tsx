@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Share2, Link, Check, ChevronRight, Tag, Sparkles, Mail, Plus, Copy } from "lucide-react";
+import { X, Share2, Link, Check, ChevronRight, Tag, Sparkles, Mail, Plus, Copy, Lock, Globe } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ShareScope = "single" | "thread" | "custom";
+type Visibility = "recipients_only" | "anyone";
 type Step = 1 | 2 | 3;
 
 interface ShareMemoryModalProps {
@@ -98,6 +99,55 @@ function RecipientChip({ email, onRemove }: { email: string; onRemove: () => voi
   );
 }
 
+// ─── Visibility segment control ───────────────────────────────────────────────
+
+function VisibilityControl({
+  value,
+  onChange,
+}: {
+  value: Visibility;
+  onChange: (v: Visibility) => void;
+}) {
+  const options: { value: Visibility; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
+    { value: "recipients_only", label: "Invited only", Icon: Lock },
+    { value: "anyone",          label: "Anyone with link", Icon: Globe },
+  ];
+
+  return (
+    <div className="relative flex rounded-xl bg-muted p-1 gap-1" role="radiogroup" aria-label="Link visibility">
+      {options.map(({ value: v, label, Icon }) => {
+        const active = value === v;
+        return (
+          <button
+            key={v}
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(v)}
+            className={cn(
+              "relative flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-medium transition-colors",
+              active
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground/70"
+            )}
+          >
+            {active && (
+              <motion.div
+                layoutId="visibility-pill"
+                className="absolute inset-0 rounded-lg bg-background shadow-sm border border-border/40"
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              />
+            )}
+            <span className="relative flex items-center gap-1.5">
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              {label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Step indicators ──────────────────────────────────────────────────────────
 
 function StepDots({ current, total }: { current: Step; total: number }) {
@@ -134,6 +184,9 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
   const [customCondition, setCustomCondition] = useState("");
   const [threadTag, setThreadTag] = useState(memory?.tag || "");
 
+  // Visibility
+  const [visibility, setVisibility] = useState<Visibility>("recipients_only");
+
   // Recipients
   const [emailInput, setEmailInput] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -144,15 +197,15 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Reset when opened with new memory
+  // Reset when closed
   const handleOpenChange = (open: boolean) => {
     if (!open) {
-      // Reset state on close
       setTimeout(() => {
         setStep(1);
         setScope("single");
         setCustomCondition("");
         setThreadTag(memory?.tag || "");
+        setVisibility("recipients_only");
         setEmailInput("");
         setEmailError(null);
         setRecipients([]);
@@ -235,6 +288,7 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
           custom_condition: scope === "custom" ? customCondition : undefined,
           thread_tag: scope === "thread" ? threadTag : undefined,
           recipients,
+          visibility,
         }),
       });
 
@@ -244,12 +298,30 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
         throw new Error(result.error || "Failed to create share link.");
       }
 
-      setShareUrl(result.share_url);
+      const generatedUrl: string = result.share_url;
+      setShareUrl(generatedUrl);
       setStep(3);
+
+      // If no recipients were added, trigger the native share sheet so the
+      // user can instantly send the link via any installed app (Messages, Mail,
+      // WhatsApp, etc.). Fall back gracefully on desktop or if the API is blocked.
+      if (recipients.length === 0 && typeof navigator.share === "function") {
+        setTimeout(() => {
+          navigator
+            .share({
+              title: "Memory shared via Weave",
+              text: "Someone shared a memory with you on Weave.",
+              url: generatedUrl,
+            })
+            .catch(() => {
+              // User dismissed or browser blocked — the copy button is the fallback.
+            });
+        }, 400);
+      }
     } catch (err) {
       console.error("Share creation error:", err);
       toast({
-        title: "Failed to create share link",
+        title: "Failed to share memory",
         description: err instanceof Error ? err.message : "Please try again.",
         variant: "destructive",
       });
@@ -276,13 +348,27 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
     }
   };
 
-  // ── Scope label helper ────────────────────────────────────────────────────
+  // ── Derived labels ────────────────────────────────────────────────────────
 
   const scopeLabel = scope === "single"
     ? "Just this memory"
     : scope === "thread"
     ? `All "${threadTag || memory?.tag}" memories`
     : `Custom: ${customCondition || "(no condition set)"}`;
+
+  const visibilityLabel = visibility === "recipients_only"
+    ? "Only invited recipients"
+    : "Anyone with the link";
+
+  const emptyRecipientsNote = visibility === "recipients_only"
+    ? "No recipients added. Add emails above to restrict who can view this."
+    : "No recipients added. Anyone with the link will be able to view this.";
+
+  const successSubtitle = recipients.length > 0
+    ? `Only the ${recipients.length} invited recipient${recipients.length !== 1 ? "s" : ""} can view this memory.`
+    : visibility === "anyone"
+    ? "Anyone with this link can view the shared memory."
+    : "Copy and send this link to your recipients.";
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -389,7 +475,7 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
               </motion.div>
             )}
 
-            {/* ── STEP 2: Add recipients ──────────────────────────────────── */}
+            {/* ── STEP 2: Visibility + recipients ────────────────────────── */}
             {step === 2 && (
               <motion.div
                 key="step2"
@@ -402,12 +488,20 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                 <div className="mb-2">
                   <h3 className="text-sm font-semibold text-foreground">Who can see this?</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Add recipients by email. They'll receive a link to view this memory.
+                    Set visibility, then optionally add recipients by email.
                   </p>
                 </div>
 
+                {/* Visibility toggle */}
+                <VisibilityControl value={visibility} onChange={setVisibility} />
+
                 {/* Email input */}
                 <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {visibility === "recipients_only"
+                      ? "Add people who can open this link"
+                      : "Optionally notify specific people"}
+                  </p>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -439,13 +533,13 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                     <p className="text-xs text-destructive">{emailError}</p>
                   )}
                   {recipients.length >= 20 && (
-                    <p className="text-xs text-warning">
+                    <p className="text-xs text-muted-foreground">
                       Maximum 20 recipients reached.
                     </p>
                   )}
                 </div>
 
-                {/* Recipient chips */}
+                {/* Recipient chips / empty state */}
                 {recipients.length > 0 ? (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground">
@@ -463,12 +557,13 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-border/60 py-6 text-center">
-                    <Mail className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
-                    <p className="text-xs text-muted-foreground">
-                      No recipients yet. Add emails above.
-                    </p>
-                    <p className="text-xs text-muted-foreground/60 mt-0.5">
-                      You can also skip this — anyone with the link can view it.
+                    {visibility === "recipients_only" ? (
+                      <Lock className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+                    ) : (
+                      <Globe className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+                    )}
+                    <p className="text-xs text-muted-foreground px-4">
+                      {emptyRecipientsNote}
                     </p>
                   </div>
                 )}
@@ -493,9 +588,9 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                         <Check className="h-7 w-7 text-primary" />
                       </div>
                       <div className="text-center">
-                        <h3 className="text-sm font-semibold text-foreground">Share link ready!</h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Anyone with this link can view the shared memory.
+                        <h3 className="text-sm font-semibold text-foreground">Memory shared!</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 max-w-xs">
+                          {successSubtitle}
                         </p>
                       </div>
                     </div>
@@ -503,12 +598,21 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                     {/* Summary card */}
                     <div className="rounded-xl bg-muted/40 border border-border/40 p-4 space-y-2">
                       <div className="flex items-start gap-2">
-                        <span className="text-xs text-muted-foreground w-16 shrink-0">Scope</span>
+                        <span className="text-xs text-muted-foreground w-20 shrink-0">Scope</span>
                         <span className="text-xs text-foreground font-medium">{scopeLabel}</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs text-muted-foreground w-20 shrink-0">Visibility</span>
+                        <span className="text-xs text-foreground font-medium flex items-center gap-1">
+                          {visibility === "recipients_only"
+                            ? <><Lock className="h-3 w-3" /> {visibilityLabel}</>
+                            : <><Globe className="h-3 w-3" /> {visibilityLabel}</>
+                          }
+                        </span>
                       </div>
                       {recipients.length > 0 && (
                         <div className="flex items-start gap-2">
-                          <span className="text-xs text-muted-foreground w-16 shrink-0">Recipients</span>
+                          <span className="text-xs text-muted-foreground w-20 shrink-0">Recipients</span>
                           <span className="text-xs text-foreground font-medium">{recipients.length} people</span>
                         </div>
                       )}
@@ -565,12 +669,23 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                       </div>
                       <div className="h-px bg-border/40" />
                       <div className="flex items-start gap-3">
+                        {visibility === "recipients_only"
+                          ? <Lock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                          : <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        }
+                        <div>
+                          <p className="text-xs text-muted-foreground">Visibility</p>
+                          <p className="text-sm font-medium text-foreground mt-0.5">{visibilityLabel}</p>
+                        </div>
+                      </div>
+                      <div className="h-px bg-border/40" />
+                      <div className="flex items-start gap-3">
                         <Mail className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                         <div>
                           <p className="text-xs text-muted-foreground">Recipients</p>
                           <p className="text-sm font-medium text-foreground mt-0.5">
                             {recipients.length === 0
-                              ? "Anyone with the link"
+                              ? visibility === "anyone" ? "Anyone with the link" : "No specific recipients"
                               : `${recipients.length} email${recipients.length !== 1 ? "s" : ""}`}
                           </p>
                           {recipients.length > 0 && (
@@ -637,18 +752,18 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                 disabled={isCreating}
               >
                 {isCreating ? (
-                    <>
+                  <>
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
                       className="mr-2 h-4 w-4 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full"
                     />
-                    Creating…
+                    Sharing…
                   </>
                 ) : (
                   <>
-                    <Link className="mr-1.5 h-4 w-4" />
-                    Create share link
+                    <Share2 className="mr-1.5 h-4 w-4" />
+                    Share memory
                   </>
                 )}
               </Button>
