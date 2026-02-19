@@ -159,7 +159,7 @@ export default function SharedMemory() {
     }
   })();
 
-  const deepLink = `/memory/${data.memory_id}`;
+  const deepLink = "/memories?view=shared";
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
