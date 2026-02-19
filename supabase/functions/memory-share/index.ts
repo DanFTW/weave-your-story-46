@@ -92,20 +92,19 @@ Deno.serve(async (req) => {
         global: { headers: { authorization: authHeader } },
       });
 
-      // Use getUser() — delegates JWT verification to the Auth service, which
-      // handles both HS256 and ES256 tokens correctly. getClaims() only works
-      // with HS256 and silently fails on ES256 (Lovable Cloud), causing 401s.
+      // Use getClaims() for local JWT verification — avoids a network round-trip
+      // to the Auth service which can fail with HTML error pages in edge environments.
       const token = authHeader.replace("Bearer ", "");
-      const { data: userData, error: userError } = await userClient.auth.getUser(token);
-      if (userError || !userData?.user) {
-        console.error("Auth error:", userError);
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims) {
+        console.error("Auth error:", claimsError);
         return new Response(
           JSON.stringify({ error: "Invalid or expired session." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const userId = userData.user.id;
+      const userId = claimsData.claims.sub;
 
       // Validate payload
       const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at } = body;
