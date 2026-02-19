@@ -47,15 +47,17 @@ Deno.serve(async (req) => {
         global: { headers: { authorization: authHeader } },
       });
 
-      const { data: { user }, error: userError } = await userClient.auth.getUser(token);
-      if (userError || !user) {
+      // Use getClaims() for local JWT verification — works with ES256 signing-key
+      // tokens (Lovable Cloud) without a server roundtrip, unlike getUser().
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired session." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const userId = user.id;
+      const userId = claimsData.claims.sub;
 
       // Validate payload
       const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at } = body;
