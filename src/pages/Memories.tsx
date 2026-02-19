@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { MemoryFilterBar } from "@/components/memories/MemoryFilterBar";
 import { MemoryList } from "@/components/memories/MemoryList";
+import { SharedWithMeList } from "@/components/memories/SharedWithMeList";
 import { ShareMemoryModal } from "@/components/memories/ShareMemoryModal";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { useTwitterAlphaPosts } from "@/hooks/useTwitterAlphaPosts";
 import { useInstagramPosts } from "@/hooks/useInstagramPosts";
+import { useSharedWithMe } from "@/hooks/useSharedWithMe";
 import { Memory } from "@/types/memory";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,6 +51,7 @@ function formatInstagramMemory(post: {
 export default function Memories() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [memoryView, setMemoryView] = useState<'mine' | 'shared'>('mine');
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sharingMemory, setSharingMemory] = useState<Memory | null>(null);
@@ -56,6 +59,7 @@ export default function Memories() {
   const { filterDeleted, clearAll, deletedIds } = useDeletedMemories();
   const { posts: twitterPosts, fetchPosts: fetchTwitterPosts, isLoading: isLoadingTwitter } = useTwitterAlphaPosts();
   const { posts: instagramPosts, fetchPosts: fetchInstagramPosts, isLoading: isLoadingInstagram } = useInstagramPosts();
+  const { items: sharedItems, isLoading: isLoadingShared, fetch: fetchShared } = useSharedWithMe();
 
   const fetchMemories = useCallback(async () => {
     const result = await listMemories();
@@ -129,6 +133,13 @@ export default function Memories() {
     fetchInstagramPosts();
   }, []); // Only run on mount
 
+  // Lazily fetch shared items when user switches to that tab
+  useEffect(() => {
+    if (memoryView === 'shared' && sharedItems.length === 0 && !isLoadingShared) {
+      fetchShared();
+    }
+  }, [memoryView]);
+
   // Refetch when filterDeleted changes (after localStorage loads)
   useEffect(() => {
     if (memories.length > 0) {
@@ -138,7 +149,11 @@ export default function Memories() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([fetchMemories(), fetchTwitterPosts(), fetchInstagramPosts()]);
+    if (memoryView === 'shared') {
+      await fetchShared();
+    } else {
+      await Promise.all([fetchMemories(), fetchTwitterPosts(), fetchInstagramPosts()]);
+    }
     setIsRefreshing(false);
   };
 
@@ -173,7 +188,7 @@ export default function Memories() {
                 variant="ghost"
                 size="icon"
                 onClick={handleRefresh}
-                disabled={isLoading || isRefreshing}
+                disabled={isLoading || isRefreshing || isLoadingShared}
                 className="shrink-0"
               >
                 <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -200,16 +215,26 @@ export default function Memories() {
             statusFilter={statusFilter}
             onFilterChange={setActiveFilter}
             onStatusFilterChange={setStatusFilter}
+            memoryView={memoryView}
+            onMemoryViewChange={setMemoryView}
           />
         </div>
         
-        {/* Memory List */}
-        <MemoryList 
-          memories={allMemories}
-          isLoading={isLoading}
-          activeFilter={activeFilter}
-          onShare={(memory) => setSharingMemory(memory)}
-        />
+        {/* Memory List — conditional on view */}
+        {memoryView === 'mine' ? (
+          <MemoryList 
+            memories={allMemories}
+            isLoading={isLoading}
+            activeFilter={activeFilter}
+            onShare={(memory) => setSharingMemory(memory)}
+          />
+        ) : (
+          <SharedWithMeList
+            items={sharedItems}
+            isLoading={isLoadingShared}
+            activeFilter={activeFilter}
+          />
+        )}
       </div>
 
       {/* Share Modal */}
