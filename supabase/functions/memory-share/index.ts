@@ -174,9 +174,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Build the share URL (use the project's published URL)
-      const origin = req.headers.get("origin") || "https://weave-your-story-46.lovable.app";
-      const shareUrl = `${origin}/shared/${shareToken}`;
+      // Build the canonical short share URL from env secret (change once, works everywhere)
+      const APP_BASE_URL = (Deno.env.get("APP_BASE_URL") ?? "https://weave-your-story-46.lovable.app").replace(/\/$/, "");
+      const shareUrl = `${APP_BASE_URL}/s/${shareToken}`;
 
       return new Response(
         JSON.stringify({ share_token: shareToken, share_url: shareUrl }),
