@@ -9,10 +9,55 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const APP_BASE_URL = (Deno.env.get("APP_BASE_URL") ?? "https://weave-your-story-46.lovable.app").replace(/\/$/, "");
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
+}
+
+/** Send a share notification email via Resend. Non-blocking — errors are logged, not thrown. */
+async function sendShareEmail(to: string, ownerName: string | null, shareUrl: string): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  try {
+    const senderName = ownerName ?? "Someone";
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Weave <onboarding@resend.dev>",
+        to: [to],
+        subject: `${senderName} shared a memory with you`,
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+            <h2 style="font-size:20px;margin-bottom:8px;">A memory was shared with you</h2>
+            <p style="color:#555;font-size:15px;line-height:1.6;">
+              <strong>${senderName}</strong> shared a memory with you on <strong>Weave</strong>.
+              Click the button below to view it.
+            </p>
+            <a href="${shareUrl}"
+               style="display:inline-block;margin-top:20px;padding:12px 24px;background:#000;color:#fff;
+                      text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;">
+              View memory →
+            </a>
+            <p style="margin-top:24px;font-size:12px;color:#999;">
+              If you weren't expecting this, you can safely ignore this email.
+            </p>
+          </div>
+        `,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      console.warn(`Resend email to ${to} failed: ${res.status} — ${body}`);
+    }
+  } catch (err) {
+    console.warn(`Resend email to ${to} threw:`, err);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -33,7 +78,7 @@ Deno.serve(async (req) => {
 
     // ─── ACTION: create ───────────────────────────────────────────────────────
     if (action === "create") {
-      // Validate auth
+      // Validate auth header
       const authHeader = req.headers.get("authorization");
       if (!authHeader) {
         return new Response(
@@ -42,22 +87,25 @@ Deno.serve(async (req) => {
         );
       }
 
-      const token = authHeader.replace("Bearer ", "");
+      // Build a user-scoped client — the auth header is forwarded automatically.
       const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { headers: { authorization: authHeader } },
       });
 
-      // Use getClaims() for local JWT verification — works with ES256 signing-key
-      // tokens (Lovable Cloud) without a server roundtrip, unlike getUser().
-      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-      if (claimsError || !claimsData?.claims) {
+      // Use getUser() — delegates JWT verification to the Auth service, which
+      // handles both HS256 and ES256 tokens correctly. getClaims() only works
+      // with HS256 and silently fails on ES256 (Lovable Cloud), causing 401s.
+      const token = authHeader.replace("Bearer ", "");
+      const { data: userData, error: userError } = await userClient.auth.getUser(token);
+      if (userError || !userData?.user) {
+        console.error("Auth error:", userError);
         return new Response(
           JSON.stringify({ error: "Invalid or expired session." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const userId = claimsData.claims.sub;
+      const userId = userData.user.id;
 
       // Validate payload
       const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at } = body;
@@ -103,13 +151,14 @@ Deno.serve(async (req) => {
         normalizedEmails.push(email.trim().toLowerCase());
       }
 
-      // Generate a unique share token
+      // Generate share token
       const shareToken = crypto.randomUUID();
+      const shareUrl = `${APP_BASE_URL}/s/${shareToken}`;
 
       // Service role client for admin operations
       const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-      // Insert share record using the user's client (respects RLS)
+      // Insert share record using userClient (RLS: memory_shares_owner_all)
       const { data: shareData, error: shareError } = await userClient
         .from("memory_shares")
         .insert({
@@ -134,7 +183,20 @@ Deno.serve(async (req) => {
 
       const shareId = shareData.id;
 
-      // Resolve recipient emails to user IDs (best-effort, not blocking)
+      // Fetch owner name for email
+      let ownerName: string | null = null;
+      try {
+        const { data: profileData } = await adminClient
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", userId)
+          .maybeSingle();
+        ownerName = profileData?.full_name || null;
+      } catch {
+        // Non-critical
+      }
+
+      // Resolve recipient emails to user IDs and insert recipients
       if (normalizedEmails.length > 0) {
         const recipientRows: {
           share_id: string;
@@ -142,43 +204,40 @@ Deno.serve(async (req) => {
           recipient_user_id: string | null;
         }[] = [];
 
+        // Resolve all users in one call (admin only)
+        let allUsers: { id: string; email?: string }[] = [];
+        try {
+          const { data: listData } = await adminClient.auth.admin.listUsers();
+          allUsers = listData?.users ?? [];
+        } catch {
+          // Non-critical
+        }
+
         for (const email of normalizedEmails) {
-          let resolvedUserId: string | null = null;
-
-          // Try to find a matching user account
-          try {
-            const { data: listData } = await adminClient.auth.admin.listUsers();
-            if (listData?.users) {
-              const match = listData.users.find(
-                (u) => u.email?.toLowerCase() === email
-              );
-              if (match) resolvedUserId = match.id;
-            }
-          } catch {
-            // Non-critical — continue without user resolution
-          }
-
+          const match = allUsers.find((u) => u.email?.toLowerCase() === email);
           recipientRows.push({
             share_id: shareId,
             recipient_email: email,
-            recipient_user_id: resolvedUserId,
+            recipient_user_id: match?.id ?? null,
           });
         }
 
-        // Insert all recipients in one batch using the user's client
-        const { error: recipientsError } = await userClient
+        // Use adminClient for insert to bypass RLS (SECURITY DEFINER check happens at policy level,
+        // but since auth.uid() may not be set server-side, adminClient is safer here)
+        const { error: recipientsError } = await adminClient
           .from("memory_share_recipients")
           .insert(recipientRows);
 
         if (recipientsError) {
           console.error("Failed to insert recipients:", recipientsError);
-          // Non-critical failure — share is still valid
+          // Non-critical — share link is still valid
         }
-      }
 
-      // Build the canonical short share URL from env secret (change once, works everywhere)
-      const APP_BASE_URL = (Deno.env.get("APP_BASE_URL") ?? "https://weave-your-story-46.lovable.app").replace(/\/$/, "");
-      const shareUrl = `${APP_BASE_URL}/s/${shareToken}`;
+        // Send email notifications concurrently (fire-and-forget)
+        await Promise.allSettled(
+          normalizedEmails.map((email) => sendShareEmail(email, ownerName, shareUrl))
+        );
+      }
 
       return new Response(
         JSON.stringify({ share_token: shareToken, share_url: shareUrl }),
@@ -197,7 +256,6 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Use service role to bypass RLS for public token lookup
       const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
       const { data: shareData, error: shareError } = await adminClient
@@ -229,7 +287,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Fetch owner profile for display
+      // Fetch owner profile
       let ownerName: string | null = null;
       try {
         const { data: profileData } = await adminClient
@@ -242,7 +300,7 @@ Deno.serve(async (req) => {
         // Non-critical
       }
 
-      // Fetch recipients list (emails only, for display)
+      // Fetch recipients list
       const { data: recipientsData } = await adminClient
         .from("memory_share_recipients")
         .select("recipient_email")
@@ -250,8 +308,7 @@ Deno.serve(async (req) => {
 
       const recipients = recipientsData?.map((r) => r.recipient_email) || [];
 
-      // Best-effort: mark viewed_at for the first unviewed recipient
-      // (we can't reliably match by IP, so we skip — caller can provide their email)
+      // Mark viewed_at for the caller if email provided
       const callerEmail = body.viewer_email?.trim()?.toLowerCase();
       if (callerEmail) {
         await adminClient
@@ -278,7 +335,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fallthrough
     return new Response(
       JSON.stringify({ error: "Unknown action." }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
