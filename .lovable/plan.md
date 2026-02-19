@@ -1,208 +1,163 @@
 
-# Share Memory Flow — Overhaul Plan
+# Fix: Share Memory Link Generation + Email Notification + Contacts Picker
 
-## Summary of Changes Required
+## Root Cause Analysis
 
-1. **Rename CTA**: "Create share link" → "Share memory" on Step 3 footer button
-2. **Canonical short URL format**: `https://weave-your-story-46.lovable.app/s/<token>` (base URL read from env/config so it can be updated later without touching code)
-3. **Add a `/s/:token` route alias** that redirects to the existing `/shared/:token` handler (no new page needed — the `SharedMemory` component is already correct)
-4. **Visibility toggle on Step 2**: "Only invited recipients" vs "Anyone with the link" — replaces the hardcoded microcopy and adds explicit semantics
-5. **Post-generation behaviour**:
-   - If recipients were added → generate link + notify them (currently recipients are stored but no notification is sent; we add email notification via the edge function)
-   - If no recipients → generate link + trigger native Web Share API with pre-filled message
-6. **"Skip recipients" microcopy** must reflect the chosen visibility setting rather than defaulting to "anyone can view"
+### Bug 1 — 401 "Invalid or expired session" (Primary Blocker)
+
+The edge function calls `userClient.auth.getClaims(token)` to verify the JWT locally inside the Deno runtime. This works with HS256 (symmetric) JWTs but **fails silently with ES256 (asymmetric) JWTs** issued by Lovable Cloud — the edge runtime does not hold the asymmetric public key, so `getClaims()` returns an error, triggering the 401 branch.
+
+**Fix**: Replace `getClaims(token)` with `userClient.auth.getUser()` (called with no argument — the token is already forwarded via the `global.headers` on the client). This delegates to the Supabase Auth service, which handles both HS256 and ES256 correctly. This is the canonical Lovable pattern for `verify_jwt = false` functions.
+
+```typescript
+// WRONG — local verification, fails on ES256
+const { data: claimsData, error } = await userClient.auth.getClaims(token);
+
+// CORRECT — server-side verification via Auth service
+const { data: userData, error } = await userClient.auth.getUser();
+const userId = userData?.user?.id;
+```
+
+### Bug 2 — Recipients insert uses `userClient` (secondary)
+
+After the auth is fixed, the `memory_share_recipients` insert uses `userClient` which is subject to RLS. The `msr_owner_insert` WITH CHECK calls `user_owns_share(share_id)` — this should work once the correct `userId` is in the session. No change needed here once Bug 1 is fixed.
+
+### Bug 3 — No email delivery to recipients
+
+When recipients are added, the edge function stores them in DB but never sends any notification. This leaves recipients with no way to know a link was shared with them. We will add email delivery via **Resend** (free tier, 3,000 emails/month, no credit card). A `RESEND_API_KEY` secret needs to be added first.
+
+### Bug 4 — Contacts picker (Apple Contacts / native share)
+
+The Web Contacts API (`navigator.contacts.select()`) is available in Safari on iOS 14.5+ and allows picking contacts directly. After picking, each contact's email(s) are added to the recipients list, or if no email is available (phone only), the native Web Share API is triggered so the user can send via iMessage/WhatsApp/etc. This requires no special permissions on web — the browser handles the OS prompt.
 
 ---
 
-## Architecture Decisions
+## Files to Change
 
-### URL Config
-A new `src/config/app.ts` file will export:
-```typescript
-export const APP_BASE_URL =
-  import.meta.env.VITE_APP_BASE_URL ?? "https://weave-your-story-46.lovable.app";
-```
-This is the single place to change when the domain moves to `weave.cloud`. The `.env` file already exists with Supabase vars; `VITE_APP_BASE_URL` can simply be overridden by setting the env var.
+| File | Change |
+|---|---|
+| `supabase/functions/memory-share/index.ts` | Fix auth (`getUser()` instead of `getClaims()`); add Resend email send for recipients |
+| `src/components/memories/ShareMemoryModal.tsx` | Add "Pick from Contacts" button using Web Contacts API; trigger native share for contact phone numbers |
 
-The edge function generates the URL by reading a `APP_BASE_URL` Supabase secret (already manageable via the dashboard) — no hardcoded origin sniffing.
-
-### Short URL Route `/s/:token`
-Add a new React Router route `<Route path="/s/:token" element={<SharedMemory />} />` in `App.tsx`. The existing `SharedMemory` component reads `useParams<{ token: string }>()` so it will work immediately with no changes to that component. The route param name matches what `SharedMemory` already expects.
-
-### Visibility (`share_visibility`)
-A new piece of local state `visibility: 'recipients_only' | 'anyone'` defaults to `'recipients_only'`. It is:
-- Stored client-side only (no DB column needed)
-- Passed to the edge function as `visibility` alongside `recipients`
-- Displayed in the Step 3 summary card
-- The "skip / generate without recipients" microcopy changes based on this value
-
-When `visibility === 'recipients_only'` and no recipients are added, the footer shows a warning instead of allowing progression, **OR** the user can choose to skip and generate a public link (the copy makes this explicit).
-
-### Notification on share creation (when recipients present)
-The edge function currently stores recipients in `memory_share_recipients` but sends no notification. We will add a `notify_recipients` flag. When `true`, the edge function sends a simple email notification via Supabase's built-in `auth.admin.generateLink()` or just logs it for now — **however, we do not have an email/SMS secret configured**. The practical approach: the edge function will attempt to use the Supabase Auth admin API to send a magic-link-style email notification, which is already available with `SUPABASE_SERVICE_ROLE_KEY`. This is the correct 2026 pattern — no third-party email service needed for basic transactional email from Supabase.
-
-Actually, on review: Supabase's auth admin `generateLink` can send magic links to existing users, but cannot send arbitrary emails to non-users. For non-users (external recipients), we'd need Resend/SendGrid. Since no email secret is configured, we will **not** add server-side email sending. Instead, the "notification" will be the share URL that is immediately shown and can be shared by the user. The receipt of recipients is already stored for access-control purposes (`Shared with Me` view). This is documented clearly in the UI.
-
-### Native Share Sheet (no recipients)
-When 0 recipients are added and user clicks "Share memory", after the link is generated, call:
-```typescript
-navigator.share({
-  title: "Memory shared via Weave",
-  text: "Someone shared a memory with you.",
-  url: shareUrl,
-});
-```
-Fall back to copy-to-clipboard if `navigator.share` is not available (desktop). This is the correct Web Share API Level 2 pattern.
+No DB migration needed. No new edge function. One new secret: `RESEND_API_KEY`.
 
 ---
 
-## Files to Create / Modify
+## Detailed Changes
 
-| File | Action | Summary |
-|---|---|---|
-| `src/config/app.ts` | **Create** | Single source of truth for `APP_BASE_URL` |
-| `src/App.tsx` | **Modify** | Add `/s/:token` route alias |
-| `src/components/memories/ShareMemoryModal.tsx` | **Modify** | Add visibility toggle, update CTA copy, update microcopy, add native share behaviour, use `APP_BASE_URL` |
-| `supabase/functions/memory-share/index.ts` | **Modify** | Use `APP_BASE_URL` env secret for URL generation; format as `/s/<token>` |
+### 1. Edge Function — Auth Fix + Email Notification
 
-No DB migration needed. No new edge function.
+**Auth fix** (lines 45–60 of current `index.ts`):
 
----
-
-## Detailed Change Breakdown
-
-### 1. `src/config/app.ts` (new)
+Replace:
 ```typescript
-/**
- * Central app configuration.
- * Override VITE_APP_BASE_URL in your environment to change the base URL
- * (e.g., when migrating from weave-your-story-46.lovable.app to weave.cloud).
- */
-export const APP_BASE_URL =
-  (import.meta.env.VITE_APP_BASE_URL as string | undefined)?.replace(/\/$/, "") ??
-  "https://weave-your-story-46.lovable.app";
-
-/**
- * Build a canonical short share URL for a given token.
- * Format: <APP_BASE_URL>/s/<token>
- */
-export function buildShareUrl(token: string): string {
-  return `${APP_BASE_URL}/s/${token}`;
-}
+const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+if (claimsError || !claimsData?.claims) { /* 401 */ }
+const userId = claimsData.claims.sub;
 ```
 
-### 2. `src/App.tsx`
-Add one new route before the wildcard:
-```tsx
-<Route path="/s/:token" element={<SharedMemory />} />
-```
-The `SharedMemory` component reads `useParams<{ token }>()` so this works instantly with zero changes to that component.
-
-### 3. `supabase/functions/memory-share/index.ts`
-Replace the URL-building logic:
+With:
 ```typescript
-// OLD (fragile — uses request origin or hardcoded fallback)
-const origin = req.headers.get("origin") || "https://weave-your-story-46.lovable.app";
-const shareUrl = `${origin}/shared/${shareToken}`;
-
-// NEW (reads from Supabase secret, clean /s/ short path)
-const APP_BASE_URL =
-  (Deno.env.get("APP_BASE_URL") ?? "https://weave-your-story-46.lovable.app").replace(/\/$/, "");
-const shareUrl = `${APP_BASE_URL}/s/${shareToken}`;
+const { data: userData, error: userError } = await userClient.auth.getUser();
+if (userError || !userData?.user) { /* 401 */ }
+const userId = userData.user.id;
 ```
-We'll also add the `APP_BASE_URL` Supabase secret so it can be updated without a code redeploy.
 
-### 4. `src/components/memories/ShareMemoryModal.tsx`
-Changes by section:
-
-**A. New state (Step 2)**
+**Email notification** — after recipients are stored in DB, loop through `normalizedEmails` and call Resend:
 ```typescript
-type Visibility = 'recipients_only' | 'anyone';
-const [visibility, setVisibility] = useState<Visibility>('recipients_only');
-```
-
-**B. Visibility toggle UI (Step 2, below heading)**
-A pill-style `SegmentedControl` component (inline, not extracted — keep it local):
-- "Only invited recipients" → lock icon
-- "Anyone with the link" → globe icon
-- Style: `bg-muted rounded-xl p-1 flex gap-1` with `framer-motion` layout animation for the active segment
-
-**C. "Skip recipients" microcopy**
-The empty-state dashed box text changes dynamically:
-- `visibility === 'recipients_only'` → "No recipients added. Add emails above to restrict access."
-- `visibility === 'anyone'` → "No recipients added. Anyone with the link will be able to view this."
-
-**D. Step 3 summary card**
-Add a "Visibility" row that shows "Only invited recipients" or "Anyone with the link" with appropriate icon.
-
-**E. CTA button (Step 3 footer, pre-generate state)**
-```tsx
-// OLD
-<>
-  <Link className="mr-1.5 h-4 w-4" />
-  Create share link
-</>
-
-// NEW
-<>
-  <Share2 className="mr-1.5 h-4 w-4" />
-  {isCreating ? "Sharing…" : "Share memory"}
-</>
-```
-
-**F. Post-generation behaviour**
-After `setShareUrl(result.share_url)` and `setStep(3)`:
-```typescript
-// If no recipients, trigger native share sheet
-if (recipients.length === 0) {
-  const shareUrl = result.share_url;
-  if (typeof navigator.share === 'function') {
-    // Small delay so the modal transitions to step 3 first
-    setTimeout(() => {
-      navigator.share({
-        title: 'Memory shared via Weave',
-        text: `${user?.name ?? 'Someone'} shared a memory with you`,
-        url: shareUrl,
-      }).catch(() => {
-        // User dismissed or share failed — already showing the URL in UI
-      });
-    }, 400);
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+if (RESEND_API_KEY && normalizedEmails.length > 0) {
+  for (const email of normalizedEmails) {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Weave <noreply@weave-your-story-46.lovable.app>",
+        to: [email],
+        subject: `${ownerName ?? "Someone"} shared a memory with you`,
+        html: `<p>You've been invited to view a memory on Weave.</p><p><a href="${shareUrl}">View memory →</a></p>`,
+      }),
+    });
   }
-  // If navigator.share unavailable (desktop), the copy button on step 3 is the fallback
 }
 ```
 
-**G. Step 3 success state microcopy**
-Update the subtitle: currently says "Anyone with this link can view the shared memory." → dynamically reflect visibility:
-- `recipients_only`: "Only the {N} invited recipient(s) can view this memory."
-- `anyone`: "Anyone with this link can view the shared memory."
+Note: Resend requires a verified sending domain. The initial from-address will use Resend's free test domain (`onboarding@resend.dev`) if the custom domain isn't verified yet. We'll add the `RESEND_API_KEY` secret via the secrets tool first, then the code.
 
-**H. Reset on close**
-Add `setVisibility('recipients_only')` to the reset block in `handleOpenChange`.
+### 2. Frontend — Contacts Picker + Share Sheet
 
-**I. Pass `visibility` to edge function**
-```typescript
-body: JSON.stringify({
-  action: "create",
-  memory_id: memory.id,
-  share_scope: scope,
-  custom_condition: scope === "custom" ? customCondition : undefined,
-  thread_tag: scope === "thread" ? threadTag : undefined,
-  recipients,
-  visibility, // 'recipients_only' | 'anyone'
-}),
+In `ShareMemoryModal.tsx`, add a "Pick from Contacts" button next to the email input in Step 2:
+
+```tsx
+// Check if Contacts API is available (iOS Safari 14.5+)
+const contactsApiAvailable =
+  typeof navigator !== "undefined" &&
+  "contacts" in navigator &&
+  "ContactsManager" in window;
+
+const handlePickContacts = async () => {
+  try {
+    // Request email + name; may also return tel if email unavailable
+    const contacts = await (navigator as any).contacts.select(
+      ["name", "email", "tel"],
+      { multiple: true }
+    );
+    
+    const emailsAdded: string[] = [];
+    const phonesOnly: string[] = [];
+    
+    for (const contact of contacts) {
+      if (contact.email?.length > 0) {
+        for (const email of contact.email) {
+          const normalized = email.trim().toLowerCase();
+          if (isValidEmail(normalized) && !recipients.includes(normalized)) {
+            emailsAdded.push(normalized);
+          }
+        }
+      } else if (contact.tel?.length > 0) {
+        // Contact has no email — collect phone for native share
+        phonesOnly.push(contact.tel[0]);
+      }
+    }
+    
+    if (emailsAdded.length > 0) {
+      setRecipients(prev => [...prev, ...emailsAdded].slice(0, 20));
+    }
+    
+    // For phone-only contacts, trigger native share immediately
+    if (phonesOnly.length > 0 && shareUrl) {
+      navigator.share?.({ url: shareUrl, title: "Memory shared via Weave" });
+    }
+  } catch {
+    // User cancelled or API unavailable — silent
+  }
+};
 ```
-The edge function receives but does not currently use `visibility` for access-control (the existing RLS already handles this via `memory_share_recipients`). We store it for future use — this is forward-compatible.
+
+The "Pick from Contacts" button only renders on devices where `contactsApiAvailable` is true (iOS Safari). On all other devices, the email input is the only path — which is correct and complete.
+
+**Native Share enhancement**: Currently `navigator.share()` only triggers when 0 recipients. We also add a "Share via…" button on Step 3's success screen (after the link is generated) — this lets the user share the link via Messages, WhatsApp, etc. at any time.
 
 ---
 
-## What We Are NOT Doing (Scope Boundaries)
-- Not adding email/SMS transactional sends (no email secret configured; would require Resend/SendGrid)
-- Not modifying the `SharedMemory` page (already correct)
-- Not adding DB columns (no migration needed)
-- Not changing any other feature or page
+## Secret Required First
+
+Before implementing the email feature, `RESEND_API_KEY` must be added as a Supabase secret. The plan will:
+1. Prompt for the secret (via tool)
+2. Update the edge function
+3. Update the modal
+
+If `RESEND_API_KEY` is not set, the email sending block is skipped gracefully — the share link is still always generated.
 
 ---
 
-## Edge Function: `APP_BASE_URL` Secret
-We need to add `APP_BASE_URL` as a Supabase secret so the edge function builds the correct short URL. The value will be `https://weave-your-story-46.lovable.app`. This can be updated to `https://weave.cloud` later via the Supabase secrets dashboard without touching any code.
+## What Will Work After This Fix
+
+- "Share memory" button on Step 3 always generates and shows a link
+- If recipients are added + Resend is configured: each recipient gets an email with the link
+- On iOS Safari: "Pick from Contacts" button lets user select contacts; email addresses are auto-added as recipients; phone-only contacts trigger the native share sheet
+- On desktop/Android: email input works as before; "Share via…" button on success screen triggers Web Share API as fallback
+- The link always uses the canonical `/s/<token>` format
