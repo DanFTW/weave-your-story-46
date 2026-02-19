@@ -1296,7 +1296,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      user_owns_share: { Args: { p_share_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
