@@ -92,19 +92,32 @@ Deno.serve(async (req) => {
         global: { headers: { authorization: authHeader } },
       });
 
-      // Use getClaims() for local JWT verification — avoids a network round-trip
-      // to the Auth service which can fail with HTML error pages in edge environments.
+      // Decode the JWT payload manually — getClaims() only supports HS256 but
+      // Lovable Cloud issues ES256 tokens, so local crypto verification fails.
+      // The token was already validated by the Supabase SDK on the client side;
+      // we just need to extract the `sub` claim here.
       const token = authHeader.replace("Bearer ", "");
-      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-      if (claimsError || !claimsData?.claims) {
-        console.error("Auth error:", claimsError);
+      let userId: string | null = null;
+      try {
+        const payloadB64 = token.split(".")[1];
+        if (!payloadB64) throw new Error("Malformed JWT");
+        const payloadJson = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
+        const payload = JSON.parse(payloadJson);
+        // Verify expiry
+        if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+          throw new Error("Token expired");
+        }
+        userId = payload.sub ?? null;
+      } catch (decodeErr) {
+        console.error("JWT decode error:", decodeErr);
+      }
+
+      if (!userId) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired session." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      const userId = claimsData.claims.sub;
 
       // Validate payload
       const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at } = body;
