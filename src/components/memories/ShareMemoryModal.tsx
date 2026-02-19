@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { buildShareUrl } from "@/config/app";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Share2, Link, Check, ChevronRight, Tag, Sparkles, Mail, Plus, Copy, Lock, Globe, BookUser } from "lucide-react";
 import { Memory } from "@/types/memory";
@@ -328,7 +329,8 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
 
       if (fnError) throw fnError;
 
-      const generatedUrl: string = result.share_url;
+      const tokenFromUrl = (result.share_url as string).split("/s/").pop() ?? "";
+      const generatedUrl = buildShareUrl(tokenFromUrl);
       setShareUrl(generatedUrl);
       setStep(3);
 
