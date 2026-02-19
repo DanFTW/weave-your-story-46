@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MemoryFilterBar } from "@/components/memories/MemoryFilterBar";
 import { MemoryList } from "@/components/memories/MemoryList";
 import { SharedWithMeList } from "@/components/memories/SharedWithMeList";
@@ -12,6 +13,7 @@ import { Memory } from "@/types/memory";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 
 // Format Instagram post for display
 function formatInstagramMemory(post: {
@@ -49,9 +51,13 @@ function formatInstagramMemory(post: {
 }
 
 export default function Memories() {
+  const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [memoryView, setMemoryView] = useState<'mine' | 'shared'>('mine');
+  // Default to 'shared' view if the URL has ?view=shared (set by SharedMemory redirect)
+  const [memoryView, setMemoryView] = useState<'mine' | 'shared'>(
+    searchParams.get('view') === 'shared' ? 'shared' : 'mine'
+  );
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sharingMemory, setSharingMemory] = useState<Memory | null>(null);
@@ -134,6 +140,28 @@ export default function Memories() {
     fetchMemories();
     fetchTwitterPosts();
     fetchInstagramPosts();
+  }, []); // Only run on mount
+
+  // Consume a pending share token (set by SharedMemory page for unauthed users
+  // who sign in / sign up outside the share redirect path)
+  useEffect(() => {
+    const pendingToken = localStorage.getItem("pendingShareToken");
+    if (!pendingToken) return;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      // Resolve with auth so the edge fn registers this user as a recipient
+      supabase.functions.invoke("memory-share", {
+        body: { action: "resolve", share_token: pendingToken },
+      }).then(() => {
+        localStorage.removeItem("pendingShareToken");
+        setMemoryView("shared");
+        fetchShared();
+      }).catch(() => {
+        // Don't block the user even if resolution fails
+        localStorage.removeItem("pendingShareToken");
+      });
+    });
   }, []); // Only run on mount
 
   // Lazily fetch shared items when user switches to that tab
