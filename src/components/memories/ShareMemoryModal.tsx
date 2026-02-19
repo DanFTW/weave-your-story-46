@@ -314,28 +314,8 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
     setIsCreating(true);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-
-      if (!accessToken) {
-        toast({
-          title: "Not signed in",
-          description: "Please sign in to share memories.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-      const functionUrl = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/memory-share`;
-
-      const response = await fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
+      const { data: result, error: fnError } = await supabase.functions.invoke("memory-share", {
+        body: {
           action: "create",
           memory_id: memory.id,
           share_scope: scope,
@@ -343,14 +323,10 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
           thread_tag: scope === "thread" ? threadTag : undefined,
           recipients,
           visibility,
-        }),
+        },
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to create share link.");
-      }
+      if (fnError) throw fnError;
 
       const generatedUrl: string = result.share_url;
       setShareUrl(generatedUrl);
