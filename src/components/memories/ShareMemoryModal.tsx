@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Share2, Link, Check, ChevronRight, Tag, Sparkles, Mail, Plus, Copy, Lock, Globe } from "lucide-react";
+import { X, Share2, Link, Check, ChevronRight, Tag, Sparkles, Mail, Plus, Copy, Lock, Globe, BookUser } from "lucide-react";
 import { Memory } from "@/types/memory";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -172,6 +172,12 @@ function StepDots({ current, total }: { current: Step; total: number }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+// ─── Contacts API availability (iOS Safari 14.5+, Chrome Android 80+) ────────
+const contactsApiAvailable =
+  typeof navigator !== "undefined" &&
+  "contacts" in navigator &&
+  typeof (navigator as any).contacts?.select === "function";
+
 export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModalProps) {
   const { toast } = useToast();
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -250,6 +256,54 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
     if (e.key === "Enter") {
       e.preventDefault();
       addRecipient();
+    }
+  };
+
+  // ── Contacts picker (Web Contacts API — iOS Safari 14.5+) ─────────────────
+
+  const handlePickContacts = async () => {
+    if (!contactsApiAvailable) return;
+    try {
+      const picked = await (navigator as any).contacts.select(
+        ["name", "email", "tel"],
+        { multiple: true }
+      );
+
+      const emailsToAdd: string[] = [];
+      const phonesOnly: string[] = [];
+
+      for (const contact of picked) {
+        if (contact.email?.length > 0) {
+          for (const email of contact.email) {
+            const normalized = email.trim().toLowerCase();
+            if (isValidEmail(normalized) && !recipients.includes(normalized)) {
+              emailsToAdd.push(normalized);
+            }
+          }
+        } else if (contact.tel?.length > 0) {
+          // Contact has no email — queue for native share sheet
+          phonesOnly.push(contact.tel[0]);
+        }
+      }
+
+      if (emailsToAdd.length > 0) {
+        setRecipients((prev) => [...prev, ...emailsToAdd].slice(0, 20));
+      }
+
+      // For phone-only contacts, open native share sheet immediately with the
+      // current link (if already generated) or a placeholder message.
+      if (phonesOnly.length > 0) {
+        const urlToShare = shareUrl ?? window.location.href;
+        navigator.share?.({
+          title: "Memory shared via Weave",
+          text: "Someone shared a memory with you on Weave.",
+          url: urlToShare,
+        }).catch(() => {
+          // User dismissed — silent
+        });
+      }
+    } catch {
+      // User cancelled contacts picker — silent
     }
   };
 
@@ -528,6 +582,17 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
+                    {contactsApiAvailable && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handlePickContacts}
+                        className="h-10 px-3 shrink-0"
+                        title="Pick from Contacts"
+                      >
+                        <BookUser className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                   {emailError && (
                     <p className="text-xs text-destructive">{emailError}</p>
@@ -771,13 +836,31 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
           )}
 
           {step === 3 && shareUrl && (
-            <Button
-              variant="outline"
-              className="w-full h-11"
-              onClick={() => handleOpenChange(false)}
-            >
-              Done
-            </Button>
+            <div className="flex gap-2">
+              {typeof navigator.share === "function" && (
+                <Button
+                  variant="outline"
+                  className="flex-1 h-11"
+                  onClick={() => {
+                    navigator.share!({
+                      title: "Memory shared via Weave",
+                      text: "Someone shared a memory with you on Weave.",
+                      url: shareUrl,
+                    }).catch(() => {});
+                  }}
+                >
+                  <Share2 className="mr-1.5 h-4 w-4" />
+                  Share via…
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="flex-1 h-11"
+                onClick={() => handleOpenChange(false)}
+              >
+                Done
+              </Button>
+            </div>
           )}
         </div>
       </DrawerContent>
