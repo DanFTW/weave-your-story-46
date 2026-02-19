@@ -21,6 +21,19 @@ export interface MemoryCategory {
   color: string;
 }
 
+export interface SharedMemoryItem {
+  shareId: string;
+  shareToken: string;
+  memoryId: string;
+  shareScope: 'single' | 'thread' | 'custom';
+  customCondition: string | null;
+  threadTag: string | null;
+  ownerUserId: string;
+  ownerName: string | null;
+  sharedAt: string;
+  viewedAt: string | null;
+}
+
 export interface GroupedMemories {
   date: string;
   label: string;

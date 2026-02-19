@@ -13,12 +13,17 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { MemoryFilterModal } from "./MemoryFilterModal";
+import { MemoryViewToggle } from "./MemoryViewToggle";
+
+type MemoryView = 'mine' | 'shared';
 
 interface MemoryFilterBarProps {
   activeFilter: string;
   statusFilter: string;
   onFilterChange: (filter: string) => void;
   onStatusFilterChange: (status: string) => void;
+  memoryView: MemoryView;
+  onMemoryViewChange: (v: MemoryView) => void;
 }
 
 const filters = [
@@ -36,7 +41,9 @@ export function MemoryFilterBar({
   activeFilter, 
   statusFilter,
   onFilterChange,
-  onStatusFilterChange 
+  onStatusFilterChange,
+  memoryView,
+  onMemoryViewChange,
 }: MemoryFilterBarProps) {
   const [showModal, setShowModal] = useState(false);
   const [showLeftFade, setShowLeftFade] = useState(false);
@@ -65,88 +72,94 @@ export function MemoryFilterBar({
   const hasActiveFilters = activeFilter !== "all" || statusFilter !== "all";
 
   return (
-    <div className="flex items-center gap-3">
-      {/* Scrollable filter area with fades */}
-      <div className="relative flex-1 min-w-0 overflow-hidden">
-        {/* Left fade */}
-        <div 
-          className={cn(
-            "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-200",
-            showLeftFade ? "opacity-100" : "opacity-0"
-          )}
-        />
-        
-        {/* Scrollable container */}
-        <div 
-          ref={scrollRef}
-          className="flex items-center gap-3 overflow-x-auto px-1 py-1"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {filters.map((filter) => {
-            const isActive = activeFilter === filter.id;
-            const Icon = filter.icon;
-            
-            return (
-              <motion.button
-                key={filter.id}
-                onClick={() => onFilterChange(filter.id)}
-                whileTap={{ scale: 0.95 }}
-                className={cn(
-                  "relative flex-shrink-0 flex items-center justify-center rounded-xl transition-all duration-200",
-                  filter.id === "all" 
-                    ? "h-11 px-6" 
-                    : "h-11 w-11",
-                  isActive && filter.id === "all"
-                    ? "bg-foreground text-primary-foreground"
-                    : filter.id === "all"
-                    ? "bg-secondary text-secondary-foreground"
-                    : "",
-                  filter.id !== "all" && filter.gradient
-                )}
-              >
-                {filter.id === "all" ? (
-                  <span className="text-sm font-medium">{filter.label}</span>
-                ) : Icon ? (
-                  <Icon className="h-5 w-5 text-white" />
-                ) : null}
-                
-                {isActive && filter.id !== "all" && (
-                  <motion.div
-                    layoutId="activeFilter"
-                    className="absolute inset-0 rounded-xl ring-2 ring-foreground ring-offset-2 ring-offset-background"
-                    initial={false}
-                    transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                  />
-                )}
-              </motion.button>
-            );
-          })}
+    <div className="space-y-3">
+      {/* Icon filter row + filter button */}
+      <div className="flex items-center gap-3">
+        {/* Scrollable filter area with fades */}
+        <div className="relative flex-1 min-w-0 overflow-hidden">
+          {/* Left fade */}
+          <div 
+            className={cn(
+              "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-200",
+              showLeftFade ? "opacity-100" : "opacity-0"
+            )}
+          />
+          
+          {/* Scrollable container */}
+          <div 
+            ref={scrollRef}
+            className="flex items-center gap-3 overflow-x-auto px-1 py-1"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {filters.map((filter) => {
+              const isActive = activeFilter === filter.id;
+              const Icon = filter.icon;
+              
+              return (
+                <motion.button
+                  key={filter.id}
+                  onClick={() => onFilterChange(filter.id)}
+                  whileTap={{ scale: 0.95 }}
+                  className={cn(
+                    "relative flex-shrink-0 flex items-center justify-center rounded-xl transition-all duration-200",
+                    filter.id === "all" 
+                      ? "h-11 px-6" 
+                      : "h-11 w-11",
+                    isActive && filter.id === "all"
+                      ? "bg-foreground text-primary-foreground"
+                      : filter.id === "all"
+                      ? "bg-secondary text-secondary-foreground"
+                      : "",
+                    filter.id !== "all" && filter.gradient
+                  )}
+                >
+                  {filter.id === "all" ? (
+                    <span className="text-sm font-medium">{filter.label}</span>
+                  ) : Icon ? (
+                    <Icon className="h-5 w-5 text-white" />
+                  ) : null}
+                  
+                  {isActive && filter.id !== "all" && (
+                    <motion.div
+                      layoutId="activeFilter"
+                      className="absolute inset-0 rounded-xl ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+          
+          {/* Right fade */}
+          <div 
+            className={cn(
+              "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-200",
+              showRightFade ? "opacity-100" : "opacity-0"
+            )}
+          />
         </div>
-        
-        {/* Right fade */}
-        <div 
+
+        {/* Filter button */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setShowModal(true)}
           className={cn(
-            "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-200",
-            showRightFade ? "opacity-100" : "opacity-0"
+            "flex-shrink-0 h-11 w-11 rounded-xl border-border/50",
+            hasActiveFilters && "border-primary bg-primary/5"
           )}
-        />
+        >
+          <SlidersHorizontal className={cn(
+            "h-5 w-5",
+            hasActiveFilters ? "text-primary" : "text-muted-foreground"
+          )} />
+        </Button>
       </div>
 
-      {/* Filter button */}
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={() => setShowModal(true)}
-        className={cn(
-          "flex-shrink-0 h-11 w-11 rounded-xl border-border/50",
-          hasActiveFilters && "border-primary bg-primary/5"
-        )}
-      >
-        <SlidersHorizontal className={cn(
-          "h-5 w-5",
-          hasActiveFilters ? "text-primary" : "text-muted-foreground"
-        )} />
-      </Button>
+      {/* Mine / Shared with Me toggle */}
+      <MemoryViewToggle value={memoryView} onChange={onMemoryViewChange} />
 
       {/* Filter Modal */}
       <MemoryFilterModal
