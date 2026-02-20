@@ -171,7 +171,7 @@ export default function Memories() {
     };
 
     resolveAndShow();
-  }, [user]); // depend on user so this re-runs once auth state is available
+  }, [user]); // user as dep fixes the race condition
 
   // Lazily fetch shared items when user switches to that tab
   useEffect(() => {
