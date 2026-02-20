@@ -320,41 +320,24 @@ Deno.serve(async (req) => {
 
       const recipients = recipientsData?.map((r) => r.recipient_email) || [];
 
-      // Auto-register authenticated visitor as a recipient
+      // Register authenticated visitor as recipient
       const authHeader = req.headers.get("authorization");
       if (authHeader) {
-        try {
-          const token = authHeader.replace("Bearer ", "");
-          const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            global: { headers: { Authorization: authHeader } },
-          });
-          const { data: userData, error: userError } = await userClient.auth.getUser(token);
-
-          if (!userError && userData?.user) {
-            const visitorId = userData.user.id;
-            const visitorEmail = userData.user.email;
-
-            if (visitorEmail) {
-              await adminClient.from("memory_share_recipients").upsert(
-                {
-                  share_id: shareData.id,
-                  recipient_user_id: visitorId,
-                  recipient_email: visitorEmail.toLowerCase(),
-                },
-                { onConflict: "share_id,recipient_email" }
-              );
-            }
-
-            // Mark viewed_at
-            await adminClient
-              .from("memory_share_recipients")
-              .update({ viewed_at: new Date().toISOString(), recipient_user_id: visitorId })
-              .eq("share_id", shareData.id)
-              .eq("recipient_email", visitorEmail!.toLowerCase())
-              .is("viewed_at", null);
-          }
-        } catch (authErr) {
-          console.warn("Failed to auto-register visitor as recipient:", authErr);
+        const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global: { headers: { authorization: authHeader } },
+        });
+        const { data: { user: authedUser } } = await userClient.auth.getUser();
+        if (authedUser?.id && authedUser?.email) {
+          await adminClient
+            .from("memory_share_recipients")
+            .upsert(
+              {
+                share_id: shareData.id,
+                recipient_user_id: authedUser.id,
+                recipient_email: authedUser.email.toLowerCase(),
+              },
+              { onConflict: "share_id,recipient_email" }
+            );
         }
       } else {
         // Mark viewed_at for the caller if email provided (unauthenticated path)
