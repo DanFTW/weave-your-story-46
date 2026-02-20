@@ -11,13 +11,13 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const APP_BASE_URL = (Deno.env.get("APP_BASE_URL") ?? "https://weave-your-story-46.lovable.app").replace(/\/$/, "");
+const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api";
 
 function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-/** Send a share notification email via Resend. Non-blocking — errors are logged, not thrown. */
+/** Send a share notification email via Resend. Non-blocking. */
 async function sendShareEmail(to: string, ownerName: string | null, shareUrl: string): Promise<void> {
   if (!RESEND_API_KEY) return;
   try {
@@ -52,13 +52,82 @@ async function sendShareEmail(to: string, ownerName: string | null, shareUrl: st
       }),
     });
     if (!res.ok) {
-      const body = await res.text();
-      console.warn(`Resend email to ${to} failed: ${res.status} — ${body}`);
+      const b = await res.text();
+      console.warn(`Resend email to ${to} failed: ${res.status} — ${b}`);
     }
   } catch (err) {
     console.warn(`Resend email to ${to} threw:`, err);
   }
 }
+
+// ─── LIAM helpers (reused from liam-memory function) ─────────────────────────
+
+function removeLeadingZeros(arr: number[]): number[] {
+  while (arr.length > 1 && arr[0] === 0 && !(arr[1] & 0x80)) arr = arr.slice(1);
+  return arr;
+}
+
+function constructLength(arr: number[], len: number): void {
+  if (len < 0x80) {
+    arr.push(len);
+    return;
+  }
+  const octets = 1 + ((Math.log(len) / Math.LN2) >>> 3);
+  arr.push(octets | 0x80);
+  for (let i = octets - 1; i >= 0; i--) arr.push((len >>> (i * 8)) & 0xff);
+}
+
+function toDER(signature: Uint8Array): string {
+  let r = Array.from(signature.slice(0, 32));
+  let s = Array.from(signature.slice(32));
+  if (r[0] & 0x80) r = [0].concat(r);
+  if (s[0] & 0x80) s = [0].concat(s);
+  r = removeLeadingZeros(r);
+  s = removeLeadingZeros(s);
+  let arr: number[] = [0x02];
+  constructLength(arr, r.length);
+  arr = arr.concat(r);
+  arr.push(0x02);
+  constructLength(arr, s.length);
+  arr = arr.concat(s);
+  let result: number[] = [0x30];
+  constructLength(result, arr.length);
+  result = result.concat(arr);
+  return btoa(String.fromCharCode(...result));
+}
+
+async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
+  const pemContents = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s/g, "");
+  const binary = atob(pemContents);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return crypto.subtle.importKey("pkcs8", bytes.buffer, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+}
+
+async function liamRequest(endpoint: string, body: object, apiKey: string, privateKey: CryptoKey): Promise<any> {
+  const bodyStr = JSON.stringify(body);
+  const raw = await crypto.subtle.sign(
+    { name: "ECDSA", hash: { name: "SHA-256" } },
+    privateKey,
+    new TextEncoder().encode(bodyStr),
+  );
+  const signature = toDER(new Uint8Array(raw));
+  const res = await fetch(`${LIAM_API_BASE}${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apiKey, signature },
+    body: bodyStr,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`LIAM ${endpoint} failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -69,108 +138,90 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    if (!action || !["create", "resolve"].includes(action)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid action. Must be 'create' or 'resolve'." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const validActions = ["create", "resolve", "fetch-shared-memory", "list-received"];
+    if (!action || !validActions.includes(action)) {
+      return new Response(JSON.stringify({ error: `Invalid action. Must be one of: ${validActions.join(", ")}.` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // ─── ACTION: create ───────────────────────────────────────────────────────
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ─── ACTION: create ─────────────────────────────────────────────────────
     if (action === "create") {
-      // Validate auth header
       const authHeader = req.headers.get("authorization");
       if (!authHeader) {
-        return new Response(
-          JSON.stringify({ error: "Authentication required." }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Authentication required." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      // Build a user-scoped client — the auth header is forwarded automatically.
       const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { headers: { authorization: authHeader } },
       });
 
-      // Decode the JWT payload manually — getClaims() only supports HS256 but
-      // Lovable Cloud issues ES256 tokens, so local crypto verification fails.
-      // The token was already validated by the Supabase SDK on the client side;
-      // we just need to extract the `sub` claim here.
       const token = authHeader.replace("Bearer ", "");
       let userId: string | null = null;
       try {
         const payloadB64 = token.split(".")[1];
         if (!payloadB64) throw new Error("Malformed JWT");
-        const payloadJson = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
-        const payload = JSON.parse(payloadJson);
-        // Verify expiry
-        if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-          throw new Error("Token expired");
-        }
+        const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
+        if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) throw new Error("Token expired");
         userId = payload.sub ?? null;
-      } catch (decodeErr) {
-        console.error("JWT decode error:", decodeErr);
+      } catch (e) {
+        console.error("JWT decode error:", e);
       }
 
       if (!userId) {
-        return new Response(
-          JSON.stringify({ error: "Invalid or expired session." }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Invalid or expired session." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      // Validate payload
       const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at } = body;
 
-      if (!memory_id || typeof memory_id !== "string" || memory_id.trim().length === 0) {
-        return new Response(
-          JSON.stringify({ error: "memory_id is required." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (!memory_id?.trim()) {
+        return new Response(JSON.stringify({ error: "memory_id is required." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-
-      const validScopes = ["single", "thread", "custom"];
-      if (!share_scope || !validScopes.includes(share_scope)) {
-        return new Response(
-          JSON.stringify({ error: "share_scope must be 'single', 'thread', or 'custom'." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (!["single", "thread", "custom"].includes(share_scope)) {
+        return new Response(JSON.stringify({ error: "share_scope must be 'single', 'thread', or 'custom'." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-
       if (!Array.isArray(recipients)) {
-        return new Response(
-          JSON.stringify({ error: "recipients must be an array of email strings." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "recipients must be an array of email strings." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-
       if (recipients.length > 50) {
-        return new Response(
-          JSON.stringify({ error: "Maximum 50 recipients allowed per share." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Maximum 50 recipients allowed per share." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      // Validate each email
       const normalizedEmails: string[] = [];
       for (const email of recipients) {
         if (typeof email !== "string" || !isValidEmail(email.trim())) {
-          return new Response(
-            JSON.stringify({ error: `Invalid email address: ${email}` }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ error: `Invalid email address: ${email}` }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
         normalizedEmails.push(email.trim().toLowerCase());
       }
 
-      // Generate share token
       const shareToken = crypto.randomUUID();
       const shareUrl = `${APP_BASE_URL}/s/${shareToken}`;
 
-      // Service role client for admin operations
-      const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-      // Insert share record using userClient (RLS: memory_shares_owner_all)
       const { data: shareData, error: shareError } = await userClient
         .from("memory_shares")
         .insert({
@@ -187,88 +238,58 @@ Deno.serve(async (req) => {
 
       if (shareError || !shareData) {
         console.error("Failed to insert memory_share:", shareError);
-        return new Response(
-          JSON.stringify({ error: "Failed to create share record." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Failed to create share record." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       const shareId = shareData.id;
 
-      // Fetch owner name for email
       let ownerName: string | null = null;
       try {
-        const { data: profileData } = await adminClient
-          .from("profiles")
-          .select("full_name")
-          .eq("user_id", userId)
-          .maybeSingle();
-        ownerName = profileData?.full_name || null;
+        const { data: p } = await adminClient.from("profiles").select("full_name").eq("user_id", userId).maybeSingle();
+        ownerName = p?.full_name || null;
       } catch {
-        // Non-critical
+        /* non-critical */
       }
 
-      // Resolve recipient emails to user IDs and insert recipients
       if (normalizedEmails.length > 0) {
-        const recipientRows: {
-          share_id: string;
-          recipient_email: string;
-          recipient_user_id: string | null;
-        }[] = [];
-
-        // Resolve all users in one call (admin only)
+        const recipientRows: { share_id: string; recipient_email: string; recipient_user_id: string | null }[] = [];
         let allUsers: { id: string; email?: string }[] = [];
         try {
           const { data: listData } = await adminClient.auth.admin.listUsers();
           allUsers = listData?.users ?? [];
         } catch {
-          // Non-critical
+          /* non-critical */
         }
 
         for (const email of normalizedEmails) {
           const match = allUsers.find((u) => u.email?.toLowerCase() === email);
-          recipientRows.push({
-            share_id: shareId,
-            recipient_email: email,
-            recipient_user_id: match?.id ?? null,
-          });
+          recipientRows.push({ share_id: shareId, recipient_email: email, recipient_user_id: match?.id ?? null });
         }
 
-        // Use adminClient for insert to bypass RLS (SECURITY DEFINER check happens at policy level,
-        // but since auth.uid() may not be set server-side, adminClient is safer here)
-        const { error: recipientsError } = await adminClient
-          .from("memory_share_recipients")
-          .insert(recipientRows);
+        const { error: recipientsError } = await adminClient.from("memory_share_recipients").insert(recipientRows);
+        if (recipientsError) console.error("Failed to insert recipients:", recipientsError);
 
-        if (recipientsError) {
-          console.error("Failed to insert recipients:", recipientsError);
-          // Non-critical — share link is still valid
-        }
-
-        // Send email notifications concurrently (fire-and-forget)
-        await Promise.allSettled(
-          normalizedEmails.map((email) => sendShareEmail(email, ownerName, shareUrl))
-        );
+        await Promise.allSettled(normalizedEmails.map((email) => sendShareEmail(email, ownerName, shareUrl)));
       }
 
-      return new Response(
-        JSON.stringify({ share_token: shareToken, share_url: shareUrl }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ share_token: shareToken, share_url: shareUrl }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // ─── ACTION: resolve ──────────────────────────────────────────────────────
+    // ─── ACTION: resolve ────────────────────────────────────────────────────
     if (action === "resolve") {
       const { share_token } = body;
-
-      if (!share_token || typeof share_token !== "string" || share_token.trim().length === 0) {
-        return new Response(
-          JSON.stringify({ error: "share_token is required." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (!share_token?.trim()) {
+        return new Response(JSON.stringify({ error: "share_token is required." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-
-      const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
       const { data: shareData, error: shareError } = await adminClient
         .from("memory_shares")
@@ -278,41 +299,36 @@ Deno.serve(async (req) => {
 
       if (shareError) {
         console.error("Error resolving share token:", shareError);
-        return new Response(
-          JSON.stringify({ error: "Failed to resolve share token." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Failed to resolve share token." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-
       if (!shareData) {
-        return new Response(
-          JSON.stringify({ error: "Share link not found or has expired." }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Share link not found or has expired." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-
-      // Check expiry
       if (shareData.expires_at && new Date(shareData.expires_at) < new Date()) {
-        return new Response(
-          JSON.stringify({ error: "This share link has expired." }),
-          { status: 410, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "This share link has expired." }), {
+          status: 410,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      // Fetch owner profile
       let ownerName: string | null = null;
       try {
-        const { data: profileData } = await adminClient
+        const { data: p } = await adminClient
           .from("profiles")
           .select("full_name")
           .eq("user_id", shareData.owner_user_id)
           .maybeSingle();
-        ownerName = profileData?.full_name || null;
+        ownerName = p?.full_name || null;
       } catch {
-        // Non-critical
+        /* non-critical */
       }
 
-      // Fetch recipients list
       const { data: recipientsData } = await adminClient
         .from("memory_share_recipients")
         .select("recipient_email")
@@ -320,13 +336,14 @@ Deno.serve(async (req) => {
 
       const recipients = recipientsData?.map((r) => r.recipient_email) || [];
 
-      // Register authenticated visitor as recipient
       const authHeader = req.headers.get("authorization");
       if (authHeader) {
         const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           global: { headers: { authorization: authHeader } },
         });
-        const { data: { user: authedUser } } = await userClient.auth.getUser();
+        const {
+          data: { user: authedUser },
+        } = await userClient.auth.getUser();
         if (authedUser?.id && authedUser?.email) {
           await adminClient
             .from("memory_share_recipients")
@@ -336,11 +353,10 @@ Deno.serve(async (req) => {
                 recipient_user_id: authedUser.id,
                 recipient_email: authedUser.email.toLowerCase(),
               },
-              { onConflict: "share_id,recipient_email" }
+              { onConflict: "share_id,recipient_email" },
             );
         }
       } else {
-        // Mark viewed_at for the caller if email provided (unauthenticated path)
         const callerEmail = body.viewer_email?.trim()?.toLowerCase();
         if (callerEmail) {
           await adminClient
@@ -364,19 +380,212 @@ Deno.serve(async (req) => {
           created_at: shareData.created_at,
           expires_at: shareData.expires_at,
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    return new Response(
-      JSON.stringify({ error: "Unknown action." }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    // ─── ACTION: fetch-shared-memory ────────────────────────────────────────
+    // Fetches the actual memory content from LIAM using the owner's API keys.
+    // Only accessible to authenticated users listed as recipients.
+    if (action === "fetch-shared-memory") {
+      const { shareToken } = body;
+      if (!shareToken) {
+        return new Response(JSON.stringify({ error: "shareToken is required." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Require auth
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "Authentication required." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Verify caller identity
+      const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { authorization: authHeader } },
+      });
+      const {
+        data: { user: callerUser },
+      } = await userClient.auth.getUser();
+      if (!callerUser) {
+        return new Response(JSON.stringify({ error: "Invalid or expired session." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Resolve the share
+      const { data: share, error: shareErr } = await adminClient
+        .from("memory_shares")
+        .select("id, memory_id, owner_user_id, expires_at")
+        .eq("share_token", shareToken)
+        .maybeSingle();
+
+      if (shareErr || !share) {
+        return new Response(JSON.stringify({ error: "Share not found." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (share.expires_at && new Date(share.expires_at) < new Date()) {
+        return new Response(JSON.stringify({ error: "This share link has expired." }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Verify caller is a listed recipient (by user_id or email)
+      const { data: recipient } = await adminClient
+        .from("memory_share_recipients")
+        .select("id")
+        .eq("share_id", share.id)
+        .or(`recipient_user_id.eq.${callerUser.id},recipient_email.eq.${callerUser.email?.toLowerCase()}`)
+        .maybeSingle();
+
+      if (!recipient) {
+        return new Response(JSON.stringify({ error: "You don't have access to this memory." }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch the owner's LIAM credentials
+      const { data: creds, error: credsErr } = await adminClient
+        .from("user_api_keys")
+        .select("api_key, private_key, user_key")
+        .eq("user_id", share.owner_user_id)
+        .single();
+
+      if (credsErr || !creds?.api_key || !creds?.private_key || !creds?.user_key) {
+        console.error("Owner LIAM credentials unavailable:", credsErr);
+        return new Response(JSON.stringify({ error: "Memory owner credentials unavailable." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Import the owner's private key and fetch all their memories from LIAM
+      let privateKey: CryptoKey;
+      try {
+        privateKey = await importPrivateKey(creds.private_key);
+      } catch (e) {
+        console.error("Failed to import owner private key:", e);
+        return new Response(JSON.stringify({ error: "Failed to process owner credentials." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let liamData: any;
+      try {
+        liamData = await liamRequest("/memory/list", { userKey: creds.user_key }, creds.api_key, privateKey);
+      } catch (e: any) {
+        console.error("LIAM list error:", e);
+        return new Response(JSON.stringify({ error: "Failed to fetch memory from LIAM." }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Find the specific memory by its transaction number / ID
+      const allMemories: any[] = liamData?.data?.memories || liamData?.memories || [];
+      const found = allMemories.find(
+        (m: any) => m.transactionNumber === share.memory_id || m.queryHash === share.memory_id,
+      );
+
+      if (!found) {
+        // Memory may have been deleted — return a graceful response
+        return new Response(JSON.stringify({ error: "Memory no longer available." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch owner name for display
+      let ownerName: string | null = null;
+      try {
+        const { data: p } = await adminClient
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", share.owner_user_id)
+          .maybeSingle();
+        ownerName = p?.full_name || null;
+      } catch {
+        /* non-critical */
+      }
+
+      // Mark as viewed
+      await adminClient
+        .from("memory_share_recipients")
+        .update({ viewed_at: new Date().toISOString() })
+        .eq("share_id", share.id)
+        .eq("recipient_user_id", callerUser.id)
+        .is("viewed_at", null);
+
+      return new Response(
+        JSON.stringify({
+          memory: {
+            id: found.transactionNumber || found.queryHash,
+            content: found.memory || found.content || "",
+            tag: found.notesKey || found.tag || null,
+            tags: found.notesKey ? [found.notesKey] : [],
+            created_at: found.date || null,
+            owner_name: ownerName,
+          },
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ─── ACTION: list-received ──────────────────────────────────────────────
+    if (action === "list-received") {
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "Authentication required." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { authorization: authHeader } },
+      });
+      const {
+        data: { user },
+      } = await userClient.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Invalid session." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: rows } = await adminClient
+        .from("memory_share_recipients")
+        .select(
+          "share_id, recipient_email, viewed_at, memory_shares(share_token, memory_id, share_scope, thread_tag, created_at, expires_at, owner_user_id)",
+        )
+        .or(`recipient_user_id.eq.${user.id},recipient_email.eq.${user.email?.toLowerCase()}`);
+
+      return new Response(JSON.stringify({ shares: rows ?? [] }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: "Unknown action." }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
     console.error("Unhandled error in memory-share:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal server error." }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Internal server error." }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
