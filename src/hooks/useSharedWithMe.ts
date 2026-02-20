@@ -1,28 +1,32 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { SharedMemoryItem } from '@/types/memory';
 
 interface UseSharedWithMeReturn {
   items: SharedMemoryItem[];
   isLoading: boolean;
-  fetch: (overrideUserId?: string, overrideEmail?: string) => Promise<void>;
+  fetch: () => Promise<void>;
 }
 
 export function useSharedWithMe(): UseSharedWithMeReturn {
-  const { user } = useAuth();
   const [items, setItems] = useState<SharedMemoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetch = useCallback(async (overrideUserId?: string, overrideEmail?: string) => {
-    console.log('[useSharedWithMe] fetch called, user:', user?.id, user?.email);
-    const effectiveId = overrideUserId ?? user?.id;
-    const effectiveEmail = overrideEmail ?? user?.email;
-    if (!effectiveId || !effectiveEmail) return;
-    setIsLoading(true);
+  const fetch = useCallback(async () => {
+    // Get session directly from Supabase — never rely on useAuth() state timing
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    const userEmail = session?.user?.email;
 
+    console.log('[useSharedWithMe] fetch called, session user:', userId, userEmail);
+
+    if (!userId || !userEmail) {
+      console.log('[useSharedWithMe] no session, aborting');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      // Fetch share recipient rows joined with parent memory_shares
       const { data: recipientRows, error } = await supabase
         .from('memory_share_recipients')
         .select(`
@@ -41,7 +45,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
             created_at
           )
         `)
-        .or(`recipient_email.eq.${effectiveEmail},recipient_user_id.eq.${effectiveId}`)
+        .or(`recipient_email.eq.${userEmail},recipient_user_id.eq.${userId}`)
         .order('created_at', { referencedTable: 'memory_shares', ascending: false });
 
       console.log('[useSharedWithMe] query result:', { recipientRows, error });
@@ -58,7 +62,6 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
         return;
       }
 
-      // Collect unique owner_user_ids for profile resolution
       const ownerIds = [
         ...new Set(
           recipientRows
@@ -67,14 +70,12 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
         ),
       ];
 
-      // Fetch owner profiles
       const profileMap: Record<string, string | null> = {};
       if (ownerIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
           .select('user_id, full_name')
           .in('user_id', ownerIds);
-
         if (profiles) {
           for (const p of profiles) {
             profileMap[p.user_id] = p.full_name;
@@ -82,7 +83,6 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
         }
       }
 
-      // Shape into SharedMemoryItem[]
       const shaped: SharedMemoryItem[] = recipientRows
         .map((r) => {
           const ms = r.memory_shares as any;
@@ -108,7 +108,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, []); // no deps — reads session directly each time
 
   return { items, isLoading, fetch };
 }
