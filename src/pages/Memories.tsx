@@ -71,10 +71,9 @@ export default function Memories() {
   const { items: sharedItems, isLoading: isLoadingShared, fetch: fetchShared } = useSharedWithMe();
 
   const fetchMemories = useCallback(async () => {
+    if (memoryView === 'shared') return; // don't fetch own memories in shared view
     const result = await listMemories();
     if (result === null) {
-      // null means the API call failed — could be missing API keys
-      // useLiamMemory already shows a toast; we surface the setup state here
       setApiKeysRequired(true);
       return;
     }
@@ -84,7 +83,7 @@ export default function Memories() {
     const filteredResult = filterDeleted(result);
     console.log('[Memories] After filtering deleted:', filteredResult.length);
     setMemories(filteredResult);
-  }, [listMemories, filterDeleted, deletedIds]);
+  }, [listMemories, filterDeleted, deletedIds, memoryView]);
 
   // Convert locally stored Twitter posts to Memory format
   const twitterAsMemories = useMemo((): Memory[] => {
@@ -153,18 +152,26 @@ export default function Memories() {
     const pendingToken = localStorage.getItem("pendingShareToken");
     if (!pendingToken || !user) return;
 
-    // Resolve with auth so the edge fn registers this user as a recipient
-    supabase.functions.invoke("memory-share", {
-      body: { action: "resolve", share_token: pendingToken },
-    }).then(() => {
-      localStorage.removeItem("pendingShareToken");
-      setMemoryView("shared");
-      fetchShared();
-    }).catch(() => {
-      // Don't block the user even if resolution fails
-      localStorage.removeItem("pendingShareToken");
-    });
-  }, [user]); // Re-run when user becomes available
+    const resolveAndShow = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await supabase.functions.invoke("memory-share", {
+          body: { action: "resolve", share_token: pendingToken },
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : undefined,
+        });
+      } catch (e) {
+        console.warn("[Memories] share resolve failed", e);
+      } finally {
+        localStorage.removeItem("pendingShareToken");
+        setMemoryView("shared");
+        fetchShared();
+      }
+    };
+
+    resolveAndShow();
+  }, [user]); // depend on user so this re-runs once auth state is available
 
   // Lazily fetch shared items when user switches to that tab
   useEffect(() => {
