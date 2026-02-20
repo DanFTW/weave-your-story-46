@@ -99,10 +99,9 @@ export default function SharedMemory() {
       if (session) {
         // Authenticated: resolve metadata + fetch actual memory content
         try {
-          const [meta, memory] = await Promise.all([
-            resolveShareToken(token, session.access_token),
-            fetchSharedContent(token, session.access_token),
-          ]);
+          // Resolve first (registers user as recipient), then fetch content
+          const meta = await resolveShareToken(token, session.access_token);
+          const memory = await fetchSharedContent(token, session.access_token);
           setState({ status: "ready", meta, memory });
         } catch (err: any) {
           setState({ status: "error", message: err.message ?? "Failed to load shared memory." });
@@ -208,7 +207,7 @@ export default function SharedMemory() {
           </div>
 
           <div className="space-y-3">
-            <Button className="w-full h-12 text-sm font-semibold" onClick={() => navigate("/login")}>
+            <Button className="w-full h-12 text-sm font-semibold" onClick={() => navigate(`/login?redirect=/s/${token}`)}>
               Sign in to view
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
