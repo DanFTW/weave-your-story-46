@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Share2, ArrowRight, Clock, Tag, Sparkles, AlertCircle, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,12 +58,21 @@ async function resolveShareToken(token: string, accessToken?: string): Promise<S
 }
 
 async function fetchSharedContent(token: string, accessToken: string): Promise<MemoryContent> {
-  const res = await supabase.functions.invoke("memory-share", {
-    body: { action: "fetch-shared-memory", shareToken: token },
-  });
-  if (res.error) throw new Error(res.error.message);
-  if (res.data?.error) throw new Error(res.data.error);
-  return res.data.memory as MemoryContent;
+  const res = await fetch(
+    `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/memory-share`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ action: "fetch-shared-memory", shareToken: token }),
+    },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to load shared memory.");
+  return data.memory as MemoryContent;
 }
 
 function scopeDescription(data: ShareMetadata): { icon: React.ReactNode; label: string } {
@@ -88,6 +97,7 @@ export default function SharedMemory() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const [state, setState] = useState<PageState>({ status: "loading" });
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!token) {
@@ -95,25 +105,41 @@ export default function SharedMemory() {
       return;
     }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    async function loadWithSession(accessToken: string) {
+      if (hasLoadedRef.current) return;
+      hasLoadedRef.current = true;
+      try {
+        const meta = await resolveShareToken(token!, accessToken);
+        const memory = await fetchSharedContent(token!, accessToken);
+        setState({ status: "ready", meta, memory });
+      } catch (err: any) {
+        setState({ status: "error", message: err.message ?? "Failed to load shared memory." });
+      }
+    }
+
+    // Listen for auth state changes (handles OAuth redirect timing)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        loadWithSession(session.access_token);
+      }
+    });
+
+    // Also check current session immediately (handles already-authenticated users)
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        // Authenticated: resolve metadata + fetch actual memory content
-        try {
-          // Resolve first (registers user as recipient), then fetch content
-          const meta = await resolveShareToken(token, session.access_token);
-          const memory = await fetchSharedContent(token, session.access_token);
-          setState({ status: "ready", meta, memory });
-        } catch (err: any) {
-          setState({ status: "error", message: err.message ?? "Failed to load shared memory." });
-        }
+        loadWithSession(session.access_token);
       } else {
-        // Unauthenticated: show landing card so they can sign in
+        // Unauthenticated: show landing card
         localStorage.setItem("pendingShareToken", token);
         resolveShareToken(token)
           .then((data) => setState({ status: "landing", data }))
           .catch((err: Error) => setState({ status: "error", message: err.message }));
       }
     });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [token]);
 
   // ── Loading ──────────────────────────────────────────────────────────────
