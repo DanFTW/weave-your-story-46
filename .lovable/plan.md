@@ -1,63 +1,87 @@
 
-
-# Fix: `auth.getUser()` Returns Null in Edge Function
+# Fix: Shared Memories Fail for Non-LIAM (Local) Memories
 
 ## Root Cause
 
-The `memory-share` edge function has an inconsistency in how it verifies authentication:
+The `fetch-shared-memory` edge function action retrieves memory content by querying the LIAM API using the owner's credentials. This works for memories created through LIAM, but **fails for local memories** (Instagram, Twitter, YouTube) because those memories are never stored in LIAM -- they only exist in the browser.
 
-- **`create` action (WORKS):** Manually decodes the JWT from the Authorization header to extract the user ID. Never calls `getUser()`.
-- **`fetch-shared-memory` action (BROKEN):** Creates a fresh Supabase client with global headers and calls `userClient.auth.getUser()` without arguments. On a freshly-created server-side client, `getUser()` has no stored session to reference, so it returns `null` -- causing the 401 "Invalid or expired session" error.
-- **`resolve` action (SILENTLY BROKEN):** Same `getUser()` pattern for recipient registration. Returns `null`, so the user is never registered as a recipient. This causes a cascading failure: even if `fetch-shared-memory` auth were fixed, the recipient check would fail with 403.
+The database confirms: share token `b8f4f659-6c87-4daf-804b-b25afa910a85` maps to `memory_id: instagram-local-18252933193290744`. The LIAM API has no record of this memory, so the edge function returns 404 "Memory no longer available."
 
-## Fix
+This affects all memory types with IDs prefixed `instagram-local-`, `twitter-local-`, or similar.
 
-### File: `supabase/functions/memory-share/index.ts`
+## Solution: Store Memory Content at Share-Creation Time
 
-Pass the extracted JWT explicitly to `auth.getUser(jwt)` instead of calling `auth.getUser()` with no arguments. This tells the Supabase Auth service to verify the specific token rather than relying on the client's non-existent session state.
+Instead of relying on LIAM to retrieve content at view time, store a snapshot of the memory content in the `memory_shares` table when the share is created. The `fetch-shared-memory` action then returns this stored snapshot directly, eliminating the LIAM dependency entirely.
 
-**Change 1 -- `resolve` action (recipient registration, ~line 339-346):**
+This is more robust for all memory types and also faster (no LIAM round-trip at view time).
 
-```
-Before:
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { authorization: authHeader } },
-  });
-  const { data: { user: authedUser } } = await userClient.auth.getUser();
+## Changes
 
-After:
-  const jwt = authHeader.replace("Bearer ", "");
-  const { data: { user: authedUser } } = await adminClient.auth.getUser(jwt);
+### 1. Database Migration: Add `memory_content` Column
+
+Add a JSONB column `memory_content` to the `memory_shares` table to store a snapshot of the shared memory.
+
+```sql
+ALTER TABLE memory_shares
+ADD COLUMN memory_content jsonb;
 ```
 
-**Change 2 -- `fetch-shared-memory` action (~line 408-419):**
+### 2. Edge Function: `supabase/functions/memory-share/index.ts`
+
+**`create` action:** Accept an optional `memory_content` field in the request body and store it in the new column. The client sends the memory's content, tag, and creation date at share time.
+
+**`fetch-shared-memory` action:** Check if `memory_content` is stored in the share record. If yes, return it directly (no LIAM call needed). If no (legacy shares created before this change), fall back to the existing LIAM lookup.
+
+This ensures backward compatibility with existing shares while fixing all future shares.
+
+### 3. Frontend: `src/components/memories/ShareMemoryModal.tsx`
+
+Update `handleCreateShare` to include the memory's content in the `create` request body:
 
 ```
-Before:
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { authorization: authHeader } },
-  });
-  const { data: { user: callerUser } } = await userClient.auth.getUser();
-
-After:
-  const jwt = authHeader.replace("Bearer ", "");
-  const { data: { user: callerUser } } = await adminClient.auth.getUser(jwt);
+body: {
+  action: "create",
+  memory_id: memory.id,
+  share_scope: scope,
+  memory_content: {
+    content: memory.content,
+    tag: memory.tag,
+    created_at: memory.createdAt,
+  },
+  ...other fields
+}
 ```
 
-Using `adminClient.auth.getUser(jwt)` (the service-role client) is the standard Supabase edge function pattern for verifying JWTs server-side. It delegates verification to the Supabase Auth service, which handles both HS256 and ES256 tokens correctly.
+The `Memory` type already has `content`, `tag`, and `createdAt` fields, so no type changes are needed.
 
-## No Other Files Change
+## Technical Details
 
-- `SharedMemory.tsx` is correct: it passes the access token explicitly via raw `fetch` with `Authorization: Bearer` header
-- `useAuth.ts` OAuth redirect handling is correct
-- `Login.tsx` redirect flow is correct
-- Frontend routing is correct
+### Database column
+- Column: `memory_content jsonb` (nullable for backward compatibility)
+- Contains: `{ "content": "...", "tag": "...", "created_at": "..." }`
 
-## Expected Result After Fix
+### Edge function `create` action change
+- Accept `memory_content` from request body
+- Pass it to the `memory_shares` insert
 
-1. User opens share link, sees landing card, clicks "Sign in to view"
-2. Signs in, redirected back to `/s/<token>`
-3. `resolveShareToken` called with auth -- `getUser(jwt)` succeeds, user registered as recipient
-4. `fetchSharedContent` called with auth -- `getUser(jwt)` succeeds, recipient check passes, memory content returned
-5. User sees the shared memory content
+### Edge function `fetch-shared-memory` action change
+- After resolving the share and verifying the recipient, check `share.memory_content`
+- If present: return it directly as the response (no LIAM call)
+- If absent (legacy): fall back to existing LIAM fetch logic
 
+### ShareMemoryModal change
+- Add `memory_content` field to the `supabase.functions.invoke` call body
+
+## No Other Changes
+
+- `SharedMemory.tsx` already handles the response format correctly
+- `useSharedWithMe.ts` is unaffected (it only lists shares, doesn't fetch content)
+- RLS policies are unaffected (the edge function uses the admin client)
+
+## Expected Result
+
+1. User shares any memory type (LIAM, Instagram, Twitter, YouTube)
+2. Memory content is stored as a snapshot in `memory_shares.memory_content`
+3. Recipient opens share link
+4. Edge function returns stored content directly -- works for all memory types
+5. Recipient sees the memory content reliably
