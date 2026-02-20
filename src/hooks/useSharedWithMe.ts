@@ -15,6 +15,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetch = useCallback(async (overrideUserId?: string, overrideEmail?: string) => {
+    console.log('[useSharedWithMe] fetch called, user:', user?.id, user?.email);
     const effectiveId = overrideUserId ?? user?.id;
     const effectiveEmail = overrideEmail ?? user?.email;
     if (!effectiveId || !effectiveEmail) return;
@@ -42,6 +43,8 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
         `)
         .or(`recipient_email.eq.${effectiveEmail},recipient_user_id.eq.${effectiveId}`)
         .order('created_at', { referencedTable: 'memory_shares', ascending: false });
+
+      console.log('[useSharedWithMe] query result:', { recipientRows, error });
 
       if (error) {
         console.error('[useSharedWithMe] query error:', error);
