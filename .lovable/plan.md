@@ -1,47 +1,47 @@
 
 
-# Fix: Shared Memory Link Flow
+# Fix: Share Links Pointing to Preview URL Instead of Published App
 
-## Problems Identified
+## Root Cause
 
-### 1. Missing redirect parameter after login
-In `SharedMemory.tsx` (line 211), when an unauthenticated user clicks "Sign in to view," they navigate to `/login` with **no redirect parameter**. After signing in, the Login page defaults to redirecting to `/` (home). The user never returns to the shared memory page or the memories page, so the shared memory effectively "disappears."
+Share links are generated using `window.location.origin` (via `buildShareUrl()` in `src/config/app.ts`). When you create a share link while using the preview environment, the link contains the preview domain (e.g., `https://id-preview--....lovable.app/s/abc123`). This preview domain is behind Lovable's own authentication wall, so recipients see Lovable's sign-in page instead of your Weave app.
 
-### 2. Race condition: parallel resolve + fetch
-In `SharedMemory.tsx` (lines 102-105), the authenticated flow calls `resolveShareToken` and `fetchSharedContent` in parallel via `Promise.all`. However, `fetchSharedContent` (the `fetch-shared-memory` action) checks if the caller is a registered recipient (line 443-455 in the edge function). The recipient row is only created by `resolveShareToken`. Running them in parallel means `fetchSharedContent` can execute before the recipient is registered, returning a **403 "You don't have access"** error.
+## Fix
 
-### 3. Redundant pendingShareToken path
-The `pendingShareToken` localStorage mechanism in `Memories.tsx` is a fallback for the redirect, but since we're fixing the redirect to go back to `/s/<token>`, the primary flow no longer depends on it. It remains as a safety net but the main path will work correctly now.
+Set `VITE_APP_BASE_URL` in the `.env` file to your published URL. This ensures all generated share links always point to the public-facing app, regardless of which environment you're using.
 
----
+### File: `.env`
 
-## Proposed Changes
-
-### File 1: `src/pages/SharedMemory.tsx`
-
-**Fix A -- Add redirect param to login navigation (line 211):**
-Change the "Sign in to view" button from `navigate("/login")` to `navigate("/login?redirect=/s/" + token)`. After auth, the Login page will redirect back to the share link, where `SharedMemory` will now detect the session and show the full memory.
-
-**Fix B -- Sequentialize resolve before fetch (lines 102-105):**
-Change from `Promise.all([resolveShareToken, fetchSharedContent])` to sequential calls: first resolve (which registers the user as recipient), then fetch (which requires recipient status). This eliminates the 403 race condition.
+Add this line:
 
 ```
-Before:
-  const [meta, memory] = await Promise.all([
-    resolveShareToken(token, session.access_token),
-    fetchSharedContent(token, session.access_token),
-  ]);
-
-After:
-  const meta = await resolveShareToken(token, session.access_token);
-  const memory = await fetchSharedContent(token, session.access_token);
+VITE_APP_BASE_URL=https://weave-your-story-46.lovable.app
 ```
 
----
+This single change is all that's needed. The existing code in `src/config/app.ts` already reads this variable:
 
-## Technical Details
+```typescript
+export const APP_BASE_URL =
+  ((import.meta.env.VITE_APP_BASE_URL as string | undefined) ?? window.location.origin)
+    .replace(/\/$/, "");
+```
 
-- **No edge function changes needed** -- the backend logic is correct; the race condition is purely a client-side sequencing issue.
-- **No changes to Memories.tsx** -- the `pendingShareToken` path remains as a fallback; no modifications required.
-- **Only `SharedMemory.tsx` is modified** -- two small, targeted changes.
+And `buildShareUrl()` already uses it to construct links:
+
+```typescript
+export function buildShareUrl(token: string): string {
+  return `${APP_BASE_URL}/s/${token}`;
+}
+```
+
+## Why This Works
+
+- Share links will always be `https://weave-your-story-46.lovable.app/s/<token>` -- the published domain has no Lovable auth wall
+- The published app has `public/_redirects` with a catch-all rule, so `/s/:token` deep links load the SPA correctly
+- `SharedMemory.tsx` renders on that route without `ProtectedRoute`, showing the landing card to unauthenticated users
+- The "Sign in to view" button navigates to `/login?redirect=/s/<token>`, keeping them in your Weave app
+
+## No Other Changes Needed
+
+The routing (`App.tsx`), the `SharedMemory.tsx` component, and the `Login.tsx` redirect handling are all working correctly. The only issue was the link origin.
 
