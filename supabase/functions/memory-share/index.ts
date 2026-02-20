@@ -338,12 +338,10 @@ Deno.serve(async (req) => {
 
       const authHeader = req.headers.get("authorization");
       if (authHeader) {
-        const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-          global: { headers: { authorization: authHeader } },
-        });
+        const jwt = authHeader.replace("Bearer ", "");
         const {
           data: { user: authedUser },
-        } = await userClient.auth.getUser();
+        } = await adminClient.auth.getUser(jwt);
         if (authedUser?.id && authedUser?.email) {
           await adminClient
             .from("memory_share_recipients")
@@ -406,12 +404,10 @@ Deno.serve(async (req) => {
       }
 
       // Verify caller identity
-      const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        global: { headers: { authorization: authHeader } },
-      });
+      const jwt = authHeader.replace("Bearer ", "");
       const {
         data: { user: callerUser },
-      } = await userClient.auth.getUser();
+      } = await adminClient.auth.getUser(jwt);
       if (!callerUser) {
         return new Response(JSON.stringify({ error: "Invalid or expired session." }), {
           status: 401,
