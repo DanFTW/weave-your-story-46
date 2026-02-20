@@ -96,14 +96,15 @@ export default function SharedMemory() {
     // Check if user is already authenticated
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
-        // Authenticated: resolve with auth token so edge fn registers this viewer,
-        // then redirect straight to the Shared With Me tab
+        // Authenticated: resolve the share and show the landing card (don't redirect)
+        // so the user can see what was shared before going to their memories
         try {
-          await resolveShareToken(token, session.access_token);
-        } catch {
-          // Even if resolve fails, still redirect — they may already be a recipient
+          const data = await resolveShareToken(token, session.access_token);
+          setState({ status: "success", data });
+        } catch (err: any) {
+          setState({ status: "error", message: err.message ?? "Failed to load shared memory." });
         }
-        navigate("/memories?view=shared", { replace: true });
+        return;
       } else {
         // Unauthenticated: persist token for post-login/signup consumption
         localStorage.setItem("pendingShareToken", token);
@@ -225,14 +226,15 @@ export default function SharedMemory() {
 
         {/* CTA */}
         <div className="space-y-3">
-          <Link to={`/login?redirect=${encodeURIComponent(deepLink)}`} className="block">
-            <Button className="w-full h-12 text-sm font-semibold">
-              View in app
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          <Button
+            className="w-full h-12 text-sm font-semibold"
+            onClick={() => navigate("/memories?view=shared", { replace: true })}
+          >
+            View in Memories
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
           <p className="text-center text-xs text-muted-foreground">
-            You'll need to sign in to see the full memory.
+            This memory has been shared with you.
           </p>
         </div>
 
