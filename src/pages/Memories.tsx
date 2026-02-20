@@ -175,10 +175,10 @@ export default function Memories() {
 
   // Lazily fetch shared items when user switches to that tab
   useEffect(() => {
-    if (memoryView === 'shared' && sharedItems.length === 0 && !isLoadingShared) {
+    if (memoryView === 'shared' && sharedItems.length === 0 && !isLoadingShared && user) {
       fetchShared();
     }
-  }, [memoryView]);
+  }, [memoryView, user]);
 
   // Refetch when filterDeleted changes (after localStorage loads)
   useEffect(() => {
