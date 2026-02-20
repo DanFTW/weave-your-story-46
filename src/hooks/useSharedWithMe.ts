@@ -6,7 +6,7 @@ import { SharedMemoryItem } from '@/types/memory';
 interface UseSharedWithMeReturn {
   items: SharedMemoryItem[];
   isLoading: boolean;
-  fetch: () => Promise<void>;
+  fetch: (overrideUserId?: string, overrideEmail?: string) => Promise<void>;
 }
 
 export function useSharedWithMe(): UseSharedWithMeReturn {
@@ -14,8 +14,10 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
   const [items, setItems] = useState<SharedMemoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetch = useCallback(async () => {
-    if (!user) return;
+  const fetch = useCallback(async (overrideUserId?: string, overrideEmail?: string) => {
+    const effectiveId = overrideUserId ?? user?.id;
+    const effectiveEmail = overrideEmail ?? user?.email;
+    if (!effectiveId || !effectiveEmail) return;
     setIsLoading(true);
 
     try {
@@ -38,7 +40,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
             created_at
           )
         `)
-        .or(`recipient_email.eq.${user.email},recipient_user_id.eq.${user.id}`)
+        .or(`recipient_email.eq.${effectiveEmail},recipient_user_id.eq.${effectiveId}`)
         .order('created_at', { referencedTable: 'memory_shares', ascending: false });
 
       if (error) {
