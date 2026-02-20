@@ -337,19 +337,22 @@ Deno.serve(async (req) => {
       const recipients = recipientsData?.map((r) => r.recipient_email) || [];
 
       const authHeader = req.headers.get("authorization");
-      if (authHeader) {
+      if (authHeader?.startsWith("Bearer ")) {
         const jwt = authHeader.replace("Bearer ", "");
-        const {
-          data: { user: authedUser },
-        } = await adminClient.auth.getUser(jwt);
-        if (authedUser?.id && authedUser?.email) {
+        const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(jwt);
+        const authedUserId = claimsErr ? null : claimsData?.claims?.sub;
+        const authedEmail = claimsErr ? null : (claimsData?.claims?.email as string | undefined);
+        if (authedUserId && authedEmail) {
           await adminClient
             .from("memory_share_recipients")
             .upsert(
               {
                 share_id: shareData.id,
-                recipient_user_id: authedUser.id,
-                recipient_email: authedUser.email.toLowerCase(),
+                recipient_user_id: authedUserId,
+                recipient_email: authedEmail.toLowerCase(),
               },
               { onConflict: "share_id,recipient_email" },
             );
@@ -403,17 +406,19 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Verify caller identity
+      // Verify caller identity using getClaims (works with signing-keys / ES256)
       const jwt = authHeader.replace("Bearer ", "");
-      const {
-        data: { user: callerUser },
-      } = await adminClient.auth.getUser(jwt);
-      if (!callerUser) {
+      const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(jwt);
+      if (claimsErr || !claimsData?.claims?.sub) {
         return new Response(JSON.stringify({ error: "Invalid or expired session." }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      const callerUser = { id: claimsData.claims.sub as string, email: claimsData.claims.email as string };
 
       // Resolve the share
       const { data: share, error: shareErr } = await adminClient
