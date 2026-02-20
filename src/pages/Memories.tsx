@@ -9,6 +9,7 @@ import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { useTwitterAlphaPosts } from "@/hooks/useTwitterAlphaPosts";
 import { useInstagramPosts } from "@/hooks/useInstagramPosts";
 import { useSharedWithMe } from "@/hooks/useSharedWithMe";
+import { useAuth } from "@/hooks/useAuth";
 import { Memory } from "@/types/memory";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ function formatInstagramMemory(post: {
 }
 
 export default function Memories() {
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -135,34 +137,34 @@ export default function Memories() {
     );
   }, [memories, twitterAsMemories, instagramAsMemories]);
 
-  // Initial fetch on mount
+  // Initial fetch on mount — skip own-memory fetches when landing on shared view
   useEffect(() => {
-    fetchMemories();
-    fetchTwitterPosts();
-    fetchInstagramPosts();
+    if (memoryView !== 'shared') {
+      fetchMemories();
+      fetchTwitterPosts();
+      fetchInstagramPosts();
+    }
   }, []); // Only run on mount
 
   // Consume a pending share token (set by SharedMemory page for unauthed users
-  // who sign in / sign up outside the share redirect path)
+  // who sign in / sign up outside the share redirect path).
+  // Depends on `user` so it re-runs once auth state is available.
   useEffect(() => {
     const pendingToken = localStorage.getItem("pendingShareToken");
-    if (!pendingToken) return;
+    if (!pendingToken || !user) return;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return;
-      // Resolve with auth so the edge fn registers this user as a recipient
-      supabase.functions.invoke("memory-share", {
-        body: { action: "resolve", share_token: pendingToken },
-      }).then(() => {
-        localStorage.removeItem("pendingShareToken");
-        setMemoryView("shared");
-        fetchShared();
-      }).catch(() => {
-        // Don't block the user even if resolution fails
-        localStorage.removeItem("pendingShareToken");
-      });
+    // Resolve with auth so the edge fn registers this user as a recipient
+    supabase.functions.invoke("memory-share", {
+      body: { action: "resolve", share_token: pendingToken },
+    }).then(() => {
+      localStorage.removeItem("pendingShareToken");
+      setMemoryView("shared");
+      fetchShared();
+    }).catch(() => {
+      // Don't block the user even if resolution fails
+      localStorage.removeItem("pendingShareToken");
     });
-  }, []); // Only run on mount
+  }, [user]); // Re-run when user becomes available
 
   // Lazily fetch shared items when user switches to that tab
   useEffect(() => {
