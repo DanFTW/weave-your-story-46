@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2, Smartphone } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getIntegrationDetail } from "@/data/integrations";
 import { IntegrationGradientBackground } from "@/components/integrations/IntegrationGradientBackground";
@@ -11,6 +11,7 @@ import { IntegrationConnectedAccount } from "@/components/integrations/Integrati
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { OAuthConfirmDialog } from "@/components/integrations/OAuthConfirmDialog";
 import { useComposio } from "@/hooks/useComposio";
+import { useIOSContacts, isDespiaIOS } from "@/hooks/useIOSContacts";
 import { useToast } from "@/hooks/use-toast";
 
 export default function IntegrationDetail() {
@@ -19,7 +20,13 @@ export default function IntegrationDetail() {
   const { toast } = useToast();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   
+  const isIOSContacts = integrationId === "ios-contacts";
+  
   const integration = integrationId ? getIntegrationDetail(integrationId) : undefined;
+  
+  // Use the appropriate hook based on integration type
+  const iosContacts = useIOSContacts();
+  const composio = useComposio(isIOSContacts ? "__unused__" : (integrationId || "gmail"));
   
   const {
     connectedAccount,
@@ -28,7 +35,7 @@ export default function IntegrationDetail() {
     connect,
     disconnect,
     checkStatus,
-  } = useComposio(integrationId || "gmail");
+  } = isIOSContacts ? iosContacts : composio;
 
   // Track if we've already handled the return redirect
   const hasHandledReturn = useRef(false);
@@ -72,13 +79,26 @@ export default function IntegrationDetail() {
     );
   }
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
+    if (isIOSContacts) {
+      // Direct native bridge call — no OAuth dialog needed
+      try {
+        await connect();
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Connection failed";
+        toast({
+          title: "Connection failed",
+          description: errorMsg,
+          variant: "destructive",
+        });
+      }
+      return;
+    }
     setShowConfirmDialog(true);
   };
 
   const handleConfirmConnect = async () => {
     try {
-      // Initial connection: don't force re-auth, use existing browser session if available
       await connect(`/integration/${integrationId}`, false);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Connection failed";
@@ -230,9 +250,18 @@ export default function IntegrationDetail() {
               </>
             ) : (
               <>
-                {/* Disconnected State: Connect Button */}
+                {/* Disconnected State: Connect Button or iOS-only message */}
                 <div className="mt-8">
-                  <IntegrationConnectButton onClick={handleConnect} />
+                  {isIOSContacts && !isDespiaIOS ? (
+                    <div className="flex flex-col items-center gap-3 py-6 text-center">
+                      <Smartphone className="w-10 h-10 text-muted-foreground" />
+                      <p className="text-muted-foreground text-sm">
+                        This integration is only available in the iOS app.
+                      </p>
+                    </div>
+                  ) : (
+                    <IntegrationConnectButton onClick={handleConnect} />
+                  )}
                 </div>
 
                 {/* Divider */}

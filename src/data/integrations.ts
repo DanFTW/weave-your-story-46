@@ -305,6 +305,12 @@ export const integrationSections: IntegrationSection[] = [
         status: "approved",
         subtitle: "Approved",
       },
+      {
+        id: "ios-contacts",
+        name: "iOS Contacts",
+        icon: "ios-contacts",
+        status: "unconfigured",
+      },
     ],
   },
 ];
@@ -925,6 +931,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#4A154B",
       secondary: "#611f69",
       tertiary: "#36C5F0",
+    },
+  },
+  "ios-contacts": {
+    id: "ios-contacts",
+    name: "iOS Contacts",
+    icon: "ios-contacts",
+    status: "unconfigured",
+    description: "iOS Contacts allows Weave to read your device contacts when running in the Despia iOS app. Sync your address book to create memories and enrich your connections.",
+    capabilities: ["Read contacts", "Access phone numbers", "View contact names"],
+    gradientColors: {
+      primary: "#007AFF",
+      secondary: "#34C759",
+      tertiary: "#5856D6",
     },
   },
 };
