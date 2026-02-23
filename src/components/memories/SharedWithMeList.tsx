@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Link2, User } from "lucide-react";
+import { Link2, User, Instagram, Twitter, Youtube, Mail, MessageSquare, FileText, Mic, Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SharedMemoryItem } from "@/types/memory";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,22 @@ interface SharedWithMeListProps {
   items: SharedMemoryItem[];
   isLoading: boolean;
   activeFilter: string;
+}
+
+const tagConfig: Record<string, { label: string; icon: React.ElementType; gradient: string }> = {
+  INSTAGRAM: { label: 'Instagram', icon: Instagram, gradient: 'from-pink-500 to-fuchsia-600' },
+  TWITTER: { label: 'X / Twitter', icon: Twitter, gradient: 'from-sky-500 to-blue-600' },
+  YOUTUBE: { label: 'YouTube', icon: Youtube, gradient: 'from-red-500 to-rose-600' },
+  GMAIL: { label: 'Gmail', icon: Mail, gradient: 'from-amber-400 to-orange-500' },
+  DISCORD: { label: 'Discord', icon: MessageSquare, gradient: 'from-indigo-500 to-violet-600' },
+  GOOGLE_DRIVE: { label: 'Google Drive', icon: FileText, gradient: 'from-emerald-400 to-teal-500' },
+  LINKEDIN: { label: 'LinkedIn', icon: Globe, gradient: 'from-blue-500 to-blue-700' },
+  FIREFLIES: { label: 'Fireflies', icon: Mic, gradient: 'from-purple-500 to-pink-500' },
+};
+
+function getTagInfo(item: SharedMemoryItem) {
+  const tag = (item.memoryTag ?? item.threadTag ?? '').toUpperCase();
+  return tagConfig[tag] ?? null;
 }
 
 function scopeLabel(item: SharedMemoryItem): string {
@@ -21,7 +37,7 @@ function scopeLabel(item: SharedMemoryItem): string {
 }
 
 function cardGradient(item: SharedMemoryItem): string {
-  const tag = item.threadTag?.toUpperCase();
+  const tag = (item.memoryTag ?? item.threadTag ?? '').toUpperCase();
   const gradients: Record<string, string> = {
     TWITTER: 'from-sky-500 to-blue-600',
     INSTAGRAM: 'from-pink-500 to-fuchsia-600',
@@ -30,14 +46,16 @@ function cardGradient(item: SharedMemoryItem): string {
     DISCORD: 'from-indigo-500 to-violet-600',
     GOOGLE_DRIVE: 'from-emerald-400 to-teal-500',
     LINKEDIN: 'from-blue-500 to-blue-700',
+    FIREFLIES: 'from-purple-500 to-pink-500',
   };
-  return gradients[tag ?? ''] ?? 'from-violet-500 to-purple-600';
+  return gradients[tag] ?? 'from-violet-500 to-purple-600';
 }
 
 function SharedCard({ item, index }: { item: SharedMemoryItem; index: number }) {
   const navigate = useNavigate();
-  const sharer = item.ownerName ?? 'Someone';
+  const sharer = item.ownerName ?? item.ownerEmail ?? 'Someone';
   const gradient = cardGradient(item);
+  const tagInfo = getTagInfo(item);
   const when = new Date(item.sharedAt).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -53,25 +71,39 @@ function SharedCard({ item, index }: { item: SharedMemoryItem; index: number }) 
     >
       {/* Gradient header */}
       <div className={cn("bg-gradient-to-br h-14 flex items-center justify-between px-4", gradient)}>
-        <div className="flex items-center gap-2">
-          <User className="h-4 w-4 text-white/80" />
-          <span className="text-white text-sm font-medium">
-            Shared by {sharer}
+        <div className="flex items-center gap-2 min-w-0">
+          <User className="h-4 w-4 text-white/80 shrink-0" />
+          <span className="text-white text-sm font-medium truncate">
+            {sharer}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 bg-white/20 rounded-full px-2.5 py-1">
+        <div className="flex items-center gap-1.5 bg-white/20 rounded-full px-2.5 py-1 shrink-0">
           <Link2 className="h-3 w-3 text-white" />
           <span className="text-white text-xs font-medium">Shared</span>
         </div>
       </div>
 
       {/* Body */}
-      <div className="p-4 space-y-2">
-        <p className="text-foreground text-sm font-medium leading-snug">
-          {scopeLabel(item)}
-        </p>
+      <div className="p-4 space-y-2.5">
+        <div className="flex items-center gap-2">
+          <p className="text-foreground text-sm font-medium leading-snug">
+            {scopeLabel(item)}
+          </p>
+        </div>
+
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Shared {when}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Shared {when}</span>
+            {tagInfo && (
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white bg-gradient-to-r",
+                tagInfo.gradient
+              )}>
+                <tagInfo.icon className="h-2.5 w-2.5" />
+                {tagInfo.label}
+              </span>
+            )}
+          </div>
           <span className="text-xs text-primary font-medium">View →</span>
         </div>
       </div>
