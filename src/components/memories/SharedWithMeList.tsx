@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Link2, User, Instagram, Twitter, Youtube, Mail, MessageSquare, FileText, Mic, Globe } from "lucide-react";
+import { Link2, User, Instagram, Twitter, Youtube, Mail, MessageSquare, FileText, Mic, Globe, Lock, Globe2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SharedMemoryItem } from "@/types/memory";
 import { cn } from "@/lib/utils";
@@ -104,7 +104,18 @@ function SharedCard({ item, index }: { item: SharedMemoryItem; index: number }) 
               </span>
             )}
           </div>
-          <span className="text-xs text-primary font-medium">View →</span>
+          <span className={cn(
+            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+            item.visibility === 'recipients_only'
+              ? "bg-amber-500/15 text-amber-600"
+              : "bg-emerald-500/15 text-emerald-600"
+          )}>
+            {item.visibility === 'recipients_only' ? (
+              <><Lock className="h-2.5 w-2.5" /> Gated</>
+            ) : (
+              <><Globe2 className="h-2.5 w-2.5" /> Open</>
+            )}
+          </span>
         </div>
       </div>
     </motion.div>
