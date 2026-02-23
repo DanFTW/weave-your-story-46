@@ -32,6 +32,7 @@ export interface SharedMemoryItem {
   ownerName: string | null;
   ownerEmail: string | null;
   memoryTag: string | null;
+  visibility: 'anyone' | 'recipients_only';
   sharedAt: string;
   viewedAt: string | null;
 }

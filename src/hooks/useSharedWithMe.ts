@@ -43,7 +43,8 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
             share_token,
             owner_user_id,
             created_at,
-            memory_content
+            memory_content,
+            visibility
           )
         `)
         .or(`recipient_email.eq.${userEmail},recipient_user_id.eq.${userId}`)
@@ -100,6 +101,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
             ownerName: profileMap[ms.owner_user_id]?.name ?? null,
             ownerEmail: profileMap[ms.owner_user_id]?.email ?? null,
             memoryTag: mc?.tag ?? ms.thread_tag ?? null,
+            visibility: (ms.visibility ?? 'anyone') as 'anyone' | 'recipients_only',
             sharedAt: ms.created_at as string,
             viewedAt: r.viewed_at,
           } satisfies SharedMemoryItem;
