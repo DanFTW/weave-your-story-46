@@ -30,6 +30,8 @@ export interface SharedMemoryItem {
   threadTag: string | null;
   ownerUserId: string;
   ownerName: string | null;
+  ownerEmail: string | null;
+  memoryTag: string | null;
   sharedAt: string;
   viewedAt: string | null;
 }

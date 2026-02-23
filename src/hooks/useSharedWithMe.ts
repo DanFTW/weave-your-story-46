@@ -42,7 +42,8 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
             thread_tag,
             share_token,
             owner_user_id,
-            created_at
+            created_at,
+            memory_content
           )
         `)
         .or(`recipient_email.eq.${userEmail},recipient_user_id.eq.${userId}`)
@@ -70,7 +71,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
         ),
       ];
 
-      const profileMap: Record<string, string | null> = {};
+      const profileMap: Record<string, { name: string | null; email: string | null }> = {};
       if (ownerIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
@@ -78,7 +79,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
           .in('user_id', ownerIds);
         if (profiles) {
           for (const p of profiles) {
-            profileMap[p.user_id] = p.full_name;
+            profileMap[p.user_id] = { name: p.full_name, email: null };
           }
         }
       }
@@ -87,6 +88,7 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
         .map((r) => {
           const ms = r.memory_shares as any;
           if (!ms) return null;
+          const mc = ms.memory_content as any;
           return {
             shareId: ms.id as string,
             shareToken: ms.share_token as string,
@@ -95,7 +97,9 @@ export function useSharedWithMe(): UseSharedWithMeReturn {
             customCondition: ms.custom_condition as string | null,
             threadTag: ms.thread_tag as string | null,
             ownerUserId: ms.owner_user_id as string,
-            ownerName: profileMap[ms.owner_user_id] ?? null,
+            ownerName: profileMap[ms.owner_user_id]?.name ?? null,
+            ownerEmail: profileMap[ms.owner_user_id]?.email ?? null,
+            memoryTag: mc?.tag ?? ms.thread_tag ?? null,
             sharedAt: ms.created_at as string,
             viewedAt: r.viewed_at,
           } satisfies SharedMemoryItem;
