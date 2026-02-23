@@ -1,53 +1,64 @@
 
+# Fix: Enforce "Invited Only" Access Control and Email Invites
 
-# Add iOS Device Contacts Integration (Despia Native Bridge)
+## Problem
 
-## Overview
-Add an "iOS Contacts" integration that uses the `despia-native` SDK to read device contacts when running inside the Despia iOS wrapper app. No OAuth or Composio is involved -- this is a direct native bridge call.
+The "Invited only" visibility option in the Share Memory modal is not actually enforced on the backend. Two issues:
 
-## What Changes
+1. **No `visibility` column**: The `memory_shares` table does not store the visibility setting, so the backend cannot distinguish between "Invited only" and "Anyone with link" shares.
+2. **Auto-registration of any visitor**: The `resolve` action unconditionally registers any authenticated user who opens the share link as a recipient -- making "Invited only" behave identically to "Anyone with link."
+3. **Email delivery**: The `sendShareEmail` function already exists and is called during share creation. It uses Resend with the test sender `onboarding@resend.dev`, which only delivers to the Resend account owner's email. For production delivery to arbitrary addresses, a verified custom domain must be configured in Resend (outside the scope of this code change, but noted).
 
-### 1. Add integration entry to `src/data/integrations.ts`
-- Add `ios-contacts` to the "System integrations (future)" section (alongside location-services and camera-access), with name "iOS Contacts", icon "location" (reusing an existing icon, or we can add a contacts icon), and status "unconfigured".
-- Add a corresponding `integrationDetails` entry with description, capabilities (e.g., "Read contacts", "Access phone numbers"), and gradient colors.
+## Solution
 
-### 2. Add `ios-contacts` to the available integrations list in `IntegrationSection.tsx`
-- Add `"ios-contacts"` to the `availableIntegrations` array so it shows as connectable (not "coming soon").
+### 1. Database Migration
 
-### 3. Create `src/hooks/useIOSContacts.ts`
-A custom hook that mirrors the `useComposio` return shape (`UseComposioReturn`-compatible) but uses Despia native calls instead of Composio OAuth:
+Add a `visibility` column to `memory_shares`:
 
-- **Environment detection:** Check user agent for "despia" + "iphone"/"ipad" to determine if the bridge is available.
-- **`connect`:** Calls `despiaSDK('requestcontactpermission://')` then `despiaSDK('readcontacts://', ['contacts'])`. On success, upserts to `user_integrations` with `integration_id: "ios-contacts"`, `account_name: "iOS Contacts"`, `account_email: "${count} contacts synced"`.
-- **`disconnect`:** Deletes the `user_integrations` row where `integration_id = "ios-contacts"`.
-- **`checkStatus`:** Reads from `user_integrations` to populate `connectedAccount` and `isConnected`.
-- Returns `{ connectedAccount, connecting, isConnected, connect, disconnect, checkStatus }`.
-
-### 4. Update `src/pages/IntegrationDetail.tsx`
-- Detect when `integrationId === "ios-contacts"`.
-- Use `useIOSContacts()` instead of `useComposio()` for this integration.
-- Skip the `OAuthConfirmDialog` -- instead, call `connect()` directly when the user taps "Connect your account".
-- When not running inside Despia (desktop/browser), show a message like "This integration is only available in the iOS app."
-- The rest of the UI (connected account card, capabilities, done button) works unchanged since the hook returns the same shape.
-
-## Technical Details
-
-### Hook interface (matches useComposio)
-```text
-connectedAccount: { name: string, email: string, avatarUrl?: string } | null
-connecting: boolean
-isConnected: boolean
-connect(customRedirectPath?: string, forceReauth?: boolean): Promise<void>
-disconnect(): Promise<void>
-checkStatus(): Promise<void>
+```sql
+ALTER TABLE memory_shares
+  ADD COLUMN visibility text NOT NULL DEFAULT 'anyone';
 ```
 
-### Database interaction
-Uses the existing `user_integrations` table -- no migration needed. The `composio_connection_id` column is nullable and will be left null for iOS Contacts.
+Default is `'anyone'` so existing shares continue working as before.
 
-### Icon
-Will need a contacts icon asset. Can reuse the existing `location.png` temporarily or add a new icon file. The simplest approach is to use the Lucide `Contact` icon as a fallback in `IntegrationIcon` and `IntegrationLargeIcon` when `icon === "ios-contacts"`.
+### 2. Edge Function: `supabase/functions/memory-share/index.ts`
 
-### No edge functions needed
-Everything runs client-side via the Despia native bridge. No Supabase edge functions are created or modified.
+**`create` action (~line 227):**
+- Destructure `visibility` from the request body.
+- Store it in the `.insert()` call: `visibility: visibility || 'anyone'`.
 
+**`resolve` action (~line 340-356):**
+- Add `visibility` to the `.select()` on the share query.
+- Change the auto-registration logic: only upsert the visiting user as a recipient when `visibility === 'anyone'`. When `visibility === 'recipients_only'`, skip auto-registration -- the user must already be in the recipients list from share creation.
+
+**`fetch-shared-memory` action (no change):**
+- The existing recipient check (lines 439-450) already enforces that only listed recipients can fetch content. Once `resolve` stops auto-registering uninvited users for `recipients_only` shares, this check naturally blocks unauthorized access.
+
+### 3. Frontend: `src/pages/SharedMemory.tsx`
+
+- Handle the 403/error case from `resolve` when a non-invited user tries to access a `recipients_only` share. Show a user-friendly message like "This memory was shared with specific people. You don't have access."
+
+### 4. No other frontend changes
+
+- `ShareMemoryModal.tsx` already sends `visibility` in the request body (line 326) and `recipients` (line 325). No changes needed.
+- `sendShareEmail` is already called for all recipients on line 275. No changes needed.
+- `useSharedWithMe.ts` and `SharedWithMeList.tsx` are unaffected.
+
+## Technical Summary
+
+| File | Change |
+|------|--------|
+| New migration SQL | Add `visibility text NOT NULL DEFAULT 'anyone'` to `memory_shares` |
+| `memory-share/index.ts` | Store visibility on create; conditionally auto-register on resolve |
+| `SharedMemory.tsx` | Handle "not invited" error gracefully |
+
+## What This Does NOT Change
+
+- The email sending mechanism (already implemented via Resend).
+- The share creation UI (already sends visibility and recipients).
+- Any other part of the codebase.
+
+## Note on Email Delivery
+
+The Resend test sender (`onboarding@resend.dev`) only delivers to the account owner's email. To send invite emails to arbitrary addresses in production, a verified sending domain must be added in the Resend dashboard and the `from` address in `sendShareEmail` updated accordingly. This is a configuration step, not a code change.
