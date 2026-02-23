@@ -9,7 +9,7 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+
 const APP_BASE_URL = (Deno.env.get("APP_BASE_URL") ?? "https://weave-your-story-46.lovable.app").replace(/\/$/, "");
 const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api";
 
@@ -17,48 +17,6 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-/** Send a share notification email via Resend. Non-blocking. */
-async function sendShareEmail(to: string, ownerName: string | null, shareUrl: string): Promise<void> {
-  if (!RESEND_API_KEY) return;
-  try {
-    const senderName = ownerName ?? "Someone";
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Weave <onboarding@resend.dev>",
-        to: [to],
-        subject: `${senderName} shared a memory with you`,
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
-            <h2 style="font-size:20px;margin-bottom:8px;">A memory was shared with you</h2>
-            <p style="color:#555;font-size:15px;line-height:1.6;">
-              <strong>${senderName}</strong> shared a memory with you on <strong>Weave</strong>.
-              Click the button below to view it.
-            </p>
-            <a href="${shareUrl}"
-               style="display:inline-block;margin-top:20px;padding:12px 24px;background:#000;color:#fff;
-                      text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;">
-              View memory →
-            </a>
-            <p style="margin-top:24px;font-size:12px;color:#999;">
-              If you weren't expecting this, you can safely ignore this email.
-            </p>
-          </div>
-        `,
-      }),
-    });
-    if (!res.ok) {
-      const b = await res.text();
-      console.warn(`Resend email to ${to} failed: ${res.status} — ${b}`);
-    }
-  } catch (err) {
-    console.warn(`Resend email to ${to} threw:`, err);
-  }
-}
 
 // ─── LIAM helpers (reused from liam-memory function) ─────────────────────────
 
@@ -273,7 +231,7 @@ Deno.serve(async (req) => {
         const { error: recipientsError } = await adminClient.from("memory_share_recipients").insert(recipientRows);
         if (recipientsError) console.error("Failed to insert recipients:", recipientsError);
 
-        await Promise.allSettled(normalizedEmails.map((email) => sendShareEmail(email, ownerName, shareUrl)));
+        
       }
 
       return new Response(JSON.stringify({ share_token: shareToken, share_url: shareUrl }), {

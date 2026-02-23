@@ -397,10 +397,10 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
     : "No recipients added. Anyone with the link will be able to view this.";
 
   const successSubtitle = recipients.length > 0
-    ? `Only the ${recipients.length} invited recipient${recipients.length !== 1 ? "s" : ""} can view this memory.`
+    ? `Share this link with your recipients. Only they can access it by signing in with their invited email.`
     : visibility === "anyone"
     ? "Anyone with this link can view the shared memory."
-    : "Copy and send this link to your recipients.";
+    : "Copy and share this link. Recipients will need to sign in with their email to view.";
 
   // ─────────────────────────────────────────────────────────────────────────
 
