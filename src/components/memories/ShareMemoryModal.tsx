@@ -324,6 +324,11 @@ export function ShareMemoryModal({ memory, open, onOpenChange }: ShareMemoryModa
           thread_tag: scope === "thread" ? threadTag : undefined,
           recipients,
           visibility,
+          memory_content: {
+            content: memory.content,
+            tag: memory.tag,
+            created_at: memory.createdAt,
+          },
         },
       });
 

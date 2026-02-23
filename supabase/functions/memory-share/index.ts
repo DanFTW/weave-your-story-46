@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at, visibility } = body;
+      const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at, visibility, memory_content } = body;
 
       if (!memory_id?.trim()) {
         return new Response(JSON.stringify({ error: "memory_id is required." }), {
@@ -191,6 +191,7 @@ Deno.serve(async (req) => {
           thread_tag: thread_tag?.trim() || null,
           expires_at: expires_at || null,
           visibility: visibility || "anyone",
+          memory_content: memory_content || null,
         })
         .select("id")
         .single();
@@ -402,10 +403,10 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Resolve the share
+      // Resolve the share (include snapshot column)
       const { data: share, error: shareErr } = await adminClient
         .from("memory_shares")
-        .select("id, memory_id, owner_user_id, expires_at")
+        .select("id, memory_id, owner_user_id, expires_at, memory_content")
         .eq("share_token", shareToken)
         .maybeSingle();
 
@@ -437,7 +438,46 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Fetch the owner's LIAM credentials
+      // Fetch owner name for display
+      let ownerName: string | null = null;
+      try {
+        const { data: p } = await adminClient
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", share.owner_user_id)
+          .maybeSingle();
+        ownerName = p?.full_name || null;
+      } catch {
+        /* non-critical */
+      }
+
+      // Mark as viewed
+      await adminClient
+        .from("memory_share_recipients")
+        .update({ viewed_at: new Date().toISOString() })
+        .eq("share_id", share.id)
+        .eq("recipient_user_id", callerUser.id)
+        .is("viewed_at", null);
+
+      // ── Snapshot path: return stored content if available ──────────────
+      const snapshot = share.memory_content as Record<string, any> | null;
+      if (snapshot) {
+        return new Response(
+          JSON.stringify({
+            memory: {
+              id: share.memory_id,
+              content: snapshot.content || "",
+              tag: snapshot.tag || null,
+              tags: snapshot.tag ? [snapshot.tag] : [],
+              created_at: snapshot.created_at || null,
+              owner_name: ownerName,
+            },
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ── Legacy fallback: fetch from LIAM API ──────────────────────────
       const { data: creds, error: credsErr } = await adminClient
         .from("user_api_keys")
         .select("api_key, private_key, user_key")
@@ -452,7 +492,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Import the owner's private key and fetch all their memories from LIAM
       let privateKey: CryptoKey;
       try {
         privateKey = await importPrivateKey(creds.private_key);
@@ -475,40 +514,17 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Find the specific memory by its transaction number / ID
       const allMemories: any[] = liamData?.data?.memories || liamData?.memories || [];
       const found = allMemories.find(
         (m: any) => m.transactionNumber === share.memory_id || m.queryHash === share.memory_id,
       );
 
       if (!found) {
-        // Memory may have been deleted — return a graceful response
         return new Response(JSON.stringify({ error: "Memory no longer available." }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      // Fetch owner name for display
-      let ownerName: string | null = null;
-      try {
-        const { data: p } = await adminClient
-          .from("profiles")
-          .select("full_name")
-          .eq("user_id", share.owner_user_id)
-          .maybeSingle();
-        ownerName = p?.full_name || null;
-      } catch {
-        /* non-critical */
-      }
-
-      // Mark as viewed
-      await adminClient
-        .from("memory_share_recipients")
-        .update({ viewed_at: new Date().toISOString() })
-        .eq("share_id", share.id)
-        .eq("recipient_user_id", callerUser.id)
-        .is("viewed_at", null);
 
       return new Response(
         JSON.stringify({
