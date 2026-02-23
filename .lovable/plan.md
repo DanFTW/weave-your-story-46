@@ -1,34 +1,60 @@
 
+# Fix: Older Shared Memories Returning "Link Not Found"
 
-# Remove Resend Email Dependency from Memory Sharing
+## Root Cause
 
-## What's happening now
-The sharing flow already correctly restricts access to invited emails -- only users who sign in/sign up with an invited email address can view "Invited only" shares. However, the edge function still attempts to send invite emails via Resend (which fails silently because the free tier can't deliver to arbitrary addresses).
+The `fetch-shared-memory` action in the edge function retrieves **all** of the owner's memories from the LIAM API via `/memory/list`, then searches for the specific shared memory by ID. The LIAM API returns a limited/capped set of memories (no pagination controls), so **older memories fall outside this window** and can no longer be found -- resulting in a 404 "Memory no longer available" error even though the share link itself is perfectly valid.
+
+## Solution: Snapshot at Share Time
+
+Store the memory content in the `memory_shares` table at the moment the share is created. When viewing a shared memory, use this stored snapshot directly instead of relying on the LIAM API lookup. This makes shared memories permanently accessible regardless of the LIAM API's retention window.
 
 ## Changes
 
-### 1. Edge function: `supabase/functions/memory-share/index.ts`
-- Remove the `sendShareEmail` function entirely (lines 20-61)
-- Remove the `RESEND_API_KEY` constant (line 12)
-- Remove the `Promise.allSettled(... sendShareEmail ...)` call in the `create` action (line 276)
+### 1. Database Migration
+Add a `memory_content` column to the `memory_shares` table:
 
-This eliminates dead code and the silent failure. The access control enforcement (already in the `resolve` action) continues to work -- only users whose email matches an invited recipient can access the memory.
+```sql
+ALTER TABLE public.memory_shares
+  ADD COLUMN memory_content jsonb DEFAULT NULL;
+```
+
+This stores a JSON snapshot of the memory (content, tag, title, created_at) at share time.
 
 ### 2. Frontend: `src/components/memories/ShareMemoryModal.tsx`
-- Update the `successSubtitle` for the "Invited only" case (around line 399-403) to make it clear the user needs to share the link manually:
-  - When recipients exist: "Share this link with your recipients. Only they can access it by signing in with their invited email."
-  - When no recipients + recipients_only: "Copy and share this link. Recipients will need to sign in with their email to view."
+In the `handleCreateShare` function (~line 318), include the memory's content, tag, and creation date in the request body sent to the `create` action:
 
-### What stays the same
-- The visibility toggle (Invited only / Anyone with link) -- unchanged
-- The recipient email input UI -- unchanged
-- The `resolve` action's access control logic -- unchanged (already blocks non-invited users with 403)
-- The `SharedMemory.tsx` error handling -- unchanged (already shows "Access restricted" for blocked users)
-- The share link generation and copy/share functionality -- unchanged
+```
+memory_content: {
+  content: memory.content,
+  tag: memory.tag,
+  created_at: memory.createdAt,
+}
+```
 
-## How it works end-to-end
-1. User creates a share with "Invited only" and adds recipient emails
-2. Backend stores the share with `visibility: 'recipients_only'` and records recipients
-3. User copies/shares the link manually (via copy button or native share sheet)
-4. Recipient opens the link, signs in or signs up with their email
-5. Backend checks their email against the recipients list -- grants or denies access
+No other UI changes needed.
+
+### 3. Edge Function: `supabase/functions/memory-share/index.ts`
+
+**`create` action (~line 142):**
+- Destructure `memory_content` from the request body.
+- Store it in the `.insert()` call alongside the other fields.
+
+**`fetch-shared-memory` action (~line 405-490):**
+- Add `memory_content` to the `.select()` query when resolving the share.
+- If `memory_content` is present (snapshot exists), return it directly without calling the LIAM API at all.
+- Only fall back to the LIAM API lookup for legacy shares that were created before the snapshot column existed.
+
+## What Stays the Same
+- The `resolve` action (landing page metadata) -- unchanged.
+- The `SharedMemory.tsx` page -- unchanged (already renders whatever `fetch-shared-memory` returns).
+- The share creation UI flow -- unchanged aside from sending additional data.
+- Access control logic (visibility, recipient checks) -- unchanged.
+
+## End-to-End Flow After Fix
+
+1. User opens share modal for a memory
+2. Frontend sends memory content snapshot along with the create request
+3. Backend stores the snapshot in `memory_content` column
+4. When a recipient views the share link, the backend returns the stored snapshot directly
+5. No LIAM API call needed -- shared memories are permanently accessible
