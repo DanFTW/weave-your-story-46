@@ -690,6 +690,7 @@ export type Database = {
           share_scope: string
           share_token: string
           thread_tag: string | null
+          visibility: string
         }
         Insert: {
           created_at?: string
@@ -701,6 +702,7 @@ export type Database = {
           share_scope?: string
           share_token?: string
           thread_tag?: string | null
+          visibility?: string
         }
         Update: {
           created_at?: string
@@ -712,6 +714,7 @@ export type Database = {
           share_scope?: string
           share_token?: string
           thread_tag?: string | null
+          visibility?: string
         }
         Relationships: []
       }

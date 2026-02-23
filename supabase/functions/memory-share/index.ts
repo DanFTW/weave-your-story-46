@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at } = body;
+      const { memory_id, share_scope, custom_condition, thread_tag, recipients, expires_at, visibility } = body;
 
       if (!memory_id?.trim()) {
         return new Response(JSON.stringify({ error: "memory_id is required." }), {
@@ -232,6 +232,7 @@ Deno.serve(async (req) => {
           custom_condition: custom_condition?.trim() || null,
           thread_tag: thread_tag?.trim() || null,
           expires_at: expires_at || null,
+          visibility: visibility || "anyone",
         })
         .select("id")
         .single();
@@ -293,7 +294,7 @@ Deno.serve(async (req) => {
 
       const { data: shareData, error: shareError } = await adminClient
         .from("memory_shares")
-        .select("id, owner_user_id, memory_id, share_scope, custom_condition, thread_tag, expires_at, created_at")
+        .select("id, owner_user_id, memory_id, share_scope, custom_condition, thread_tag, expires_at, created_at, visibility")
         .eq("share_token", share_token.trim())
         .maybeSingle();
 
@@ -336,6 +337,8 @@ Deno.serve(async (req) => {
 
       const recipients = recipientsData?.map((r) => r.recipient_email) || [];
 
+      const shareVisibility = (shareData as any).visibility || "anyone";
+
       const authHeader = req.headers.get("authorization");
       if (authHeader) {
         const jwt = authHeader.replace("Bearer ", "");
@@ -343,16 +346,42 @@ Deno.serve(async (req) => {
           data: { user: authedUser },
         } = await adminClient.auth.getUser(jwt);
         if (authedUser?.id && authedUser?.email) {
-          await adminClient
-            .from("memory_share_recipients")
-            .upsert(
-              {
-                share_id: shareData.id,
-                recipient_user_id: authedUser.id,
-                recipient_email: authedUser.email.toLowerCase(),
-              },
-              { onConflict: "share_id,recipient_email" },
-            );
+          if (shareVisibility === "anyone") {
+            // Public share: auto-register any authenticated visitor as a recipient
+            await adminClient
+              .from("memory_share_recipients")
+              .upsert(
+                {
+                  share_id: shareData.id,
+                  recipient_user_id: authedUser.id,
+                  recipient_email: authedUser.email.toLowerCase(),
+                },
+                { onConflict: "share_id,recipient_email" },
+              );
+          } else {
+            // recipients_only: check if user is already an invited recipient
+            const { data: existingRecipient } = await adminClient
+              .from("memory_share_recipients")
+              .select("id")
+              .eq("share_id", shareData.id)
+              .or(`recipient_user_id.eq.${authedUser.id},recipient_email.eq.${authedUser.email.toLowerCase()}`)
+              .maybeSingle();
+
+            if (!existingRecipient) {
+              return new Response(
+                JSON.stringify({ error: "This memory was shared with specific people. You don't have access.", code: "NOT_INVITED" }),
+                { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+
+            // Update recipient_user_id if they were invited by email but haven't been linked yet
+            await adminClient
+              .from("memory_share_recipients")
+              .update({ recipient_user_id: authedUser.id })
+              .eq("share_id", shareData.id)
+              .eq("recipient_email", authedUser.email.toLowerCase())
+              .is("recipient_user_id", null);
+          }
         }
       } else {
         const callerEmail = body.viewer_email?.trim()?.toLowerCase();
