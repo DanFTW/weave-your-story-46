@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    const validActions = ["create", "resolve", "fetch-shared-memory", "list-received"];
+    const validActions = ["create", "resolve", "fetch-shared-memory", "list-received", "list-my-shares", "revoke"];
     if (!action || !validActions.includes(action)) {
       return new Response(JSON.stringify({ error: `Invalid action. Must be one of: ${validActions.join(", ")}.` }), {
         status: 400,
@@ -526,6 +526,23 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Backfill snapshot so future visits never need LIAM again
+      const backfillContent = {
+        content: found.memory || found.content || "",
+        tag: found.notesKey || found.tag || null,
+        created_at: found.date || null,
+      };
+      try {
+        await adminClient
+          .from("memory_shares")
+          .update({ memory_content: backfillContent })
+          .eq("id", share.id);
+        console.log("Backfilled snapshot for share:", share.id);
+      } catch (e) {
+        console.error("Failed to backfill snapshot:", e);
+        // Non-critical — still return the memory
+      }
+
       return new Response(
         JSON.stringify({
           memory: {
@@ -569,6 +586,120 @@ Deno.serve(async (req) => {
         .or(`recipient_user_id.eq.${user.id},recipient_email.eq.${user.email?.toLowerCase()}`);
 
       return new Response(JSON.stringify({ shares: rows ?? [] }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── ACTION: list-my-shares ────────────────────────────────────────────
+    if (action === "list-my-shares") {
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "Authentication required." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const jwt = authHeader.replace("Bearer ", "");
+      const {
+        data: { user },
+      } = await adminClient.auth.getUser(jwt);
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Invalid session." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: shares, error: sharesErr } = await adminClient
+        .from("memory_shares")
+        .select("id, memory_id, share_scope, share_token, thread_tag, custom_condition, created_at, expires_at, visibility, memory_content")
+        .eq("owner_user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (sharesErr) {
+        console.error("list-my-shares error:", sharesErr);
+        return new Response(JSON.stringify({ error: "Failed to list shares." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch recipients for all shares
+      const shareIds = (shares ?? []).map((s) => s.id);
+      let recipientsByShare: Record<string, { email: string; viewed_at: string | null }[]> = {};
+      if (shareIds.length > 0) {
+        const { data: recipients } = await adminClient
+          .from("memory_share_recipients")
+          .select("share_id, recipient_email, viewed_at")
+          .in("share_id", shareIds);
+        if (recipients) {
+          for (const r of recipients) {
+            if (!recipientsByShare[r.share_id]) recipientsByShare[r.share_id] = [];
+            recipientsByShare[r.share_id].push({ email: r.recipient_email, viewed_at: r.viewed_at });
+          }
+        }
+      }
+
+      const result = (shares ?? []).map((s) => ({
+        ...s,
+        recipients: recipientsByShare[s.id] || [],
+      }));
+
+      return new Response(JSON.stringify({ shares: result }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── ACTION: revoke ─────────────────────────────────────────────────────
+    if (action === "revoke") {
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "Authentication required." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const jwt = authHeader.replace("Bearer ", "");
+      const {
+        data: { user },
+      } = await adminClient.auth.getUser(jwt);
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Invalid session." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { share_id } = body;
+      if (!share_id) {
+        return new Response(JSON.stringify({ error: "share_id is required." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Verify ownership
+      const { data: share } = await adminClient
+        .from("memory_shares")
+        .select("id, owner_user_id")
+        .eq("id", share_id)
+        .single();
+
+      if (!share || share.owner_user_id !== user.id) {
+        return new Response(JSON.stringify({ error: "Share not found or not owned by you." }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Delete recipients first (no cascade set up via FK ON DELETE CASCADE)
+      await adminClient.from("memory_share_recipients").delete().eq("share_id", share_id);
+      // Delete the share
+      await adminClient.from("memory_shares").delete().eq("id", share_id);
+
+      return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Key, LogOut } from "lucide-react";
+import { Key, LogOut, Share2 } from "lucide-react";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileSettingsCard, SettingsRow } from "@/components/profile/ProfileSettingsCard";
 import { BellIcon, EyeIcon, SparkleIcon } from "@/components/profile/ProfileIcons";
@@ -12,6 +12,7 @@ import { useUserApiKeys } from "@/hooks/useUserApiKeys";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ManageSharedMemories } from "@/components/memories/ManageSharedMemories";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function Profile() {
   const { hasKeys } = useUserApiKeys();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+  const [sharesDrawerOpen, setSharesDrawerOpen] = useState(false);
   
   // Use profile data with auth fallback
   const displayName = profile?.full_name || user?.user_metadata?.full_name || user?.email || "Guest";
@@ -69,6 +71,19 @@ export default function Profile() {
           />
         </ProfileSettingsCard>
         
+        {/* Shared Memories card */}
+        <ProfileSettingsCard>
+          <SettingsRow
+            icon={<Share2 className="w-5 h-5 text-muted-foreground" />}
+            iconBgColor="bg-muted"
+            label="Manage Shared Memories"
+            value=""
+            hasChevron
+            isLast
+            onClick={() => setSharesDrawerOpen(true)}
+          />
+        </ProfileSettingsCard>
+
         {/* Preferences card */}
         <ProfileSettingsCard>
           <SettingsRow
@@ -116,6 +131,12 @@ export default function Profile() {
       <ProfileEditDrawer 
         open={editDrawerOpen} 
         onOpenChange={setEditDrawerOpen} 
+      />
+
+      {/* Manage Shared Memories Drawer */}
+      <ManageSharedMemories
+        open={sharesDrawerOpen}
+        onOpenChange={setSharesDrawerOpen}
       />
     </div>
   );
