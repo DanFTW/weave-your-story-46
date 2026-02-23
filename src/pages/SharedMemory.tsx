@@ -156,15 +156,21 @@ export default function SharedMemory() {
   // ── Error ────────────────────────────────────────────────────────────────
 
   if (state.status === "error") {
+    const isNotInvited = state.message.includes("specific people");
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-background px-5 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 mb-4">
-          <AlertCircle className="h-8 w-8 text-destructive" />
+        <div className={cn(
+          "flex h-16 w-16 items-center justify-center rounded-full mb-4",
+          isNotInvited ? "bg-amber-500/10" : "bg-destructive/10"
+        )}>
+          <AlertCircle className={cn("h-8 w-8", isNotInvited ? "text-amber-500" : "text-destructive")} />
         </div>
-        <h1 className="text-xl font-bold text-foreground mb-2">Link not found</h1>
+        <h1 className="text-xl font-bold text-foreground mb-2">
+          {isNotInvited ? "Access restricted" : "Link not found"}
+        </h1>
         <p className="text-sm text-muted-foreground max-w-xs mb-6">{state.message}</p>
-        <Link to="/login">
-          <Button variant="outline">Sign in to your account</Button>
+        <Link to={isNotInvited ? "/memories" : "/login"}>
+          <Button variant="outline">{isNotInvited ? "Go to your memories" : "Sign in to your account"}</Button>
         </Link>
       </div>
     );
