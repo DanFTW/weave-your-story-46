@@ -362,7 +362,7 @@ export default function SharedMemory() {
             style={{
               width: "100%",
               padding: "16px 20px",
-              background: "radial-gradient(ellipse 108.65% 103.45% at 50% 109.62%, #FF543E 0%, #1050C5 60%)",
+              background: "#1050C5",
               color: "white",
               fontFamily: "PP Telegraf, sans-serif",
               fontWeight: 700,
