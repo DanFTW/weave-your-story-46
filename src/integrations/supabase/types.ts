@@ -685,6 +685,7 @@ export type Database = {
           custom_condition: string | null
           expires_at: string | null
           id: string
+          memory_content: Json | null
           memory_id: string
           owner_user_id: string
           share_scope: string
@@ -697,6 +698,7 @@ export type Database = {
           custom_condition?: string | null
           expires_at?: string | null
           id?: string
+          memory_content?: Json | null
           memory_id: string
           owner_user_id: string
           share_scope?: string
@@ -709,6 +711,7 @@ export type Database = {
           custom_condition?: string | null
           expires_at?: string | null
           id?: string
+          memory_content?: Json | null
           memory_id?: string
           owner_user_id?: string
           share_scope?: string
