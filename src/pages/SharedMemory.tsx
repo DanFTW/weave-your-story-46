@@ -105,6 +105,10 @@ export default function SharedMemory() {
       return;
     }
 
+    // Reset on token change so navigating between shares works
+    hasLoadedRef.current = false;
+    setState({ status: "loading" });
+
     async function loadWithSession(accessToken: string) {
       if (hasLoadedRef.current) return;
       hasLoadedRef.current = true;
