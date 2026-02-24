@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 import { Thread, ThreadGradient } from "@/types/threads";
 import { IntegrationIcon } from "./integrations/IntegrationIcon";
 import { ThreadTypeBadge } from "./threads/ThreadTypeBadge";
@@ -141,25 +142,8 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
             {thread.title}
           </h3>
 
-          <div
-            className="flex-shrink-0 flex items-center justify-center"
-            style={{
-              padding: 12,
-              background: "#292C39",
-              borderRadius: 12,
-            }}
-          >
-            <span
-              className="text-white whitespace-nowrap"
-              style={{
-                fontSize: 16,
-                fontFamily: "PP Telegraf",
-                fontWeight: 600,
-                lineHeight: "16px",
-              }}
-            >
-              Try it
-            </span>
+          <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center">
+            <ChevronRight className="w-6 h-6 text-white/90" />
           </div>
         </div>
       </div>
