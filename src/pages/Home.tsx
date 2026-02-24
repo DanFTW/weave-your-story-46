@@ -97,7 +97,6 @@ export default function Home() {
             <ThreadCard
               thread={thread}
               onClick={() => navigate(`/thread/${thread.id}`)}
-              fixedHeight
             />
           </motion.div>
         ))}

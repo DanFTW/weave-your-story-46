@@ -69,23 +69,10 @@ export default function Threads() {
   return (
     <div className="pb-nav">
       <div className="px-5">
-        <PageHeader 
-          title="Threads" 
-          subtitle="Create memories through automated connections" 
-        />
-
-        {/* Filter Bar */}
-        <div className="mt-4 mb-6">
-          <ThreadFilterBar
-            flowModeFilter={flowModeFilter}
-            searchQuery={searchQuery}
-            onFlowModeChange={setFlowModeFilter}
-            onSearchChange={setSearchQuery}
-          />
-        </div>
+        <PageHeader title="Threads" />
 
         {/* Thread Cards */}
-        <div className="space-y-3">
+        <div className="mt-6 space-y-2">
           <AnimatePresence mode="popLayout">
             {filteredThreads.map((thread) => (
               <motion.div
