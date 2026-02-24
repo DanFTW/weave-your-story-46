@@ -1,69 +1,99 @@
 
 
-# Fix: Persistent Shared Memory Access + Owner Revocation
+# Revamp Thread Cards to Weave Alpha Design (with Badges)
 
-## Problem Identified
+## Overview
 
-Two issues found:
+Redesign the thread cards on `/threads` to match the Figma screenshot while keeping the Auto/Manual and Thread/Flow/Dump badges visible on each card.
 
-1. **Pre-snapshot shares fail on subsequent visits**: Shares created before the snapshot feature was added have no `memory_content` stored. They fall back to the LIAM API, which has a retention cap -- causing "Memory no longer available" errors for older memories. 6 of the 10 most recent shares in the database lack snapshots.
+## Layout (New Card Anatomy)
 
-2. **No owner revocation UI**: There is no way for the memory owner to revoke or manage their shared memories. The user wants a "manage shared memories" option.
-
-3. **Navigation bug**: The `hasLoadedRef` in `SharedMemory.tsx` never resets when the `token` param changes, so navigating between shared memories without a full page reload silently fails.
-
-## Solution
-
-### 1. Backfill Snapshots on First Successful LIAM Fetch
-**File: `supabase/functions/memory-share/index.ts`**
-
-In the legacy LIAM fallback path (around line 529), after successfully finding the memory, write the content back to `memory_shares.memory_content` so all future visits use the snapshot directly. This is a one-time backfill per share.
-
-```
-// After finding the memory from LIAM, backfill the snapshot
-const backfillContent = {
-  content: found.memory || found.content || "",
-  tag: found.notesKey || found.tag || null,
-  created_at: found.date || null,
-};
-await adminClient
-  .from("memory_shares")
-  .update({ memory_content: backfillContent })
-  .eq("id", share.id);
+```text
++-----------------------------------------------+
+| [48px icon]              [Auto] [Thread]       |
+|                                                |
+|         (decorative blurred gradient orb)       |
+|                                                |
+| Large Bold Title (28px)          [Try it btn]  |
++-----------------------------------------------+
+  rounded-[36px], height: 170px, overflow: hidden
 ```
 
-### 2. Add `revoke` Action to Edge Function
-**File: `supabase/functions/memory-share/index.ts`**
+Key differences from previous plan:
+- Badges stay -- moved to the **top-right** corner (replacing the "Try it" button position from Figma)
+- "Try it" button moves to **bottom-right**, next to the title row
+- Integration icon remains **top-left** at 48x48
 
-Add a new `revoke` action that allows the share owner to delete a share and all its recipient records (cascade handled by the foreign key). Requires authentication and verifies ownership.
+## Files to Change
 
-### 3. Add `list-my-shares` Action to Edge Function
-**File: `supabase/functions/memory-share/index.ts`**
+### 1. `src/components/ThreadCard.tsx` -- Full Redesign
 
-Add a new action that returns all shares the authenticated user has created, including recipient details. This powers the management UI.
+**Remove:**
+- Description text
+- ChevronRight arrow button
+- Bottom integration icons row
+- Gradient overlay div
 
-### 4. Fix `hasLoadedRef` Bug
-**File: `src/pages/SharedMemory.tsx`**
+**New structure:**
+```text
+<button> (card container)
+  <!-- Decorative orb (absolute, behind content) -->
+  <div absolute, w-[338px] h-[338px], rotate(-39deg), blur(50px), border-radius: 9999px>
+    <div inner gradient circle />
+  </div>
 
-Reset `hasLoadedRef.current = false` at the start of the `useEffect` callback so that changing tokens (navigating between shared memories) correctly re-fetches.
+  <!-- Content (relative, z-10, flex-col justify-between, full height) -->
 
-### 5. Owner "Manage Shared Memories" UI
-**New file: `src/components/memories/ManageSharedMemories.tsx`**
+  <!-- Top row: icon + badges -->
+  <div flex justify-between>
+    <IntegrationIcon 48x48 or thread.icon />
+    <div flex gap-1.5>
+      <ThreadTypeBadge triggerType />
+      <ThreadTypeBadge flowMode />
+    </div>
+  </div>
 
-A drawer/sheet component accessible from the memory detail page or profile that shows all memories the user has shared, with the ability to revoke access. Each card shows: memory snippet, recipient list, share scope, and a "Revoke" button.
+  <!-- Bottom row: title + "Try it" button -->
+  <div flex justify-between items-end>
+    <h3 text-[28px] font-bold text-white>{title}</h3>
+    <div bg-[#292C39] rounded-xl px-3 py-3>Try it</div>
+  </div>
+</button>
+```
 
-**New file: `src/hooks/useMyShares.ts`**
+**Card styling:**
+- `rounded-[36px]`, `h-[170px]`, `overflow-hidden`
+- Padding: `pt-5 pb-6 pl-5 pr-3` (matches Figma's 20/24/20/12)
+- Keep existing dynamic gradient logic for background colors
+- Orb colors: a lighter/complementary shade per card, defined in a color map
 
-A hook that calls the `list-my-shares` action and the `revoke` action, managing state for the management UI.
+**Orb color map** (new constant, per integration or gradient fallback):
 
-### 6. Entry Point for Management
-**File: `src/pages/Profile.tsx`** (or equivalent settings area)
+| Key           | Card BG   | Orb Color | Orb Inner Gradient         |
+|---------------|-----------|-----------|----------------------------|
+| twitter       | #3B82F6   | #2EAFFF   | #3CC8FF -> #D3F3FF         |
+| instagram     | #1ECF93   | #5EEDB8   | #7AFFD0 -> #D0FFF0         |
+| gmail         | #16BC9A   | #3DE0BB   | #5AEAC8 -> #C8FFF0         |
+| youtube       | #00D4D4   | #40E8E8   | #6AF0F0 -> #D0FCFC         |
+| linkedin      | #F5993D   | #FFBE6B   | #FFD08A -> #FFE8C4         |
+| hubspot       | #0085A6   | #2EB8D8   | #50CCE5 -> #C4F0FA         |
+| trello        | #CCAD00   | #E8D040   | #F0DC60 -> #FFF8C4         |
+| googlephotos  | #BC7A0B   | #E0A030   | #F0B850 -> #FFE8B0         |
+| fireflies     | #6C3AED   | #9B6FE0   | #A87FE8 -> #D4C0F9         |
+| discord       | #99AAF5   | #B0C0FF   | #C4D0FF -> #E8ECFF         |
+| blue (fallback)| #437CFB  | #2EAFFF   | #3CC8FF -> #D3F3FF         |
+| teal          | #2A8B7A   | #3DAA96   | #50C0AC -> #C0F0E4         |
+| purple        | #7B4FC7   | #9B6FE0   | #A87FE8 -> #D4C0F9         |
+| orange        | #E87A3D   | #F5A040   | #FFBE6B -> #FFE0B2         |
+| pink          | #D94FA0   | #E87AB8   | #F098CC -> #FFD4E8         |
 
-Add a "Manage Shared Memories" menu item that opens the management drawer, keeping it discoverable without cluttering the main memory views.
+### 2. `src/pages/Threads.tsx` -- Simplify Layout
 
-## What Stays the Same
-- All existing share creation flows
-- RLS policies (owner delete policy already exists)
-- Recipient access patterns
-- The SharedWithMeList component
+- Remove `subtitle` prop from `PageHeader` (Figma just shows "Threads")
+- Remove `ThreadFilterBar` from render (keep imports/state for later)
+- Change card gap from `space-y-3` to `gap-2` (8px, matching Figma)
+
+### 3. No other files change
+
+`ThreadTypeBadge`, `ThreadFilterBar`, `IntegrationIcon`, thread data, types -- all untouched.
 
