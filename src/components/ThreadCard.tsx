@@ -132,9 +132,10 @@ export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
         {/* Bottom row: title + "Try it" button */}
         <div className="flex items-end justify-between gap-3">
           <h3
-            className="text-white text-left leading-7 flex-1 min-w-0"
+            className="text-white text-left flex-1 min-w-0 line-clamp-2"
             style={{
-              fontSize: 28,
+              fontSize: 22,
+              lineHeight: "26px",
               fontFamily: "PP Telegraf",
               fontWeight: 700,
             }}
