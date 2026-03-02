@@ -400,7 +400,7 @@ async function sendEmailViaComposio(
         arguments: {
           recipient_email: to,
           subject,
-          message_body: body,
+          body,
         },
       }),
     });
@@ -433,9 +433,7 @@ async function sendEmailViaComposio(
       payload?.data?.successfull === true ||
       payload?.data?.successful === true ||
       payload?.successfull === true ||
-      payload?.successful === true ||
-      // If no explicit status but also no error and HTTP was OK, treat as success
-      (!payload?.error && res.ok);
+      payload?.successful === true;
 
     if (!hasSuccessMarker) {
       console.error(`[Birthday] Composio uncertain outcome:`, JSON.stringify(payload).substring(0, 500));
