@@ -1,16 +1,17 @@
-import { Gift, Pause, RefreshCw, Loader2 } from "lucide-react";
+import { Gift, Pause, RefreshCw, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BirthdayReminderStats } from "@/types/birthdayReminder";
-import { formatDistanceToNow } from "date-fns";
+import { BirthdayReminderStats, SentReminder } from "@/types/birthdayReminder";
+import { formatDistanceToNow, format } from "date-fns";
 
 interface ActiveMonitoringProps {
   stats: BirthdayReminderStats;
   isPolling: boolean;
   onPause: () => void;
   onCheckNow: () => void;
+  sentReminders: SentReminder[];
 }
 
-export function ActiveMonitoring({ stats, isPolling, onPause, onCheckNow }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, isPolling, onPause, onCheckNow, sentReminders }: ActiveMonitoringProps) {
   const lastCheckedText = stats.lastChecked
     ? formatDistanceToNow(new Date(stats.lastChecked), { addSuffix: true })
     : "Never";
@@ -68,6 +69,38 @@ export function ActiveMonitoring({ stats, isPolling, onPause, onCheckNow }: Acti
           <Pause className="w-4 h-4 mr-2" />
           Pause
         </Button>
+      </div>
+
+      <div className="bg-card rounded-xl border border-border p-4">
+        <h4 className="font-medium text-foreground mb-3">Sent Reminders</h4>
+        {sentReminders.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No reminders sent yet. They'll appear here once birthdays are detected.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {sentReminders.map((reminder) => (
+              <div
+                key={reminder.id}
+                className="flex items-center gap-3 text-sm"
+              >
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Mail className="w-4 h-4 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground truncate">{reminder.personName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {reminder.birthdayDate ?? "Unknown date"} · Sent{" "}
+                    {formatDistanceToNow(new Date(reminder.sentAt), { addSuffix: true })}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground flex-shrink-0">
+                  {format(new Date(reminder.sentAt), "MMM d")}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

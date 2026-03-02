@@ -66,6 +66,24 @@ export function useBirthdayReminder() {
         }
         setPhase("configure");
       }
+      // Fetch sent reminders
+      const { data: reminders } = await supabase
+        .from("birthday_reminders_sent")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("sent_at", { ascending: false });
+
+      if (reminders) {
+        setSentReminders(
+          reminders.map((r: any) => ({
+            id: r.id,
+            personName: r.person_name,
+            birthdayDate: r.birthday_date,
+            yearSent: r.year_sent,
+            sentAt: r.sent_at,
+          }))
+        );
+      }
     } finally {
       setIsLoading(false);
     }

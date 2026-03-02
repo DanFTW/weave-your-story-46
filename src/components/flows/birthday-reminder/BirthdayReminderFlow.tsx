@@ -23,7 +23,7 @@ export function BirthdayReminderFlow() {
   const { isConnected, checkStatus } = useComposio("GMAIL");
 
   const {
-    phase, setPhase, config, stats,
+    phase, setPhase, config, stats, sentReminders,
     isLoading, isActivating, isPolling,
     loadConfig, activateMonitoring, deactivateMonitoring, triggerManualPoll,
   } = useBirthdayReminder();
@@ -105,6 +105,7 @@ export function BirthdayReminderFlow() {
             isPolling={isPolling}
             onPause={deactivateMonitoring}
             onCheckNow={triggerManualPoll}
+            sentReminders={sentReminders}
           />
         )}
       </div>
