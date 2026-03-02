@@ -1,99 +1,132 @@
 
 
-# Revamp Thread Cards to Weave Alpha Design (with Badges)
+# Auto Birthday Reminder — Implementation Plan
 
-## Overview
+## Summary
 
-Redesign the thread cards on `/threads` to match the Figma screenshot while keeping the Auto/Manual and Thread/Flow/Dump badges visible on each card.
+A new automated thread that runs a daily cron job to scan LIAM memories for upcoming birthdays (7 days out), gathers contextual memories about each person, composes a personalized birthday email using the Lovable AI Gateway, and sends it via Composio Gmail. Deduplication prevents repeat emails.
 
-## Layout (New Card Anatomy)
+## Architecture
 
 ```text
-+-----------------------------------------------+
-| [48px icon]              [Auto] [Thread]       |
-|                                                |
-|         (decorative blurred gradient orb)       |
-|                                                |
-| Large Bold Title (28px)          [Try it btn]  |
-+-----------------------------------------------+
-  rounded-[36px], height: 170px, overflow: hidden
+Daily Cron (pg_cron)
+  → birthday-reminder edge function (cron-poll action)
+    → LIAM API /memory/list (query: "birthday")
+    → Parse dates, find birthdays 7 days away
+    → For each person:
+        → LIAM /memory/list (query: "{person name}")
+        → Extract email address from memories
+        → If no email found → skip silently
+        → AI Gateway → generate personalized email body
+        → Composio GMAIL_SEND_EMAIL → send email
+        → Insert into birthday_reminders_sent (dedup table)
 ```
 
-Key differences from previous plan:
-- Badges stay -- moved to the **top-right** corner (replacing the "Try it" button position from Figma)
-- "Try it" button moves to **bottom-right**, next to the title row
-- Integration icon remains **top-left** at 48x48
+## What Gets Created
 
-## Files to Change
+### 1. Database (migration)
 
-### 1. `src/components/ThreadCard.tsx` -- Full Redesign
+**Table: `birthday_reminder_config`**
+- `id` uuid PK
+- `user_id` uuid NOT NULL
+- `is_active` boolean DEFAULT true
+- `reminders_sent` integer DEFAULT 0
+- `last_checked_at` timestamptz
+- `days_before` integer DEFAULT 7
+- `created_at`, `updated_at` timestamptz
 
-**Remove:**
-- Description text
-- ChevronRight arrow button
-- Bottom integration icons row
-- Gradient overlay div
+**Table: `birthday_reminders_sent`**  (deduplication)
+- `id` uuid PK
+- `user_id` uuid NOT NULL
+- `person_name` text NOT NULL
+- `birthday_date` text NOT NULL (e.g. "September 24")
+- `year_sent` integer NOT NULL (e.g. 2026)
+- `sent_at` timestamptz DEFAULT now()
+- UNIQUE(user_id, person_name, year_sent)
 
-**New structure:**
-```text
-<button> (card container)
-  <!-- Decorative orb (absolute, behind content) -->
-  <div absolute, w-[338px] h-[338px], rotate(-39deg), blur(50px), border-radius: 9999px>
-    <div inner gradient circle />
-  </div>
+RLS policies: standard `auth.uid() = user_id` pattern for SELECT, INSERT, UPDATE, DELETE on config; SELECT + INSERT on sent table. Service role used by cron.
 
-  <!-- Content (relative, z-10, flex-col justify-between, full height) -->
+### 2. Edge Function: `birthday-reminder/index.ts`
 
-  <!-- Top row: icon + badges -->
-  <div flex justify-between>
-    <IntegrationIcon 48x48 or thread.icon />
-    <div flex gap-1.5>
-      <ThreadTypeBadge triggerType />
-      <ThreadTypeBadge flowMode />
-    </div>
-  </div>
+Actions (same pattern as twitter-alpha-tracker):
 
-  <!-- Bottom row: title + "Try it" button -->
-  <div flex justify-between items-end>
-    <h3 text-[28px] font-bold text-white>{title}</h3>
-    <div bg-[#292C39] rounded-xl px-3 py-3>Try it</div>
-  </div>
-</button>
+| Action | Auth | Description |
+|---|---|---|
+| `activate` | User JWT | Create/enable config row |
+| `deactivate` | User JWT | Set is_active = false |
+| `status` | User JWT | Return config + stats |
+| `cron-poll` | Cron secret | Process all active users |
+
+**Cron-poll logic:**
+1. Fetch all active configs (service role)
+2. For each user:
+   - Get user's LIAM API keys from `user_api_keys`
+   - Get Gmail connection from `user_integrations` (integration_id = 'gmail')
+   - Query LIAM: `POST /memory/list` with `query: "birthday"` to find birthday memories
+   - Parse each memory for patterns like `"{Name}'s birthday is {Month} {Day}"`
+   - Check if birthday is exactly 7 days from today
+   - Check `birthday_reminders_sent` for dedup (person_name + current year)
+   - For each upcoming birthday person:
+     a. Query LIAM: `POST /memory/list` with `query: "{person name}"` to gather context
+     b. Look for email pattern: `"{Name}'s email is {email}"`  — skip if not found
+     c. Call Lovable AI Gateway to compose a personalized birthday email using gathered memories
+     d. Send via Composio `GMAIL_SEND_EMAIL` tool
+     e. Insert into `birthday_reminders_sent`
+     f. Increment `reminders_sent` counter
+
+### 3. Frontend Files
+
+**`src/data/threads.ts`** — Add entry:
+```ts
+{
+  id: "birthday-reminder",
+  title: "Auto Birthday Reminder",
+  description: "Automatically send personalized birthday emails 7 days before",
+  icon: Gift, // from lucide-react
+  gradient: "purple",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["gmail"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
 ```
 
-**Card styling:**
-- `rounded-[36px]`, `h-[170px]`, `overflow-hidden`
-- Padding: `pt-5 pb-6 pl-5 pr-3` (matches Figma's 20/24/20/12)
-- Keep existing dynamic gradient logic for background colors
-- Orb colors: a lighter/complementary shade per card, defined in a color map
+**`src/data/threadConfigs.ts`** — Add overview steps config (connect Gmail, enable, always-on pattern).
 
-**Orb color map** (new constant, per integration or gradient fallback):
+**`src/data/flowConfigs.ts`** — Add flow config with `isBirthdayReminderFlow: true`.
 
-| Key           | Card BG   | Orb Color | Orb Inner Gradient         |
-|---------------|-----------|-----------|----------------------------|
-| twitter       | #3B82F6   | #2EAFFF   | #3CC8FF -> #D3F3FF         |
-| instagram     | #1ECF93   | #5EEDB8   | #7AFFD0 -> #D0FFF0         |
-| gmail         | #16BC9A   | #3DE0BB   | #5AEAC8 -> #C8FFF0         |
-| youtube       | #00D4D4   | #40E8E8   | #6AF0F0 -> #D0FCFC         |
-| linkedin      | #F5993D   | #FFBE6B   | #FFD08A -> #FFE8C4         |
-| hubspot       | #0085A6   | #2EB8D8   | #50CCE5 -> #C4F0FA         |
-| trello        | #CCAD00   | #E8D040   | #F0DC60 -> #FFF8C4         |
-| googlephotos  | #BC7A0B   | #E0A030   | #F0B850 -> #FFE8B0         |
-| fireflies     | #6C3AED   | #9B6FE0   | #A87FE8 -> #D4C0F9         |
-| discord       | #99AAF5   | #B0C0FF   | #C4D0FF -> #E8ECFF         |
-| blue (fallback)| #437CFB  | #2EAFFF   | #3CC8FF -> #D3F3FF         |
-| teal          | #2A8B7A   | #3DAA96   | #50C0AC -> #C0F0E4         |
-| purple        | #7B4FC7   | #9B6FE0   | #A87FE8 -> #D4C0F9         |
-| orange        | #E87A3D   | #F5A040   | #FFBE6B -> #FFE0B2         |
-| pink          | #D94FA0   | #E87AB8   | #F098CC -> #FFD4E8         |
+**`src/types/flows.ts`** — Add `isBirthdayReminderFlow?: boolean`.
 
-### 2. `src/pages/Threads.tsx` -- Simplify Layout
+**`src/types/birthdayReminder.ts`** — Phase type, config interface, stats interface.
 
-- Remove `subtitle` prop from `PageHeader` (Figma just shows "Threads")
-- Remove `ThreadFilterBar` from render (keep imports/state for later)
-- Change card gap from `space-y-3` to `gap-2` (8px, matching Figma)
+**`src/hooks/useBirthdayReminder.ts`** — Hook following useHubSpotAutomation pattern (activate, deactivate, status, loadConfig).
 
-### 3. No other files change
+**`src/components/flows/birthday-reminder/`**:
+- `BirthdayReminderFlow.tsx` — Main flow (auth-check → configure → activating → active), same structure as HubSpotAutomationFlow
+- `AutomationConfig.tsx` — Toggle for days_before, activate button
+- `ActiveMonitoring.tsx` — Stats display (reminders sent, last checked)
+- `ActivatingScreen.tsx` — Transition animation
+- `index.ts` — Barrel export
 
-`ThreadTypeBadge`, `ThreadFilterBar`, `IntegrationIcon`, thread data, types -- all untouched.
+**`src/pages/FlowPage.tsx`** — Add conditional render for `isBirthdayReminderFlow`.
+
+**`src/pages/Threads.tsx`** + **`src/pages/ThreadOverview.tsx`** — Add `'birthday-reminder'` to `flowEnabledThreads` array.
+
+### 4. pg_cron Job (via SQL insert tool)
+
+Daily at 8:00 AM UTC, calling the edge function with cron-poll action + cron secret from `app_settings`, same pattern as existing automation crons.
+
+### 5. Config Updates
+
+**`supabase/config.toml`** — Add `[functions.birthday-reminder]` with `verify_jwt = false`.
+
+## Technical Decisions
+
+- **LIAM semantic search** for birthday discovery — query "birthday" returns all birthday-related memories. Parse with regex for `{Name}'s birthday is {Month} {Day}` patterns.
+- **7-day lookahead** with year-based dedup — only one email per person per year.
+- **AI-generated email** via Lovable AI Gateway (same pattern as `generate-memories` edge function) for personalization using gathered context memories.
+- **Gmail send via Composio** `GMAIL_SEND_EMAIL` tool execution, reusing the existing connected account lookup from `user_integrations`.
+- **Batch processing** with 500ms delays between sends (same as twitter-alpha-tracker) to avoid rate limits.
 
