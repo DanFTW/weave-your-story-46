@@ -1,31 +1,58 @@
 
 
-## Current Status
+## Root Cause Analysis
 
-The edge function is deployed and all frontend components are in place, but two critical backend pieces are missing:
+Three distinct bugs are preventing birthday reminders from being sent:
 
-1. **Database tables** (`birthday_reminder_config` and `birthday_reminders_sent`) were never created — the migration failed earlier and the tables don't exist yet.
-2. **pg_cron job** was never scheduled.
+### Bug 1: Cron Job Authentication is Broken (Critical)
 
-Both `pg_cron` and `pg_net` extensions are already enabled.
+The `birthday-reminder-daily` pg_cron job was created with the wrong headers. It sends a static `Authorization: Bearer <anon_key>` header, but the edge function's `cron-poll` handler checks for `x-cron-secret` and `x-cron-trigger` headers, which are absent. Every other cron job in the project (e.g., `twitter-alpha-tracker-poll`, `instagram-automation-poll`) correctly uses `jsonb_build_object` with the `x-cron-secret` pulled from `app_settings` and `x-cron-trigger: supabase-internal`.
 
-## What Needs to Happen
+**Result:** The daily cron always gets a 401 Unauthorized response. No birthdays are ever checked automatically.
 
-### Step 1: Create the database tables + RLS policies
+**Fix:** Drop the existing cron job and recreate it using the same pattern as other working cron jobs.
 
-Run a migration to create:
-- `birthday_reminder_config` (user settings: `is_active`, `days_before`, `reminders_sent`, `last_checked_at`)
-- `birthday_reminders_sent` (dedup table with unique constraint on `user_id, person_name, year_sent`)
-- Standard `auth.uid() = user_id` RLS policies on both
-- `updated_at` trigger on config table
+### Bug 2: Birthday Matching Only Checks Exactly N Days Ahead (Design Flaw)
 
-### Step 2: Schedule the pg_cron job
+`isBirthdayInDays(birthday, daysBeforeTarget)` checks if the birthday falls on **exactly** `daysBeforeTarget` (default 7) days from now. It does not check a range. This means:
+- The reminder can only fire on one specific day (7 days before the birthday)
+- If the cron misses that day (which it always does, per Bug 1), the opportunity is lost
+- Manual polls also fail unless run on that exact day
 
-Insert the daily cron job (`0 8 * * *`) that calls the `birthday-reminder` edge function with `cron-poll` action, using the existing `CRON_SECRET` and `SUPABASE_ANON_KEY` pattern. This will use the Supabase SQL insert tool (not a migration) since it contains project-specific URLs.
+**Fix:** Change the logic to check if the birthday is **within the next N days** (1 to N inclusive), so reminders are sent anytime the birthday is upcoming.
 
-### Step 3: Update generated types
+### Bug 3: Regex May Not Match All Memory Formats (Robustness)
 
-The `src/integrations/supabase/types.ts` file will auto-update once tables are created, removing the need for `as any` casts in `useBirthdayReminder.ts`.
+The birthday regex requires a possessive form like `"X's birthday is March 9"`. It uses `(?:'s|'s)` which handles straight and curly apostrophes but may miss other formats like:
+- `"John birthday March 9"` (no apostrophe)
+- `"Birthday: John - March 9"`
+- `"March 9 is John's birthday"`
 
-No frontend or edge function changes needed — those are already complete.
+**Fix:** Add more flexible regex patterns and a reversed date-first pattern.
+
+---
+
+## Implementation Plan
+
+### Step 1: Fix the pg_cron job
+
+Use the Supabase SQL insert tool to:
+1. Unschedule the broken `birthday-reminder-daily` job
+2. Recreate it using `jsonb_build_object` with `x-cron-secret` from `app_settings` and `x-cron-trigger`, matching the pattern used by all other working cron jobs
+
+### Step 2: Fix `isBirthdayInDays` in the edge function
+
+Change the function to check if the birthday falls within a range of 1 to `daysAhead` days from now (inclusive), rather than exactly `daysAhead` days. This ensures the reminder fires anytime the birthday is upcoming, not just on one specific day.
+
+### Step 3: Add more birthday parsing patterns
+
+Add additional regex patterns to the edge function:
+- Date-first: `"March 9 is X's birthday"`
+- Simpler: `"X birthday March 9"` (no possessive)
+
+### Step 4: Redeploy the edge function
+
+Deploy the updated `birthday-reminder` function.
+
+No frontend changes needed. No database schema changes needed.
 
