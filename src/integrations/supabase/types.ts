@@ -32,6 +32,66 @@ export type Database = {
         }
         Relationships: []
       }
+      birthday_reminder_config: {
+        Row: {
+          created_at: string
+          days_before: number
+          id: string
+          is_active: boolean
+          last_checked_at: string | null
+          reminders_sent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          days_before?: number
+          id?: string
+          is_active?: boolean
+          last_checked_at?: string | null
+          reminders_sent?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          days_before?: number
+          id?: string
+          is_active?: boolean
+          last_checked_at?: string | null
+          reminders_sent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      birthday_reminders_sent: {
+        Row: {
+          birthday_date: string | null
+          id: string
+          person_name: string
+          sent_at: string
+          user_id: string
+          year_sent: number
+        }
+        Insert: {
+          birthday_date?: string | null
+          id?: string
+          person_name: string
+          sent_at?: string
+          user_id: string
+          year_sent: number
+        }
+        Update: {
+          birthday_date?: string | null
+          id?: string
+          person_name?: string
+          sent_at?: string
+          user_id?: string
+          year_sent?: number
+        }
+        Relationships: []
+      }
       discord_automation_config: {
         Row: {
           channel_id: string | null
