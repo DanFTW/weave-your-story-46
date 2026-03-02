@@ -139,8 +139,8 @@ function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
 
 function isBirthdayInDays(birthday: ParsedBirthday, daysAhead: number): boolean {
   const now = new Date();
-  // Check if the birthday falls within the next 1 to daysAhead days (inclusive)
-  for (let d = 1; d <= daysAhead; d++) {
+  // Check if the birthday falls within today (0) through daysAhead days (inclusive)
+  for (let d = 0; d <= daysAhead; d++) {
     const target = new Date(now);
     target.setDate(target.getDate() + d);
     if (target.getMonth() + 1 === birthday.month && target.getDate() === birthday.day) {
