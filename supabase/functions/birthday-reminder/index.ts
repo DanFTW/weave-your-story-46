@@ -111,19 +111,27 @@ interface ParsedBirthday {
 }
 
 function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
-  // Pattern 1: "X's birthday is [on] Month Day"
-  // Pattern 2: "Birthday of/for X is [on] Month Day"
-  // Pattern 3: "X birthday [is] Month Day" (no possessive)
-  // Pattern 4: "Month Day is X's birthday" (date-first)
+  // Normalize smart quotes and extra whitespace
+  const text = memoryText.replace(/[\u2018\u2019\u201C\u201D]/g, "'").replace(/\s+/g, " ").trim();
+
+  // ── Named-month patterns (order matters: most specific first) ──
   const patterns: { regex: RegExp; nameIdx: number; monthIdx: number; dayIdx: number }[] = [
-    { regex: /(.+?)(?:'s|'s|\u2019s)\s+birthday\s+is\s+(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
-    { regex: /birthday\s+(?:of|for)\s+(.+?)\s+(?:is\s+)?(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
-    { regex: /(.+?)\s+birthday\s+(?:is\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
-    { regex: /(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?\s+is\s+(.+?)(?:'s|'s|\u2019s)?\s+birthday/i, nameIdx: 3, monthIdx: 1, dayIdx: 2 },
+    // "X's birthday is [on] Month Day[, Year]"  /  "X's birthday: Month Day"
+    { regex: /(.+?)(?:'s)\s+birthday[\s:]+(?:is\s+)?(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*\d{4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    // "X was born on Month Day" / "X born [on] Month Day"
+    { regex: /(.+?)\s+(?:was\s+)?born\s+(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*\d{4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    // "X has a birthday on Month Day"
+    { regex: /(.+?)\s+has\s+a\s+birthday\s+(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*\d{4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    // "Birthday of/for X is [on] Month Day"
+    { regex: /birthday\s+(?:of|for)\s+(.+?)\s+(?:is\s+)?(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*\d{4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    // "X birthday [is] Month Day" (no possessive)
+    { regex: /(.+?)\s+birthday\s+(?:is\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*\d{4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    // "Month Day is X's birthday"
+    { regex: /(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?\s+is\s+(.+?)(?:'s)?\s+birthday/i, nameIdx: 3, monthIdx: 1, dayIdx: 2 },
   ];
 
   for (const { regex, nameIdx, monthIdx, dayIdx } of patterns) {
-    const match = memoryText.match(regex);
+    const match = text.match(regex);
     if (match) {
       const name = match[nameIdx].trim();
       const monthStr = match[monthIdx].toLowerCase();
@@ -134,6 +142,27 @@ function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
       }
     }
   }
+
+  // ── Numeric date patterns: "X's birthday is M/D" or "X's birthday: MM/DD" ──
+  const numericPatterns: { regex: RegExp; nameIdx: number; monthIdx: number; dayIdx: number }[] = [
+    { regex: /(.+?)(?:'s)\s+birthday[\s:]+(?:is\s+)?(?:on\s+)?(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    { regex: /(.+?)\s+(?:was\s+)?born\s+(?:on\s+)?(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    { regex: /(.+?)\s+birthday\s+(?:is\s+)?(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+  ];
+
+  for (const { regex, nameIdx, monthIdx, dayIdx } of numericPatterns) {
+    const match = text.match(regex);
+    if (match) {
+      const name = match[nameIdx].trim();
+      const month = parseInt(match[monthIdx], 10);
+      const day = parseInt(match[dayIdx], 10);
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const monthName = Object.keys(MONTH_MAP).find(k => MONTH_MAP[k] === month) || `${month}`;
+        return { personName: name, month, day, dateString: `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${day}` };
+      }
+    }
+  }
+
   return null;
 }
 
@@ -375,7 +404,10 @@ async function processUser(supabase: any, config: any): Promise<number> {
   for (const mem of birthdayMemories) {
     const memText = mem.memory || mem.content || mem.text || "";
     const parsed = parseBirthdayFromMemory(memText);
-    if (!parsed) continue;
+    if (!parsed) {
+      console.log(`[Birthday] Could not parse birthday from: "${memText.substring(0, 120)}"`);
+      continue;
+    }
 
     // Check if birthday is exactly daysBeforeTarget days away
     if (!isBirthdayInDays(parsed, daysBeforeTarget)) continue;
