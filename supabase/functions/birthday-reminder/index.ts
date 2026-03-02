@@ -111,22 +111,26 @@ interface ParsedBirthday {
 }
 
 function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
-  // Patterns: "X's birthday is Month Day" / "X's birthday is on Month Day"
-  // Also: "X birthday is Month Day"
-  const patterns = [
-    /(.+?)(?:'s|'s)\s+birthday\s+is\s+(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i,
-    /birthday\s+(?:of|for)\s+(.+?)\s+is\s+(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i,
+  // Pattern 1: "X's birthday is [on] Month Day"
+  // Pattern 2: "Birthday of/for X is [on] Month Day"
+  // Pattern 3: "X birthday [is] Month Day" (no possessive)
+  // Pattern 4: "Month Day is X's birthday" (date-first)
+  const patterns: { regex: RegExp; nameIdx: number; monthIdx: number; dayIdx: number }[] = [
+    { regex: /(.+?)(?:'s|'s|\u2019s)\s+birthday\s+is\s+(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    { regex: /birthday\s+(?:of|for)\s+(.+?)\s+(?:is\s+)?(?:on\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    { regex: /(.+?)\s+birthday\s+(?:is\s+)?(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?/i, nameIdx: 1, monthIdx: 2, dayIdx: 3 },
+    { regex: /(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?\s+is\s+(.+?)(?:'s|'s|\u2019s)?\s+birthday/i, nameIdx: 3, monthIdx: 1, dayIdx: 2 },
   ];
 
-  for (const pattern of patterns) {
-    const match = memoryText.match(pattern);
+  for (const { regex, nameIdx, monthIdx, dayIdx } of patterns) {
+    const match = memoryText.match(regex);
     if (match) {
-      const name = match[1].trim();
-      const monthStr = match[2].toLowerCase();
-      const day = parseInt(match[3], 10);
+      const name = match[nameIdx].trim();
+      const monthStr = match[monthIdx].toLowerCase();
+      const day = parseInt(match[dayIdx], 10);
       const month = MONTH_MAP[monthStr];
       if (month && day >= 1 && day <= 31) {
-        return { personName: name, month, day, dateString: `${match[2]} ${match[3]}` };
+        return { personName: name, month, day, dateString: `${match[monthIdx]} ${match[dayIdx]}` };
       }
     }
   }
@@ -135,9 +139,15 @@ function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
 
 function isBirthdayInDays(birthday: ParsedBirthday, daysAhead: number): boolean {
   const now = new Date();
-  const target = new Date(now);
-  target.setDate(target.getDate() + daysAhead);
-  return target.getMonth() + 1 === birthday.month && target.getDate() === birthday.day;
+  // Check if the birthday falls within the next 1 to daysAhead days (inclusive)
+  for (let d = 1; d <= daysAhead; d++) {
+    const target = new Date(now);
+    target.setDate(target.getDate() + d);
+    if (target.getMonth() + 1 === birthday.month && target.getDate() === birthday.day) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ── Email extraction ──
