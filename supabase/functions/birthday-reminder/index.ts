@@ -163,6 +163,32 @@ function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
     }
   }
 
+  // ── Compact/ISO numeric dates: YYYYMMDD, YYYY-MM-DD, YYYY/MM/DD ──
+  const compactPatterns: { regex: RegExp; nameIdx: number }[] = [
+    // "X's birthday is [on] 20260302" or "X's birthday: 2026-03-02"
+    { regex: /(.+?)(?:'s)\s+birthday[\s:]+(?:is\s+)?(?:on\s+)?\d{4}[-\/]?(\d{2})[-\/]?(\d{2})/i, nameIdx: 1 },
+    // "X was born on 19960302"
+    { regex: /(.+?)\s+(?:was\s+)?born\s+(?:on\s+)?\d{4}[-\/]?(\d{2})[-\/]?(\d{2})/i, nameIdx: 1 },
+    // "X birthday [is] 20260302"
+    { regex: /(.+?)\s+birthday\s+(?:is\s+)?(?:on\s+)?\d{4}[-\/]?(\d{2})[-\/]?(\d{2})/i, nameIdx: 1 },
+    // "Birthday of X is 20260302"
+    { regex: /birthday\s+(?:of|for)\s+(.+?)\s+(?:is\s+)?(?:on\s+)?\d{4}[-\/]?(\d{2})[-\/]?(\d{2})/i, nameIdx: 1 },
+  ];
+
+  for (const { regex, nameIdx } of compactPatterns) {
+    const match = text.match(regex);
+    if (match) {
+      const name = match[nameIdx].trim();
+      const month = parseInt(match[2], 10);
+      const day = parseInt(match[3], 10);
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const monthName = Object.keys(MONTH_MAP).find(k => MONTH_MAP[k] === month) || `${month}`;
+        console.log(`[Birthday] Parsed compact date for "${name}": month=${month}, day=${day}`);
+        return { personName: name, month, day, dateString: `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${day}` };
+      }
+    }
+  }
+
   return null;
 }
 
