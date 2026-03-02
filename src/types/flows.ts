@@ -47,6 +47,7 @@ export interface FlowConfig {
   isFirefliesAutomationFlow?: boolean; // If true, uses Fireflies automation UI
   isGoogleDriveAutomationFlow?: boolean; // If true, uses Google Drive automation UI
   isDiscordAutomationFlow?: boolean; // If true, uses Discord automation UI
+  isBirthdayReminderFlow?: boolean; // If true, uses Birthday Reminder UI
 }
 
 // Single data entry (e.g., one family member)
