@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "birthday-reminder": {
+    id: "birthday-reminder",
+    title: "Auto Birthday Reminder",
+    subtitle: "Never miss a birthday",
+    description: "Scans your memories for birthdays, gathers context about each person, and sends a personalized email 7 days before via Gmail.",
+    gradient: "purple",
+    icon: Gift,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to send emails",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Reminders",
+        description: "Activate birthday scanning",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Birthday emails sent automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "todoist-task-tracker": {
     id: "todoist-task-tracker",
     title: "Todoist New Task Tracker",

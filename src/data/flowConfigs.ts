@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "birthday-reminder": {
+    id: "birthday-reminder",
+    title: "Auto Birthday Reminder",
+    subtitle: "Personalized birthday emails",
+    description: "Automatically send personalized birthday emails before birthdays.",
+    gradient: "purple",
+    icon: Gift,
+    entryName: "reminder",
+    entryNamePlural: "reminders",
+    memoryTag: "BIRTHDAY",
+    fields: [],
+    isBirthdayReminderFlow: true,
+  },
   "todoist-task-tracker": {
     id: "todoist-task-tracker",
     title: "Todoist Task Tracker",

@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "birthday-reminder",
+    title: "Auto Birthday Reminder",
+    description: "Automatically send personalized birthday emails 7 days before",
+    icon: Gift,
+    gradient: "purple",
+    status: "active",
+    type: "automation",
+    category: "personal",
+    integrations: ["gmail"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "discord-tracker",
     title: "Discord Channel Message Tracker",

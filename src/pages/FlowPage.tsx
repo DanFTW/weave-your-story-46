@@ -77,6 +77,9 @@ import { GoogleDriveAutomationFlow } from "@/components/flows/googledrive-automa
 // Discord Automation components
 import { DiscordAutomationFlow } from "@/components/flows/discord-automation";
 
+// Birthday Reminder components
+import { BirthdayReminderFlow } from "@/components/flows/birthday-reminder";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -285,6 +288,12 @@ export default function FlowPage() {
 
   if (config.isDiscordAutomationFlow) {
     return <DiscordAutomationFlow />;
+  }
+
+  // === BIRTHDAY REMINDER FLOW RENDER ===
+
+  if (config.isBirthdayReminderFlow) {
+    return <BirthdayReminderFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===
