@@ -70,6 +70,9 @@ export type Database = {
           birthday_date: string | null
           id: string
           person_name: string
+          provider_response: Json | null
+          provider_status: string | null
+          recipient_email: string | null
           sent_at: string
           user_id: string
           year_sent: number
@@ -78,6 +81,9 @@ export type Database = {
           birthday_date?: string | null
           id?: string
           person_name: string
+          provider_response?: Json | null
+          provider_status?: string | null
+          recipient_email?: string | null
           sent_at?: string
           user_id: string
           year_sent: number
@@ -86,6 +92,9 @@ export type Database = {
           birthday_date?: string | null
           id?: string
           person_name?: string
+          provider_response?: Json | null
+          provider_status?: string | null
+          recipient_email?: string | null
           sent_at?: string
           user_id?: string
           year_sent?: number

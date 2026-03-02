@@ -205,21 +205,80 @@ function isBirthdayInDays(birthday: ParsedBirthday, daysAhead: number): boolean 
   return false;
 }
 
-// ── Email extraction ──
+// ── Email extraction (scored candidates) ──
 
-function extractEmailFromMemories(memories: any[], personName: string): string | null {
-  const nameLower = personName.toLowerCase();
-  const emailPattern = /[\w.+-]+@[\w.-]+\.\w+/;
+interface EmailCandidate {
+  email: string;
+  score: number;
+  memoryDate: string;
+}
+
+function resolveRecipientEmail(memories: any[], personName: string): string | null {
+  const nameLower = personName.toLowerCase().replace(/['']/g, "").trim();
+  const emailPattern = /[\w.+-]+@[\w.-]+\.\w{2,}/g;
+
+  // Explicit patterns ranked by confidence
+  const explicitPatterns = [
+    // "{name}'s email is {email}"
+    new RegExp(`${nameLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:'s|s)?\\s+email\\s+(?:is|address is|address:)\\s+`, "i"),
+    // "email for {name} is {email}"
+    new RegExp(`email\\s+(?:for|of)\\s+${nameLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(?:is|:)\\s+`, "i"),
+  ];
+
+  const candidates: EmailCandidate[] = [];
 
   for (const mem of memories) {
-    const text = (mem.memory || mem.content || mem.text || "").toLowerCase();
-    if (text.includes(nameLower) && text.includes("email")) {
-      const fullText = mem.memory || mem.content || mem.text || "";
-      const emailMatch = fullText.match(emailPattern);
-      if (emailMatch) return emailMatch[0];
+    const rawText = mem.memory || mem.content || mem.text || "";
+    const textLower = rawText.toLowerCase().replace(/['']/g, "");
+
+    // Must mention this person
+    if (!textLower.includes(nameLower)) continue;
+
+    const emailMatches = rawText.match(emailPattern);
+    if (!emailMatches || emailMatches.length === 0) continue;
+
+    // Score: explicit pattern match = 10, generic mention = 1
+    let score = 1;
+    for (const pattern of explicitPatterns) {
+      if (pattern.test(textLower)) {
+        score = 10;
+        break;
+      }
+    }
+
+    // If the memory text contains "email" keyword, boost score
+    if (textLower.includes("email") && score < 10) score = 5;
+
+    for (const email of emailMatches) {
+      candidates.push({
+        email: email.toLowerCase(),
+        score,
+        memoryDate: mem.date || mem.created_at || "",
+      });
     }
   }
-  return null;
+
+  if (candidates.length === 0) {
+    console.log(`[Birthday] No email candidates found for "${personName}"`);
+    return null;
+  }
+
+  // Sort by score desc, then by date desc (newest first)
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return (b.memoryDate || "").localeCompare(a.memoryDate || "");
+  });
+
+  // If top candidate has a much higher score than second, it's unambiguous
+  const top = candidates[0];
+  const runner = candidates.length > 1 ? candidates[1] : null;
+
+  if (runner && top.score === runner.score && top.email !== runner.email) {
+    console.warn(`[Birthday] Ambiguous email for "${personName}": ${top.email} vs ${runner.email} (both score ${top.score}). Picking newest.`);
+  }
+
+  console.log(`[Birthday] Resolved email for "${personName}": ${top.email} (score=${top.score}, candidates=${candidates.length})`);
+  return top.email;
 }
 
 // ── AI email generation ──
@@ -309,14 +368,24 @@ Return ONLY a JSON object with "subject" and "body" keys. The body should be pla
   }
 }
 
-// ── Send email via Composio ──
+// ── Send email via Composio (fail-closed) ──
+
+interface SendResult {
+  success: boolean;
+  providerStatus: string;
+  providerResponse: Record<string, any> | null;
+}
 
 async function sendEmailViaComposio(
   connectionId: string,
   to: string,
   subject: string,
   body: string
-): Promise<boolean> {
+): Promise<SendResult> {
+  const fail = (status: string, resp: Record<string, any> | null = null): SendResult => ({
+    success: false, providerStatus: status, providerResponse: resp,
+  });
+
   try {
     console.log(`[Birthday] Sending email to ${to} via Composio`);
 
@@ -336,17 +405,55 @@ async function sendEmailViaComposio(
       }),
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[Birthday] Composio send error:", res.status, errText);
-      return false;
+    let payload: any = null;
+    const rawText = await res.text();
+    try {
+      payload = JSON.parse(rawText);
+    } catch {
+      console.error(`[Birthday] Composio response not JSON: ${rawText.substring(0, 500)}`);
+      return fail("parse_error", { raw: rawText.substring(0, 500) });
     }
 
-    console.log(`[Birthday] Email sent to ${to}`);
-    return true;
+    if (!res.ok) {
+      console.error(`[Birthday] Composio HTTP ${res.status}:`, JSON.stringify(payload).substring(0, 500));
+      return fail(`http_${res.status}`, payload);
+    }
+
+    // Check for error in payload
+    if (payload?.error) {
+      console.error(`[Birthday] Composio payload error:`, JSON.stringify(payload.error).substring(0, 500));
+      return fail("provider_error", payload);
+    }
+
+    // Check for successful execution markers
+    const execStatus = payload?.status || payload?.execution_status || payload?.data?.status;
+    const hasSuccessMarker =
+      execStatus === "success" ||
+      execStatus === "executed" ||
+      payload?.data?.successfull === true ||
+      payload?.data?.successful === true ||
+      payload?.successfull === true ||
+      payload?.successful === true ||
+      // If no explicit status but also no error and HTTP was OK, treat as success
+      (!payload?.error && res.ok);
+
+    if (!hasSuccessMarker) {
+      console.error(`[Birthday] Composio uncertain outcome:`, JSON.stringify(payload).substring(0, 500));
+      return fail("uncertain", payload);
+    }
+
+    console.log(`[Birthday] ✅ Provider confirmed email sent to ${to}`);
+    return {
+      success: true,
+      providerStatus: "confirmed",
+      providerResponse: {
+        status: execStatus || "ok",
+        request_id: payload?.request_id || payload?.data?.request_id || null,
+      },
+    };
   } catch (e) {
     console.error("[Birthday] Send email exception:", e);
-    return false;
+    return fail("exception", { message: String(e) });
   }
 }
 
@@ -461,8 +568,8 @@ async function processUser(supabase: any, config: any): Promise<number> {
       .filter((t: string) => t && !t.toLowerCase().includes("birthday"))
       .slice(0, 10);
 
-    // Extract email
-    const recipientEmail = extractEmailFromMemories(personMemories, parsed.personName);
+    // Resolve recipient email (scored candidates)
+    const recipientEmail = resolveRecipientEmail(personMemories, parsed.personName);
     if (!recipientEmail) {
       console.log(`[Birthday] No email found for ${parsed.personName}, skipping`);
       continue;
@@ -475,21 +582,24 @@ async function processUser(supabase: any, config: any): Promise<number> {
       continue;
     }
 
-    // Send via Composio Gmail
-    const sent = await sendEmailViaComposio(
+    // Send via Composio Gmail (fail-closed)
+    const sendResult = await sendEmailViaComposio(
       gmailIntegration.composio_connection_id,
       recipientEmail,
       email.subject,
       email.body
     );
 
-    if (sent) {
-      // Record dedup
+    if (sendResult.success) {
+      // Record dedup with audit metadata
       await supabase.from("birthday_reminders_sent").insert({
         user_id: userId,
         person_name: parsed.personName,
         birthday_date: parsed.dateString,
         year_sent: currentYear,
+        recipient_email: recipientEmail,
+        provider_status: sendResult.providerStatus,
+        provider_response: sendResult.providerResponse,
       });
 
       // Increment counter
@@ -503,6 +613,8 @@ async function processUser(supabase: any, config: any): Promise<number> {
 
       sentCount++;
       console.log(`[Birthday] ✅ Reminder sent for ${parsed.personName} → ${recipientEmail}`);
+    } else {
+      console.error(`[Birthday] ❌ Send FAILED for ${parsed.personName} → ${recipientEmail} (status: ${sendResult.providerStatus}). NOT writing dedup row.`);
     }
 
     await delay(BATCH_DELAY_MS);
