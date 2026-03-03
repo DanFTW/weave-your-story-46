@@ -407,7 +407,7 @@ export default function FlowPage() {
     try {
       let savedCount = 0;
       for (const memory of llmGeneratedMemories) {
-        const success = await createMemory(memory.content, memory.tag);
+        const success = await createMemory(memory.content, memory.tag, { silent: true });
         if (success) savedCount++;
       }
 
@@ -583,7 +583,7 @@ export default function FlowPage() {
       const savedIds: string[] = [];
       
       for (const memory of state.generatedMemories) {
-        const success = await createMemory(memory.content, memory.tag);
+        const success = await createMemory(memory.content, memory.tag, { silent: true });
         if (success) {
           savedIds.push(memory.id);
         }

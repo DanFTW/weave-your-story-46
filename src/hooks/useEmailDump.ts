@@ -187,12 +187,16 @@ export function useEmailDump(): UseEmailDumpReturn {
     try {
       let saved = 0;
       for (const memory of extractedEmails) {
-        const success = await createMemory(memory.content, memory.tag);
+        const success = await createMemory(memory.content, memory.tag, { silent: true });
         if (success) saved++;
       }
 
       if (saved > 0) {
         setSavedCount(saved);
+        toast({
+          title: "Emails saved",
+          description: `Successfully saved ${saved} email memories.`,
+        });
         setPhase('success');
         return true;
       }

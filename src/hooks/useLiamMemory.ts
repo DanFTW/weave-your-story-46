@@ -87,7 +87,7 @@ interface Memory {
 }
 
 interface UseLiamMemoryReturn {
-  createMemory: (content: string, tag?: string) => Promise<boolean>;
+  createMemory: (content: string, tag?: string, options?: { silent?: boolean }) => Promise<boolean>;
   listMemories: () => Promise<Memory[] | null>;
   forgetMemory: (memoryId: string, permanent?: boolean) => Promise<boolean>;
   changeTag: (memoryId: string, newTag: string) => Promise<boolean>;
@@ -132,7 +132,8 @@ export function useLiamMemory(): UseLiamMemoryReturn {
     return { data, error };
   };
 
-  const createMemory = async (content: string, tag?: string): Promise<boolean> => {
+  const createMemory = async (content: string, tag?: string, options?: { silent?: boolean }): Promise<boolean> => {
+    const silent = options?.silent ?? false;
     setIsCreating(true);
     
     try {
@@ -154,11 +155,13 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         const errorMessage = error.message || 'Failed to save memory';
         const isConfigError = errorMessage.includes('API keys not configured') || errorMessage.includes('API keys incomplete');
         
-        toast({
-          title: isConfigError ? 'API keys required' : 'Failed to save memory',
-          description: isConfigError ? 'Please configure your API keys in Profile → API Configuration.' : errorMessage,
-          variant: 'destructive',
-        });
+        if (!silent) {
+          toast({
+            title: isConfigError ? 'API keys required' : 'Failed to save memory',
+            description: isConfigError ? 'Please configure your API keys in Profile → API Configuration.' : errorMessage,
+            variant: 'destructive',
+          });
+        }
         return false;
       }
 
@@ -171,13 +174,15 @@ export function useLiamMemory(): UseLiamMemoryReturn {
                              errorMessage.includes('API keys incomplete') ||
                              errorMessage.includes('Invalid private key');
         
-        toast({
-          title: isConfigError ? 'API keys required' : 'Failed to save memory',
-          description: isConfigError 
-            ? 'Please configure your API keys in Profile → API Configuration.' 
-            : typeof data.details === 'string' ? data.details : errorMessage,
-          variant: 'destructive',
-        });
+        if (!silent) {
+          toast({
+            title: isConfigError ? 'API keys required' : 'Failed to save memory',
+            description: isConfigError 
+              ? 'Please configure your API keys in Profile → API Configuration.' 
+              : typeof data.details === 'string' ? data.details : errorMessage,
+            variant: 'destructive',
+          });
+        }
         return false;
       }
 
@@ -185,27 +190,33 @@ export function useLiamMemory(): UseLiamMemoryReturn {
       // The API returns { success: true } or similar on success
       if (!data || (data.success === false)) {
         console.error('Unexpected response from LIAM API:', data);
-        toast({
-          title: 'Failed to save memory',
-          description: 'The memory service returned an unexpected response.',
-          variant: 'destructive',
-        });
+        if (!silent) {
+          toast({
+            title: 'Failed to save memory',
+            description: 'The memory service returned an unexpected response.',
+            variant: 'destructive',
+          });
+        }
         return false;
       }
 
       console.log('Memory created successfully:', data);
-      toast({
-        title: 'Memory saved',
-        description: 'Your memory has been stored.',
-      });
+      if (!silent) {
+        toast({
+          title: 'Memory saved',
+          description: 'Your memory has been stored.',
+        });
+      }
       return true;
     } catch (err) {
       console.error('Unexpected error creating memory:', err);
-      toast({
-        title: 'Failed to save memory',
-        description: 'An unexpected error occurred.',
-        variant: 'destructive',
-      });
+      if (!silent) {
+        toast({
+          title: 'Failed to save memory',
+          description: 'An unexpected error occurred.',
+          variant: 'destructive',
+        });
+      }
       return false;
     } finally {
       setIsCreating(false);
