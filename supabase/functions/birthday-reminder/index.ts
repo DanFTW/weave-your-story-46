@@ -189,6 +189,34 @@ function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
     }
   }
 
+  // ── Free-text fallback: extract name via birthday keyword, then find YYYYMMDD anywhere ──
+  const namePatterns = [
+    /(.+?)(?:'s)\s+birthday/i,
+    /birthday\s+(?:of|for)\s+(.+?)(?:\s+(?:is|on|a|the|,))/i,
+  ];
+  let extractedName: string | null = null;
+  for (const np of namePatterns) {
+    const nm = text.match(np);
+    if (nm) {
+      extractedName = nm[1].trim();
+      break;
+    }
+  }
+
+  if (extractedName) {
+    // Look for YYYYMMDD or YYYY-MM-DD anywhere in the text
+    const dateMatch = text.match(/(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})/);
+    if (dateMatch) {
+      const month = parseInt(dateMatch[2], 10);
+      const day = parseInt(dateMatch[3], 10);
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const monthName = Object.keys(MONTH_MAP).find(k => MONTH_MAP[k] === month) || `${month}`;
+        console.log(`[Birthday] Parsed free-text fallback for "${extractedName}": month=${month}, day=${day}`);
+        return { personName: extractedName, month, day, dateString: `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${day}` };
+      }
+    }
+  }
+
   return null;
 }
 
@@ -406,17 +434,17 @@ async function createDraftViaComposio(
     try {
       payload = JSON.parse(rawText);
     } catch {
-      console.error(`[Birthday] Composio response not JSON: ${rawText.substring(0, 500)}`);
-      return fail("parse_error", { raw: rawText.substring(0, 500) });
+      console.error(`[Birthday] Composio response not JSON (full): ${rawText}`);
+      return fail("parse_error", { raw: rawText });
     }
 
     if (!res.ok) {
-      console.error(`[Birthday] Composio HTTP ${res.status}:`, JSON.stringify(payload).substring(0, 500));
+      console.error(`[Birthday] Composio HTTP ${res.status} (full response):`, JSON.stringify(payload));
       return fail(`http_${res.status}`, payload);
     }
 
     if (payload?.error) {
-      console.error(`[Birthday] Composio payload error:`, JSON.stringify(payload.error).substring(0, 500));
+      console.error(`[Birthday] Composio payload error (full):`, JSON.stringify(payload));
       return fail("provider_error", payload);
     }
 
@@ -430,7 +458,7 @@ async function createDraftViaComposio(
       payload?.successful === true;
 
     if (!hasSuccessMarker) {
-      console.error(`[Birthday] Composio uncertain outcome:`, JSON.stringify(payload).substring(0, 500));
+      console.error(`[Birthday] Composio uncertain outcome (full response):`, JSON.stringify(payload));
       return fail("uncertain", payload);
     }
 
@@ -606,7 +634,8 @@ async function processUser(supabase: any, config: any): Promise<number> {
       sentCount++;
       console.log(`[Birthday] ✅ Draft created for ${parsed.personName} → ${recipientEmail}`);
     } else {
-      console.error(`[Birthday] ❌ Draft FAILED for ${parsed.personName} → ${recipientEmail} (status: ${draftResult.providerStatus}). NOT writing dedup row.`);
+      console.error(`[Birthday] ❌ Draft FAILED for ${parsed.personName} → ${recipientEmail} (status: ${draftResult.providerStatus}). Full providerResponse:`, JSON.stringify(draftResult.providerResponse));
+      throw new Error(`Draft creation failed for ${parsed.personName}: ${draftResult.providerStatus} — ${JSON.stringify(draftResult.providerResponse)}`);
     }
 
     await delay(BATCH_DELAY_MS);
