@@ -6,7 +6,10 @@ import { useBirthdayReminder } from "@/hooks/useBirthdayReminder";
 import { AutomationConfig } from "./AutomationConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
+import { DraftConfirmationScreen, DraftConfirmationPerson } from "@/components/flows/DraftConfirmationScreen";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -19,13 +22,19 @@ const gradientClasses: Record<string, string> = {
 export function BirthdayReminderFlow() {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newBirthday, setNewBirthday] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [confirmationPeople, setConfirmationPeople] = useState<DraftConfirmationPerson[]>([]);
 
   const { isConnected, checkStatus } = useComposio("GMAIL");
 
   const {
-    phase, setPhase, config, stats, sentReminders,
-    isLoading, isActivating, isPolling,
+    phase, setPhase, config, stats, sentReminders, scannedPeople,
+    isLoading, isActivating, isPolling, isScanning, isCreatingDrafts,
     loadConfig, activateMonitoring, deactivateMonitoring, triggerManualPoll,
+    scanBirthdays, createConfirmedDrafts,
   } = useBirthdayReminder();
 
   useEffect(() => {
@@ -46,12 +55,64 @@ export function BirthdayReminderFlow() {
     }
   }, [isCheckingAuth, isConnected, loadConfig, navigate]);
 
-  const handleBack = () => navigate("/threads");
+  const handleBack = () => {
+    if (phase === "confirming") {
+      setPhase("active");
+      return;
+    }
+    navigate("/threads");
+  };
 
   const handleActivate = async () => {
     setPhase("activating");
     const success = await activateMonitoring();
     if (!success) setPhase("configure");
+  };
+
+  const handleCheckNow = async () => {
+    const people = await scanBirthdays();
+    const mapped: DraftConfirmationPerson[] = people
+      .filter((p) => !p.alreadySent)
+      .map((p, i) => ({
+        id: `${p.personName}-${i}`,
+        name: p.personName,
+        subtitle: p.birthdayDate,
+        email: p.email,
+        contextItems: p.contextMemories,
+      }));
+    setConfirmationPeople(mapped);
+    setPhase("confirming");
+  };
+
+  const handleConfirmDrafts = async (confirmed: DraftConfirmationPerson[]) => {
+    const people = confirmed.map((p) => ({
+      personName: p.name,
+      birthdayDate: p.subtitle,
+      email: p.email!,
+      contextMemories: p.contextItems,
+    }));
+    await createConfirmedDrafts(people);
+    setPhase("active");
+  };
+
+  const handleAddPerson = () => {
+    setShowAddForm(true);
+  };
+
+  const handleSubmitNewPerson = () => {
+    if (!newName.trim() || !newBirthday.trim()) return;
+    const newPerson: DraftConfirmationPerson = {
+      id: `manual-${Date.now()}`,
+      name: newName.trim(),
+      subtitle: newBirthday.trim(),
+      email: newEmail.trim() || null,
+      contextItems: [],
+    };
+    setConfirmationPeople((prev) => [...prev, newPerson]);
+    setNewName("");
+    setNewBirthday("");
+    setNewEmail("");
+    setShowAddForm(false);
   };
 
   if (isCheckingAuth || isLoading) {
@@ -70,6 +131,7 @@ export function BirthdayReminderFlow() {
     switch (phase) {
       case "configure": return "Set up reminders";
       case "active": return "Reminders active";
+      case "confirming": return "Review drafts";
       default: return "Birthday automation";
     }
   };
@@ -102,11 +164,56 @@ export function BirthdayReminderFlow() {
         {phase === "active" && (
           <ActiveMonitoring
             stats={stats}
-            isPolling={isPolling}
+            isPolling={isScanning || isPolling}
             onPause={deactivateMonitoring}
-            onCheckNow={triggerManualPoll}
+            onCheckNow={handleCheckNow}
             sentReminders={sentReminders}
           />
+        )}
+        {phase === "confirming" && (
+          <>
+            <DraftConfirmationScreen
+              title="Birthday Drafts"
+              people={confirmationPeople}
+              onConfirm={handleConfirmDrafts}
+              onAddPerson={handleAddPerson}
+              onBack={() => setPhase("active")}
+              isConfirming={isCreatingDrafts}
+              emptyMessage="No birthdays found in your memories. Add a person manually or save birthday memories first."
+            />
+            {showAddForm && (
+              <div className="mt-4 bg-card rounded-xl border border-border p-4 space-y-3">
+                <h4 className="font-medium text-foreground text-sm">Add Person</h4>
+                <Input
+                  placeholder="Name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="h-9 text-sm rounded-lg"
+                />
+                <Input
+                  placeholder="Birthday (e.g. March 10)"
+                  value={newBirthday}
+                  onChange={(e) => setNewBirthday(e.target.value)}
+                  className="h-9 text-sm rounded-lg"
+                />
+                <Input
+                  type="email"
+                  placeholder="Email (optional)"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="h-9 text-sm rounded-lg"
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowAddForm(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSubmitNewPerson} disabled={!newName.trim() || !newBirthday.trim()} className="flex-1">
+                    Add
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

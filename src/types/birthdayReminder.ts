@@ -2,7 +2,8 @@ export type BirthdayReminderPhase =
   | 'auth-check'
   | 'configure'
   | 'activating'
-  | 'active';
+  | 'active'
+  | 'confirming';
 
 export interface BirthdayReminderConfig {
   id: string;
@@ -28,4 +29,12 @@ export interface SentReminder {
   birthdayDate: string;
   yearSent: number;
   sentAt: string;
+}
+
+export interface ScannedBirthdayPerson {
+  personName: string;
+  birthdayDate: string;
+  email: string | null;
+  contextMemories: string[];
+  alreadySent: boolean;
 }
