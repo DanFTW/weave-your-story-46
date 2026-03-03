@@ -1,33 +1,32 @@
 
 
-## Plan: Switch Birthday Reminder from Send to Draft Creation (Exact 7-Day Trigger)
+## Fix: Birthday Reminder Error Surfacing + Free-Text Date Parsing
 
-### Changes
+Two targeted changes in `supabase/functions/birthday-reminder/index.ts`.
 
-**1. Edge Function (`supabase/functions/birthday-reminder/index.ts`)**
+### 1. Surface `createDraftViaComposio` failures clearly
 
-- **Replace `isBirthdayInDays` range check with exact 7-day check.** New function `isBirthdayExactlyInDays(birthday, days)` checks if `today + days` matches the birthday month/day. No more 0-to-N range loop.
+The current code returns a `DraftResult` with `success: false` but the caller in `processUser` (line 608) only logs at `error` level. The issue is that errors from Composio aren't thrown, so they can appear "silent" in some flows.
 
-- **Replace `sendEmailViaComposio` with `createDraftViaComposio`.** Change the Composio tool from `GMAIL_SEND_EMAIL` to `GMAIL_CREATE_EMAIL_DRAFT`. Same payload keys (`recipient_email`, `subject`, `body`). Same fail-closed validation. Same `SendResult` return type.
+**Changes:**
+- In `createDraftViaComposio` (lines 385-449): add detailed logging of the full raw response text on every non-success path (currently only partial/truncated logging).
+- In `processUser` (lines 578-610): after a failed `draftResult`, log the full `providerResponse` object so the exact Composio error is always visible. Throw an explicit error when a draft fails during `manual-poll` so the user gets feedback rather than a silent `draftsCreated: 0`.
 
-- **Update `processUser` to call `createDraftViaComposio`.** Update log messages from "sent"/"Reminder sent" to "draft created". Dedup row still written on success.
+### 2. Parse dates from free-text memories
 
-- **Update `generateBirthdayEmail` prompt.** Instruct the AI that the message will be saved as a Gmail draft for the user to review and send. Emphasize referencing the contact's interests, relationship details, and shared experiences from the context memories to make it personal.
+The current parser fails on strings like `"Remember Sadie Fernandez's birthday a week before on 20251202"` because none of the compact patterns match — they all require "birthday" to appear immediately before the YYYYMMDD date, but here there's intervening text ("a week before on").
 
-- **Update log messages and response fields** throughout the function (`remindersSent` → semantically still the same key but logs say "drafts created").
+**Changes to `parseBirthdayFromMemory` (lines 113-193):**
+- Add a new **free-text fallback** section after the existing compact patterns block (before the final `return null`).
+- This fallback uses a two-step approach:
+  1. Extract a person name from the text using existing birthday-keyword patterns (e.g., `(.+?)'s birthday` or `birthday of (.+?)`)
+  2. Find any YYYYMMDD / YYYY-MM-DD numeric date anywhere in the remaining text
+- If both a name and a valid date are found, return the parsed birthday.
+- This catches strings where the date is separated from the keyword by arbitrary words like "a week before on".
 
-**2. UI: `AutomationConfig.tsx`**
-- Step 4: "Creates a personalized birthday draft in your Gmail for you to review and send"
-- Description: "compose a personalized draft" instead of "send a personalized email"
+### Files modified
+- `supabase/functions/birthday-reminder/index.ts` only
 
-**3. UI: `ActiveMonitoring.tsx`**
-- "Reminders Sent" → "Drafts Created"
-- "Birthday Emails" → "Birthday Drafts"
-- "Sent Reminders" → "Created Drafts"
-- Empty state and per-item text updated to "draft" language
-
-**4. Hook: `useBirthdayReminder.ts`**
-- Toast messages updated: "drafts" instead of "reminders"
-
-No database migrations needed. Existing `birthday_reminders_sent` table is reused for draft dedup tracking.
+### No other changes
+No UI, hook, type, or migration changes.
 
