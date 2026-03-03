@@ -775,6 +775,170 @@ serve(async (req) => {
       });
     }
 
+    // ── Scan birthdays (no drafts created) ──
+    if (action === "scan-birthdays") {
+      const { data: apiKeysRow } = await supabase
+        .from("user_api_keys")
+        .select("api_key, private_key, user_key")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!apiKeysRow) {
+        return new Response(JSON.stringify({ error: "No API keys configured" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const birthdayMemories = await liamListMemories(apiKeysRow, "birthday");
+      console.log(`[Birthday] scan-birthdays: found ${birthdayMemories.length} memories for user ${userId}`);
+
+      const currentYear = new Date().getFullYear();
+      const scanned: any[] = [];
+      const seenNames = new Set<string>();
+
+      for (const mem of birthdayMemories) {
+        const memText = mem.memory || mem.content || mem.text || "";
+        const parsed = parseBirthdayFromMemory(memText);
+        if (!parsed) continue;
+
+        const nameKey = parsed.personName.toLowerCase().trim();
+        if (seenNames.has(nameKey)) continue;
+        seenNames.add(nameKey);
+
+        // Check dedup
+        const { data: existing } = await supabase
+          .from("birthday_reminders_sent")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("person_name", parsed.personName)
+          .eq("year_sent", currentYear)
+          .maybeSingle();
+
+        // Gather context memories
+        const personMemories = await liamListMemories(apiKeysRow, parsed.personName);
+        const contextTexts = personMemories
+          .map((m: any) => m.memory || m.content || m.text || "")
+          .filter((t: string) => t && !t.toLowerCase().includes("birthday"))
+          .slice(0, 10);
+
+        // Resolve email
+        const email = resolveRecipientEmail(personMemories, parsed.personName);
+
+        scanned.push({
+          personName: parsed.personName,
+          birthdayDate: parsed.dateString,
+          email,
+          contextMemories: contextTexts,
+          alreadySent: !!existing,
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, people: scanned }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Create confirmed drafts ──
+    if (action === "create-confirmed-drafts") {
+      const { people } = body as { people: { personName: string; birthdayDate: string; email: string; contextMemories: string[] }[] };
+
+      if (!people || !Array.isArray(people) || people.length === 0) {
+        return new Response(JSON.stringify({ error: "No people provided" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get Gmail connection
+      const { data: gmailIntegration } = await supabase
+        .from("user_integrations")
+        .select("composio_connection_id")
+        .eq("user_id", userId)
+        .eq("integration_id", "gmail")
+        .eq("status", "connected")
+        .maybeSingle();
+
+      if (!gmailIntegration?.composio_connection_id) {
+        return new Response(JSON.stringify({ error: "Gmail not connected" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const senderName = profile?.full_name || "Your friend";
+
+      const { data: config } = await supabase
+        .from("birthday_reminder_config")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const currentYear = new Date().getFullYear();
+      const results: { personName: string; success: boolean; error?: string }[] = [];
+
+      for (const person of people) {
+        try {
+          // Generate email
+          const emailContent = await generateBirthdayEmail(person.personName, person.birthdayDate, person.contextMemories, senderName);
+          if (!emailContent) {
+            results.push({ personName: person.personName, success: false, error: "AI generation failed" });
+            continue;
+          }
+
+          // Create draft
+          const draftResult = await createDraftViaComposio(
+            gmailIntegration.composio_connection_id,
+            person.email,
+            emailContent.subject,
+            emailContent.body
+          );
+
+          if (draftResult.success) {
+            // Record dedup
+            await supabase.from("birthday_reminders_sent").insert({
+              user_id: userId,
+              person_name: person.personName,
+              birthday_date: person.birthdayDate,
+              year_sent: currentYear,
+              recipient_email: person.email,
+              provider_status: draftResult.providerStatus,
+              provider_response: draftResult.providerResponse,
+            });
+
+            // Increment counter
+            if (config) {
+              await supabase
+                .from("birthday_reminder_config")
+                .update({
+                  reminders_sent: (config.reminders_sent || 0) + results.filter(r => r.success).length + 1,
+                  last_checked_at: new Date().toISOString(),
+                })
+                .eq("id", config.id);
+            }
+
+            results.push({ personName: person.personName, success: true });
+          } else {
+            results.push({ personName: person.personName, success: false, error: draftResult.providerStatus });
+          }
+
+          await delay(BATCH_DELAY_MS);
+        } catch (e) {
+          results.push({ personName: person.personName, success: false, error: String(e) });
+        }
+      }
+
+      const draftsCreated = results.filter((r) => r.success).length;
+      return new Response(JSON.stringify({ success: true, draftsCreated, results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

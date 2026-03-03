@@ -6,6 +6,7 @@ import {
   BirthdayReminderConfig,
   BirthdayReminderStats,
   SentReminder,
+  ScannedBirthdayPerson,
 } from "@/types/birthdayReminder";
 
 export function useBirthdayReminder() {
@@ -13,9 +14,12 @@ export function useBirthdayReminder() {
   const [phase, setPhase] = useState<BirthdayReminderPhase>("auth-check");
   const [config, setConfig] = useState<BirthdayReminderConfig | null>(null);
   const [sentReminders, setSentReminders] = useState<SentReminder[]>([]);
+  const [scannedPeople, setScannedPeople] = useState<ScannedBirthdayPerson[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isCreatingDrafts, setIsCreatingDrafts] = useState(false);
 
   const stats: BirthdayReminderStats = {
     remindersSent: config?.remindersSent ?? 0,
@@ -171,9 +175,77 @@ export function useBirthdayReminder() {
     }
   }, [loadConfig, toast]);
 
+  const scanBirthdays = useCallback(async (): Promise<ScannedBirthdayPerson[]> => {
+    setIsScanning(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({ title: "Authentication required", variant: "destructive" });
+        return [];
+      }
+
+      const { data, error } = await supabase.functions.invoke("birthday-reminder", {
+        body: { action: "scan-birthdays" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Scan failed", description: error.message, variant: "destructive" });
+        return [];
+      }
+
+      const people: ScannedBirthdayPerson[] = (data as any)?.people ?? [];
+      setScannedPeople(people);
+      return people;
+    } catch {
+      toast({ title: "Scan failed", variant: "destructive" });
+      return [];
+    } finally {
+      setIsScanning(false);
+    }
+  }, [toast]);
+
+  const createConfirmedDrafts = useCallback(async (
+    people: { personName: string; birthdayDate: string; email: string; contextMemories: string[] }[]
+  ): Promise<number> => {
+    setIsCreatingDrafts(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({ title: "Authentication required", variant: "destructive" });
+        return 0;
+      }
+
+      const { data, error } = await supabase.functions.invoke("birthday-reminder", {
+        body: { action: "create-confirmed-drafts", people },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Draft creation failed", description: error.message, variant: "destructive" });
+        return 0;
+      }
+
+      const result = data as any;
+      const draftsCreated = result?.draftsCreated ?? 0;
+      await loadConfig();
+      toast({
+        title: `Created ${draftsCreated} draft${draftsCreated !== 1 ? "s" : ""}`,
+        description: draftsCreated > 0 ? "Check your Gmail drafts folder" : "No drafts were created",
+      });
+      return draftsCreated;
+    } catch {
+      toast({ title: "Draft creation failed", variant: "destructive" });
+      return 0;
+    } finally {
+      setIsCreatingDrafts(false);
+    }
+  }, [loadConfig, toast]);
+
   return {
-    phase, setPhase, config, stats, sentReminders,
-    isLoading, isActivating, isPolling,
+    phase, setPhase, config, stats, sentReminders, scannedPeople,
+    isLoading, isActivating, isPolling, isScanning, isCreatingDrafts,
     loadConfig, activateMonitoring, deactivateMonitoring, triggerManualPoll,
+    scanBirthdays, createConfirmedDrafts,
   };
 }
