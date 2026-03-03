@@ -1,32 +1,79 @@
 
 
-## Fix: Birthday Reminder Error Surfacing + Free-Text Date Parsing
+## Plan: Birthday Draft Confirmation Screen
 
-Two targeted changes in `supabase/functions/birthday-reminder/index.ts`.
+### Overview
 
-### 1. Surface `createDraftViaComposio` failures clearly
+Add a confirmation step between "Check Now" and draft creation. The edge function gets a new `scan-birthdays` action that returns parsed birthday data without creating drafts. A new reusable `DraftConfirmationScreen` component displays each person as an editable card. Only after the user confirms does a `create-confirmed-drafts` action fire to actually create Gmail drafts.
 
-The current code returns a `DraftResult` with `success: false` but the caller in `processUser` (line 608) only logs at `error` level. The issue is that errors from Composio aren't thrown, so they can appear "silent" in some flows.
+### Files to create/modify
 
-**Changes:**
-- In `createDraftViaComposio` (lines 385-449): add detailed logging of the full raw response text on every non-success path (currently only partial/truncated logging).
-- In `processUser` (lines 578-610): after a failed `draftResult`, log the full `providerResponse` object so the exact Composio error is always visible. Throw an explicit error when a draft fails during `manual-poll` so the user gets feedback rather than a silent `draftsCreated: 0`.
+**1. `supabase/functions/birthday-reminder/index.ts`** — Two new actions:
 
-### 2. Parse dates from free-text memories
+- `scan-birthdays`: Reuses existing `processUser` logic but stops before draft creation. Returns an array of `{ personName, birthdayDate, email (nullable), contextMemories[] }` for all people with parseable birthdays (no date-range filter — show all). Dedup-skipped people are excluded.
+- `create-confirmed-drafts`: Accepts an array of `{ personName, birthdayDate, email, contextMemories[] }` from the client, generates AI emails, creates Gmail drafts, writes dedup rows. Returns per-person success/failure.
 
-The current parser fails on strings like `"Remember Sadie Fernandez's birthday a week before on 20251202"` because none of the compact patterns match — they all require "birthday" to appear immediately before the YYYYMMDD date, but here there's intervening text ("a week before on").
+**2. `src/types/birthdayReminder.ts`** — Add types:
 
-**Changes to `parseBirthdayFromMemory` (lines 113-193):**
-- Add a new **free-text fallback** section after the existing compact patterns block (before the final `return null`).
-- This fallback uses a two-step approach:
-  1. Extract a person name from the text using existing birthday-keyword patterns (e.g., `(.+?)'s birthday` or `birthday of (.+?)`)
-  2. Find any YYYYMMDD / YYYY-MM-DD numeric date anywhere in the remaining text
-- If both a name and a valid date are found, return the parsed birthday.
-- This catches strings where the date is separated from the keyword by arbitrary words like "a week before on".
+```typescript
+export interface ScannedBirthdayPerson {
+  personName: string;
+  birthdayDate: string;
+  email: string | null;
+  contextMemories: string[];
+  alreadySent: boolean;
+}
+```
 
-### Files modified
-- `supabase/functions/birthday-reminder/index.ts` only
+Add `'confirming'` to `BirthdayReminderPhase`.
 
-### No other changes
-No UI, hook, type, or migration changes.
+**3. `src/hooks/useBirthdayReminder.ts`** — Add two new functions:
+
+- `scanBirthdays()`: Calls `scan-birthdays` action, returns `ScannedBirthdayPerson[]`.
+- `createConfirmedDrafts(people)`: Calls `create-confirmed-drafts` action with the user-confirmed list, returns draft count.
+- Add `scannedPeople` state and `isScanning` / `isCreatingDrafts` loading states.
+
+**4. `src/components/flows/DraftConfirmationScreen.tsx`** — NEW reusable component:
+
+Props interface designed for reuse by other threads:
+```typescript
+interface DraftConfirmationPerson {
+  id: string;
+  name: string;
+  subtitle: string;       // e.g. "March 10"
+  email: string | null;
+  contextItems: string[]; // memories that will personalize the draft
+}
+
+interface DraftConfirmationScreenProps {
+  title: string;
+  people: DraftConfirmationPerson[];
+  onConfirm: (confirmed: DraftConfirmationPerson[]) => void;
+  onAddPerson?: () => void;
+  onBack: () => void;
+  isConfirming: boolean;
+  emptyMessage?: string;
+}
+```
+
+Each person card shows:
+- Name + birthday (subtitle)
+- Email field — pre-filled if found, editable input if missing
+- Expandable list of context memories that will be used
+- Remove button to exclude from this batch
+
+Bottom: "Add Person" button (calls `onAddPerson`) + "Create N Drafts" confirm button.
+
+**5. `src/components/flows/birthday-reminder/BirthdayReminderFlow.tsx`** — Wire up:
+
+- "Check Now" in `ActiveMonitoring` now calls `scanBirthdays()` → sets phase to `'confirming'`.
+- `'confirming'` phase renders `DraftConfirmationScreen` with the scanned people.
+- On confirm → calls `createConfirmedDrafts(people)` → shows results → returns to `'active'`.
+- "Add Person" opens a simple inline form to manually specify name + birthday + email.
+
+**6. `src/components/flows/birthday-reminder/index.ts`** — No changes needed (DraftConfirmationScreen lives in `src/components/flows/`).
+
+### No other files modified
+
+No database migrations. No changes to other threads, pages, or hooks.
 
