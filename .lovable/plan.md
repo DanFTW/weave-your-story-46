@@ -1,79 +1,32 @@
 
 
-## Plan: Birthday Draft Confirmation Screen
+## Batch Memory Toast Notifications
 
-### Overview
+### Problem
+`createMemory()` in `useLiamMemory.ts` fires a toast on every single call — success or error. When batch-saving 14 memories, users see 14 separate notifications.
 
-Add a confirmation step between "Check Now" and draft creation. The edge function gets a new `scan-birthdays` action that returns parsed birthday data without creating drafts. A new reusable `DraftConfirmationScreen` component displays each person as an editable card. Only after the user confirms does a `create-confirmed-drafts` action fire to actually create Gmail drafts.
+### Solution
+Add a `silent` option to `createMemory` that suppresses toasts. All batch callers already have their own summary toast after the loop, so they just need to pass `{ silent: true }`.
 
-### Files to create/modify
+### Changes
 
-**1. `supabase/functions/birthday-reminder/index.ts`** — Two new actions:
+**`src/hooks/useLiamMemory.ts`**
+- Change `createMemory` signature from `(content: string, tag?: string)` to `(content: string, tag?: string, options?: { silent?: boolean })`.
+- Wrap all 5 toast calls inside `createMemory` with `if (!options?.silent)` guards.
+- No changes to the public return type shape — just an optional third parameter.
 
-- `scan-birthdays`: Reuses existing `processUser` logic but stops before draft creation. Returns an array of `{ personName, birthdayDate, email (nullable), contextMemories[] }` for all people with parseable birthdays (no date-range filter — show all). Dedup-skipped people are excluded.
-- `create-confirmed-drafts`: Accepts an array of `{ personName, birthdayDate, email, contextMemories[] }` from the client, generates AI emails, creates Gmail drafts, writes dedup rows. Returns per-person success/failure.
+**`src/pages/FlowPage.tsx`** — 3 batch call sites:
+- Line 410 (LLM import loop): pass `{ silent: true }` → existing summary toast at line 417 handles the notification.
+- Line 586 (standard flow confirm loop): pass `{ silent: true }` → existing summary toast at line 593 handles it.
+- Line 162 (single receipt save): leave as-is (not a batch).
 
-**2. `src/types/birthdayReminder.ts`** — Add types:
+**`src/hooks/useEmailDump.ts`** — 1 batch call site:
+- Line 190: pass `{ silent: true }`. Check if there's already a summary toast after the loop; if not, add one.
 
-```typescript
-export interface ScannedBirthdayPerson {
-  personName: string;
-  birthdayDate: string;
-  email: string | null;
-  contextMemories: string[];
-  alreadySent: boolean;
-}
-```
+**No other files changed.** `ProfileEditDrawer` and `Home.tsx` are single-call sites — left as-is.
 
-Add `'confirming'` to `BirthdayReminderPhase`.
-
-**3. `src/hooks/useBirthdayReminder.ts`** — Add two new functions:
-
-- `scanBirthdays()`: Calls `scan-birthdays` action, returns `ScannedBirthdayPerson[]`.
-- `createConfirmedDrafts(people)`: Calls `create-confirmed-drafts` action with the user-confirmed list, returns draft count.
-- Add `scannedPeople` state and `isScanning` / `isCreatingDrafts` loading states.
-
-**4. `src/components/flows/DraftConfirmationScreen.tsx`** — NEW reusable component:
-
-Props interface designed for reuse by other threads:
-```typescript
-interface DraftConfirmationPerson {
-  id: string;
-  name: string;
-  subtitle: string;       // e.g. "March 10"
-  email: string | null;
-  contextItems: string[]; // memories that will personalize the draft
-}
-
-interface DraftConfirmationScreenProps {
-  title: string;
-  people: DraftConfirmationPerson[];
-  onConfirm: (confirmed: DraftConfirmationPerson[]) => void;
-  onAddPerson?: () => void;
-  onBack: () => void;
-  isConfirming: boolean;
-  emptyMessage?: string;
-}
-```
-
-Each person card shows:
-- Name + birthday (subtitle)
-- Email field — pre-filled if found, editable input if missing
-- Expandable list of context memories that will be used
-- Remove button to exclude from this batch
-
-Bottom: "Add Person" button (calls `onAddPerson`) + "Create N Drafts" confirm button.
-
-**5. `src/components/flows/birthday-reminder/BirthdayReminderFlow.tsx`** — Wire up:
-
-- "Check Now" in `ActiveMonitoring` now calls `scanBirthdays()` → sets phase to `'confirming'`.
-- `'confirming'` phase renders `DraftConfirmationScreen` with the scanned people.
-- On confirm → calls `createConfirmedDrafts(people)` → shows results → returns to `'active'`.
-- "Add Person" opens a simple inline form to manually specify name + birthday + email.
-
-**6. `src/components/flows/birthday-reminder/index.ts`** — No changes needed (DraftConfirmationScreen lives in `src/components/flows/`).
-
-### No other files modified
-
-No database migrations. No changes to other threads, pages, or hooks.
+### Files modified
+1. `src/hooks/useLiamMemory.ts` — add `silent` option
+2. `src/pages/FlowPage.tsx` — pass `{ silent: true }` in batch loops
+3. `src/hooks/useEmailDump.ts` — pass `{ silent: true }` in batch loop
 
