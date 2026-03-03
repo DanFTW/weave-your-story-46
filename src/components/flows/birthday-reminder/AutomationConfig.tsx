@@ -19,8 +19,8 @@ export function AutomationConfig({ config, onActivate, isActivating }: Automatio
           <div>
             <h3 className="font-medium text-foreground">Birthday Reminders</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Automatically scans your memories for birthdays. When one is {config.daysBefore} days away, 
-              we'll compose a personalized email using everything you know about that person and send it via Gmail.
+              Automatically scans your memories for birthdays. When one is exactly {config.daysBefore} days away, 
+              we'll compose a personalized draft using everything you know about that person and save it in your Gmail drafts for you to review and send.
             </p>
           </div>
         </div>
@@ -43,7 +43,7 @@ export function AutomationConfig({ config, onActivate, isActivating }: Automatio
           </div>
           <div className="flex gap-3">
             <span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">4</span>
-            <span>Writes and sends a personalized birthday email via your connected Gmail</span>
+            <span>Creates a personalized birthday draft in your Gmail for you to review and send</span>
           </div>
         </div>
       </div>

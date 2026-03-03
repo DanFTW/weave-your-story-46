@@ -192,17 +192,11 @@ function parseBirthdayFromMemory(memoryText: string): ParsedBirthday | null {
   return null;
 }
 
-function isBirthdayInDays(birthday: ParsedBirthday, daysAhead: number): boolean {
+function isBirthdayExactlyInDays(birthday: ParsedBirthday, days: number): boolean {
   const now = new Date();
-  // Check if the birthday falls within today (0) through daysAhead days (inclusive)
-  for (let d = 0; d <= daysAhead; d++) {
-    const target = new Date(now);
-    target.setDate(target.getDate() + d);
-    if (target.getMonth() + 1 === birthday.month && target.getDate() === birthday.day) {
-      return true;
-    }
-  }
-  return false;
+  const target = new Date(now);
+  target.setDate(target.getDate() + days);
+  return target.getMonth() + 1 === birthday.month && target.getDate() === birthday.day;
 }
 
 // ── Email extraction (scored candidates) ──
@@ -298,9 +292,11 @@ async function generateBirthdayEmail(
     ? `Here are some things I know about ${personName}:\n${contextMemories.map((m) => `- ${m}`).join("\n")}`
     : `I don't have much context about ${personName} beyond their birthday.`;
 
-  const prompt = `Write a warm, personal birthday email for ${personName} whose birthday is ${birthdayDate}. The email should feel genuine and not generic.
+  const prompt = `Write a warm, personal birthday message for ${personName} whose birthday is ${birthdayDate}. This will be saved as a Gmail draft for the sender to review and send — so make it feel genuine and ready to send, not like a template.
 
 ${contextBlock}
+
+Use specific details from the memories above — mention their interests, hobbies, shared experiences, relationship context, or anything personal you can find. The more specific and personal, the better. Avoid generic phrases like "I hope you have a great day" unless there's truly no context to draw from.
 
 The sender's name is ${senderName || "a friend"}.
 
@@ -316,7 +312,7 @@ Return ONLY a JSON object with "subject" and "body" keys. The body should be pla
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: "You are a helpful assistant that writes personal birthday emails. Always respond with valid JSON." },
+          { role: "system", content: "You are a helpful assistant that writes personal, heartfelt birthday messages. Draw heavily on any context memories provided — reference specific interests, hobbies, shared experiences, and relationship details to make the message feel uniquely personal. Always respond with valid JSON." },
           { role: "user", content: prompt },
         ],
         tools: [
@@ -368,28 +364,28 @@ Return ONLY a JSON object with "subject" and "body" keys. The body should be pla
   }
 }
 
-// ── Send email via Composio (fail-closed) ──
+// ── Create Gmail draft via Composio (fail-closed) ──
 
-interface SendResult {
+interface DraftResult {
   success: boolean;
   providerStatus: string;
   providerResponse: Record<string, any> | null;
 }
 
-async function sendEmailViaComposio(
+async function createDraftViaComposio(
   connectionId: string,
   to: string,
   subject: string,
   body: string
-): Promise<SendResult> {
-  const fail = (status: string, resp: Record<string, any> | null = null): SendResult => ({
+): Promise<DraftResult> {
+  const fail = (status: string, resp: Record<string, any> | null = null): DraftResult => ({
     success: false, providerStatus: status, providerResponse: resp,
   });
 
   try {
-    console.log(`[Birthday] Sending email to ${to} via Composio`);
+    console.log(`[Birthday] Creating Gmail draft for ${to} via Composio`);
 
-    const res = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEND_EMAIL", {
+    const res = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_CREATE_EMAIL_DRAFT", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -419,13 +415,11 @@ async function sendEmailViaComposio(
       return fail(`http_${res.status}`, payload);
     }
 
-    // Check for error in payload
     if (payload?.error) {
       console.error(`[Birthday] Composio payload error:`, JSON.stringify(payload.error).substring(0, 500));
       return fail("provider_error", payload);
     }
 
-    // Check for successful execution markers
     const execStatus = payload?.status || payload?.execution_status || payload?.data?.status;
     const hasSuccessMarker =
       execStatus === "success" ||
@@ -440,7 +434,7 @@ async function sendEmailViaComposio(
       return fail("uncertain", payload);
     }
 
-    console.log(`[Birthday] ✅ Provider confirmed email sent to ${to}`);
+    console.log(`[Birthday] ✅ Provider confirmed draft created for ${to}`);
     return {
       success: true,
       providerStatus: "confirmed",
@@ -450,7 +444,7 @@ async function sendEmailViaComposio(
       },
     };
   } catch (e) {
-    console.error("[Birthday] Send email exception:", e);
+    console.error("[Birthday] Create draft exception:", e);
     return fail("exception", { message: String(e) });
   }
 }
@@ -460,7 +454,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── Cron poll: process all active users ──
 
-async function cronPoll(supabase: any): Promise<{ usersProcessed: number; remindersSent: number }> {
+async function cronPoll(supabase: any): Promise<{ usersProcessed: number; draftsCreated: number }> {
   const { data: activeConfigs, error } = await supabase
     .from("birthday_reminder_config")
     .select("*")
@@ -468,22 +462,22 @@ async function cronPoll(supabase: any): Promise<{ usersProcessed: number; remind
 
   if (error || !activeConfigs?.length) {
     console.log("[Birthday] No active configs or error:", error?.message);
-    return { usersProcessed: 0, remindersSent: 0 };
+    return { usersProcessed: 0, draftsCreated: 0 };
   }
 
   console.log(`[Birthday] Processing ${activeConfigs.length} active users`);
-  let totalSent = 0;
+  let totalDrafts = 0;
 
   for (const config of activeConfigs) {
     try {
-      const sent = await processUser(supabase, config);
-      totalSent += sent;
+      const drafts = await processUser(supabase, config);
+      totalDrafts += drafts;
     } catch (e) {
       console.error(`[Birthday] Error processing user ${config.user_id}:`, e);
     }
   }
 
-  return { usersProcessed: activeConfigs.length, remindersSent: totalSent };
+  return { usersProcessed: activeConfigs.length, draftsCreated: totalDrafts };
 }
 
 async function processUser(supabase: any, config: any): Promise<number> {
@@ -541,7 +535,7 @@ async function processUser(supabase: any, config: any): Promise<number> {
     }
 
     // Check if birthday is exactly daysBeforeTarget days away
-    if (!isBirthdayInDays(parsed, daysBeforeTarget)) continue;
+    if (!isBirthdayExactlyInDays(parsed, daysBeforeTarget)) continue;
 
     console.log(`[Birthday] Upcoming birthday: ${parsed.personName} on ${parsed.dateString}`);
 
@@ -555,7 +549,7 @@ async function processUser(supabase: any, config: any): Promise<number> {
       .maybeSingle();
 
     if (existing) {
-      console.log(`[Birthday] Already sent reminder for ${parsed.personName} in ${currentYear}`);
+      console.log(`[Birthday] Already created draft for ${parsed.personName} in ${currentYear}`);
       continue;
     }
 
@@ -580,15 +574,15 @@ async function processUser(supabase: any, config: any): Promise<number> {
       continue;
     }
 
-    // Send via Composio Gmail (fail-closed)
-    const sendResult = await sendEmailViaComposio(
+    // Create draft via Composio Gmail (fail-closed)
+    const draftResult = await createDraftViaComposio(
       gmailIntegration.composio_connection_id,
       recipientEmail,
       email.subject,
       email.body
     );
 
-    if (sendResult.success) {
+    if (draftResult.success) {
       // Record dedup with audit metadata
       await supabase.from("birthday_reminders_sent").insert({
         user_id: userId,
@@ -596,8 +590,8 @@ async function processUser(supabase: any, config: any): Promise<number> {
         birthday_date: parsed.dateString,
         year_sent: currentYear,
         recipient_email: recipientEmail,
-        provider_status: sendResult.providerStatus,
-        provider_response: sendResult.providerResponse,
+        provider_status: draftResult.providerStatus,
+        provider_response: draftResult.providerResponse,
       });
 
       // Increment counter
@@ -610,9 +604,9 @@ async function processUser(supabase: any, config: any): Promise<number> {
         .eq("id", config.id);
 
       sentCount++;
-      console.log(`[Birthday] ✅ Reminder sent for ${parsed.personName} → ${recipientEmail}`);
+      console.log(`[Birthday] ✅ Draft created for ${parsed.personName} → ${recipientEmail}`);
     } else {
-      console.error(`[Birthday] ❌ Send FAILED for ${parsed.personName} → ${recipientEmail} (status: ${sendResult.providerStatus}). NOT writing dedup row.`);
+      console.error(`[Birthday] ❌ Draft FAILED for ${parsed.personName} → ${recipientEmail} (status: ${draftResult.providerStatus}). NOT writing dedup row.`);
     }
 
     await delay(BATCH_DELAY_MS);
@@ -746,8 +740,8 @@ serve(async (req) => {
         });
       }
 
-      const sent = await processUser(supabase, config);
-      return new Response(JSON.stringify({ success: true, remindersSent: sent }), {
+      const drafts = await processUser(supabase, config);
+      return new Response(JSON.stringify({ success: true, draftsCreated: drafts }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

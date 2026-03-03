@@ -34,7 +34,7 @@ export function ActiveMonitoring({ stats, isPolling, onPause, onCheckNow, sentRe
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div className="bg-muted/50 rounded-lg p-3 text-center">
             <div className="text-2xl font-bold text-foreground">{stats.remindersSent}</div>
-            <div className="text-xs text-muted-foreground mt-1">Reminders Sent</div>
+            <div className="text-xs text-muted-foreground mt-1">Drafts Created</div>
           </div>
           <div className="bg-muted/50 rounded-lg p-3 text-center">
             <div className="text-sm font-medium text-foreground">{lastCheckedText}</div>
@@ -49,7 +49,7 @@ export function ActiveMonitoring({ stats, isPolling, onPause, onCheckNow, sentRe
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
             <Gift className="w-4 h-4 text-primary" />
           </div>
-          <span className="text-foreground">Birthday Emails</span>
+          <span className="text-foreground">Birthday Drafts</span>
           <span className="ml-auto text-xs bg-green-500/10 text-green-600 px-2 py-1 rounded-full">
             Active
           </span>
@@ -72,10 +72,10 @@ export function ActiveMonitoring({ stats, isPolling, onPause, onCheckNow, sentRe
       </div>
 
       <div className="bg-card rounded-xl border border-border p-4">
-        <h4 className="font-medium text-foreground mb-3">Sent Reminders</h4>
+        <h4 className="font-medium text-foreground mb-3">Created Drafts</h4>
         {sentReminders.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No reminders sent yet. They'll appear here once birthdays are detected.
+            No drafts created yet. They'll appear here once birthdays are detected.
           </p>
         ) : (
           <div className="space-y-3">
@@ -90,7 +90,7 @@ export function ActiveMonitoring({ stats, isPolling, onPause, onCheckNow, sentRe
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-foreground truncate">{reminder.personName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {reminder.birthdayDate ?? "Unknown date"} · Sent{" "}
+                    {reminder.birthdayDate ?? "Unknown date"} · Created{" "}
                     {formatDistanceToNow(new Date(reminder.sentAt), { addSuffix: true })}
                   </p>
                 </div>
