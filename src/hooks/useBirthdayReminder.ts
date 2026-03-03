@@ -110,7 +110,7 @@ export function useBirthdayReminder() {
 
       setConfig((prev) => prev ? { ...prev, isActive: true } : null);
       setPhase("active");
-      toast({ title: "Birthday reminders activated", description: "You'll get notified before birthdays" });
+      toast({ title: "Birthday drafts activated", description: "Gmail drafts will be created 7 days before birthdays" });
       return true;
     } catch {
       toast({ title: "Activation failed", variant: "destructive" });
@@ -137,7 +137,7 @@ export function useBirthdayReminder() {
 
       setConfig((prev) => prev ? { ...prev, isActive: false } : null);
       setPhase("configure");
-      toast({ title: "Birthday reminders paused" });
+      toast({ title: "Birthday drafts paused" });
       return true;
     } catch {
       return false;
@@ -162,7 +162,7 @@ export function useBirthdayReminder() {
 
       await loadConfig();
       const result = data as any;
-      toast({ title: "Check complete", description: `Sent ${result?.remindersSent ?? 0} reminders` });
+      toast({ title: "Check complete", description: `Created ${result?.draftsCreated ?? 0} drafts` });
       return true;
     } catch {
       return false;
