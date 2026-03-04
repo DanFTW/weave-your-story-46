@@ -280,15 +280,13 @@ serve(async (req) => {
           .maybeSingle();
 
         if (integration?.composio_connection_id) {
-          const success = await bookmarkOnGoogleMaps(
+          const result = await findOnGoogleMaps(
             integration.composio_connection_id,
             parsed.name,
             parsed.address,
-            parsed.cuisine,
-            parsed.notes
           );
 
-          if (success) {
+          if (result.found) {
             await sb.from("pending_restaurant_bookmarks").upsert({
               user_id: userId,
               memory_id: memoryId,
@@ -297,6 +295,8 @@ serve(async (req) => {
               restaurant_address: parsed.address,
               restaurant_cuisine: parsed.cuisine,
               restaurant_notes: parsed.notes,
+              place_id: result.placeId,
+              google_maps_url: result.googleMapsUrl,
               status: "completed",
             }, { onConflict: "user_id,memory_id" });
 
@@ -312,7 +312,7 @@ serve(async (req) => {
               .update({ restaurants_bookmarked: ((currentCfg as any)?.restaurants_bookmarked ?? 0) + 1 })
               .eq("user_id", userId);
 
-            return new Response(JSON.stringify({ bookmarked: true }), {
+            return new Response(JSON.stringify({ found: true, googleMapsUrl: result.googleMapsUrl }), {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }
@@ -376,25 +376,23 @@ serve(async (req) => {
         });
       }
 
-      const success = await bookmarkOnGoogleMaps(
+      const result = await findOnGoogleMaps(
         integration.composio_connection_id,
         bookmark.restaurant_name,
         bookmark.restaurant_address,
-        bookmark.restaurant_cuisine,
-        bookmark.restaurant_notes
       );
 
-      if (!success) {
-        return new Response(JSON.stringify({ error: "Failed to bookmark restaurant" }), {
+      if (!result.found) {
+        return new Response(JSON.stringify({ error: "Could not find restaurant on Google Maps" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Mark completed
+      // Mark completed with place data
       await sb
         .from("pending_restaurant_bookmarks")
-        .update({ status: "completed" })
+        .update({ status: "completed", place_id: result.placeId, google_maps_url: result.googleMapsUrl })
         .eq("id", bookmarkId);
 
       // Increment counter
@@ -409,7 +407,7 @@ serve(async (req) => {
         .update({ restaurants_bookmarked: ((cfg as any)?.restaurants_bookmarked ?? 0) + 1 })
         .eq("user_id", userId);
 
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, googleMapsUrl: result.googleMapsUrl }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -586,14 +584,12 @@ serve(async (req) => {
             if (!parsed.isRestaurant) return r;
 
             if (parsed.isComplete && parsed.name && parsed.address && integration?.composio_connection_id) {
-              const ok = await bookmarkOnGoogleMaps(
+              const placeResult = await findOnGoogleMaps(
                 integration.composio_connection_id,
                 parsed.name,
                 parsed.address,
-                parsed.cuisine,
-                parsed.notes
               );
-              if (ok) {
+              if (placeResult.found) {
                 await sb.from("pending_restaurant_bookmarks").upsert({
                   user_id: userId,
                   memory_id: mem.id,
@@ -602,6 +598,8 @@ serve(async (req) => {
                   restaurant_address: parsed.address,
                   restaurant_cuisine: parsed.cuisine,
                   restaurant_notes: parsed.notes,
+                  place_id: placeResult.placeId,
+                  google_maps_url: placeResult.googleMapsUrl,
                   status: "completed",
                 }, { onConflict: "user_id,memory_id" });
                 r.bookmarked++;
