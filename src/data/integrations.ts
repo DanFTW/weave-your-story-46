@@ -292,6 +292,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "googlecalendar",
         status: "unconfigured",
       },
+      {
+        id: "googlemaps",
+        name: "Google Maps",
+        icon: "googlemaps",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -951,6 +957,20 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#EA4335",
       tertiary: "#34A853",
       quaternary: "#FBBC05",
+    },
+  },
+  "googlemaps": {
+    id: "googlemaps",
+    name: "Google Maps",
+    icon: "googlemaps",
+    status: "unconfigured",
+    description: "Google Maps allows Weave to access your saved places, directions, and location history. Create memories from your favorite spots and track your travels.",
+    capabilities: ["View saved places", "Access directions", "Search locations", "View location history"],
+    gradientColors: {
+      primary: "#1a73e8",
+      secondary: "#ea4335",
+      tertiary: "#34a853",
+      quaternary: "#fbbc04",
     },
   },
   "ios-contacts": {
