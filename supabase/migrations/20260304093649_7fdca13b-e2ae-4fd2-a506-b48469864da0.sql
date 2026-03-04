@@ -1,0 +1,1 @@
+ALTER TABLE public.pending_restaurant_bookmarks ADD COLUMN place_id text, ADD COLUMN google_maps_url text;

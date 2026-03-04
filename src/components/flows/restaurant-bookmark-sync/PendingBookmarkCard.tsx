@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, X, Send, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, X, Search, Loader2, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { PendingRestaurantBookmark } from "@/types/restaurantBookmarkSync";
 
@@ -19,6 +19,7 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
   const [notes, setNotes] = useState(bookmark.restaurantNotes ?? "");
 
   const isComplete = name.trim().length > 0 && address.trim().length > 0;
+  const hasMapLink = !!bookmark.googleMapsUrl;
 
   const handleSaveAndPush = async () => {
     await onUpdate(bookmark.id, {
@@ -53,13 +54,27 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
               ? bookmark.memoryContent.slice(0, 80) + "…"
               : bookmark.memoryContent}
           </p>
-          {missingFields.length > 0 && (
+          {!hasMapLink && missingFields.length > 0 && (
             <p className="text-xs text-destructive mt-1">
               Missing: {missingFields.join(", ")}
             </p>
           )}
+          {hasMapLink && (
+            <p className="text-xs text-primary mt-1 font-medium">✓ Found on Maps</p>
+          )}
         </div>
         <div className="flex items-center gap-2 ml-3">
+          {hasMapLink && (
+            <a
+              href={bookmark.googleMapsUrl!}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-primary hover:bg-primary/10 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onDismiss(bookmark.id); }}
             className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
@@ -77,6 +92,17 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
       {/* Expanded form */}
       {expanded && (
         <div className="px-5 pb-5 space-y-3 border-t border-border pt-4">
+          {hasMapLink && (
+            <a
+              href={bookmark.googleMapsUrl!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 transition-opacity"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open in Google Maps
+            </a>
+          )}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Restaurant Name *</label>
             <Input
@@ -113,20 +139,22 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
               className="h-10 rounded-xl text-sm"
             />
           </div>
-          <button
-            onClick={handleSaveAndPush}
-            disabled={!isComplete || isPushing}
-            className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-40 transition-opacity"
-          >
-            {isPushing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                Bookmark on Google Maps
-              </>
-            )}
-          </button>
+          {!hasMapLink && (
+            <button
+              onClick={handleSaveAndPush}
+              disabled={!isComplete || isPushing}
+              className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-40 transition-opacity"
+            >
+              {isPushing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Search className="w-4 h-4" />
+                  Find on Google Maps
+                </>
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>

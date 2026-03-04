@@ -123,19 +123,22 @@ async function parseMemoryForRestaurant(content: string): Promise<ParsedRestaura
   }
 }
 
-// ── Bookmark via Composio Google Maps ──
+// ── Find place via Composio Google Maps ──
 
-async function bookmarkOnGoogleMaps(
+interface PlaceResult {
+  found: boolean;
+  placeId: string | null;
+  googleMapsUrl: string | null;
+}
+
+async function findOnGoogleMaps(
   connectionId: string,
   name: string,
   address: string,
-  cuisine: string | null,
-  notes: string | null
-): Promise<boolean> {
+): Promise<PlaceResult> {
   try {
     console.log(`[RestaurantSync] Searching Google Maps for: "${name}" at "${address}"`);
 
-    // Search for the place using Composio Google Maps
     const searchQuery = `${name} ${address}`.trim();
     const searchRes = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/GOOGLE_MAPS_TEXT_SEARCH",
@@ -147,9 +150,7 @@ async function bookmarkOnGoogleMaps(
         },
         body: JSON.stringify({
           connected_account_id: connectionId,
-          arguments: {
-            textQuery: searchQuery,
-          },
+          arguments: { textQuery: searchQuery },
         }),
       }
     );
@@ -157,47 +158,40 @@ async function bookmarkOnGoogleMaps(
     const searchRaw = await searchRes.text();
     if (!searchRes.ok) {
       console.error(`[RestaurantSync] Composio search error ${searchRes.status}:`, searchRaw);
-      return false;
+      return { found: false, placeId: null, googleMapsUrl: null };
     }
 
-    console.log("[RestaurantSync] Search result:", searchRaw.substring(0, 200));
+    console.log("[RestaurantSync] Search result:", searchRaw.substring(0, 300));
 
-    // Try to save/star the place
+    // Extract place_id from search results
     try {
-      const saveRes = await fetch(
-        "https://backend.composio.dev/api/v3/tools/execute/GOOGLE_MAPS_GET_PLACE_DETAILS",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": COMPOSIO_API_KEY,
-          },
-          body: JSON.stringify({
-            connected_account_id: connectionId,
-            arguments: {
-              textQuery: searchQuery,
-              name: name,
-            },
-          }),
+      const searchData = JSON.parse(searchRaw);
+      const responseData = searchData?.response_data ?? searchData?.data ?? searchData;
+      const places = responseData?.places ?? responseData?.results ?? [];
+      const firstPlace = Array.isArray(places) ? places[0] : null;
+
+      if (firstPlace) {
+        const placeId = firstPlace.id ?? firstPlace.place_id ?? firstPlace.placeId ?? null;
+        const placeName = firstPlace.displayName?.text ?? firstPlace.name ?? name;
+        if (placeId) {
+          const googleMapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`;
+          console.log(`[RestaurantSync] Found place: ${placeName} (${placeId})`);
+          return { found: true, placeId, googleMapsUrl };
         }
-      );
-
-      const saveRaw = await saveRes.text();
-      if (!saveRes.ok) {
-        console.warn(`[RestaurantSync] Save place returned ${saveRes.status}:`, saveRaw);
-        // Search succeeded, so we still consider this a partial success
-      } else {
-        console.log("[RestaurantSync] Place saved/bookmarked successfully");
       }
-    } catch (saveErr) {
-      console.warn("[RestaurantSync] Save place error (non-fatal):", saveErr);
-    }
 
-    // Consider the search itself as a successful bookmark action
-    return true;
+      // Fallback: generate a search URL even without place_id
+      const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+      console.log(`[RestaurantSync] No place_id found, using search URL fallback`);
+      return { found: true, placeId: null, googleMapsUrl: fallbackUrl };
+    } catch (parseErr) {
+      console.warn("[RestaurantSync] Could not parse search response:", parseErr);
+      const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+      return { found: true, placeId: null, googleMapsUrl: fallbackUrl };
+    }
   } catch (e) {
-    console.error("[RestaurantSync] Bookmark error:", e);
-    return false;
+    console.error("[RestaurantSync] Search error:", e);
+    return { found: false, placeId: null, googleMapsUrl: null };
   }
 }
 
@@ -286,15 +280,13 @@ serve(async (req) => {
           .maybeSingle();
 
         if (integration?.composio_connection_id) {
-          const success = await bookmarkOnGoogleMaps(
+          const result = await findOnGoogleMaps(
             integration.composio_connection_id,
             parsed.name,
             parsed.address,
-            parsed.cuisine,
-            parsed.notes
           );
 
-          if (success) {
+          if (result.found) {
             await sb.from("pending_restaurant_bookmarks").upsert({
               user_id: userId,
               memory_id: memoryId,
@@ -303,6 +295,8 @@ serve(async (req) => {
               restaurant_address: parsed.address,
               restaurant_cuisine: parsed.cuisine,
               restaurant_notes: parsed.notes,
+              place_id: result.placeId,
+              google_maps_url: result.googleMapsUrl,
               status: "completed",
             }, { onConflict: "user_id,memory_id" });
 
@@ -318,7 +312,7 @@ serve(async (req) => {
               .update({ restaurants_bookmarked: ((currentCfg as any)?.restaurants_bookmarked ?? 0) + 1 })
               .eq("user_id", userId);
 
-            return new Response(JSON.stringify({ bookmarked: true }), {
+            return new Response(JSON.stringify({ found: true, googleMapsUrl: result.googleMapsUrl }), {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }
@@ -382,25 +376,23 @@ serve(async (req) => {
         });
       }
 
-      const success = await bookmarkOnGoogleMaps(
+      const result = await findOnGoogleMaps(
         integration.composio_connection_id,
         bookmark.restaurant_name,
         bookmark.restaurant_address,
-        bookmark.restaurant_cuisine,
-        bookmark.restaurant_notes
       );
 
-      if (!success) {
-        return new Response(JSON.stringify({ error: "Failed to bookmark restaurant" }), {
+      if (!result.found) {
+        return new Response(JSON.stringify({ error: "Could not find restaurant on Google Maps" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Mark completed
+      // Mark completed with place data
       await sb
         .from("pending_restaurant_bookmarks")
-        .update({ status: "completed" })
+        .update({ status: "completed", place_id: result.placeId, google_maps_url: result.googleMapsUrl })
         .eq("id", bookmarkId);
 
       // Increment counter
@@ -415,7 +407,7 @@ serve(async (req) => {
         .update({ restaurants_bookmarked: ((cfg as any)?.restaurants_bookmarked ?? 0) + 1 })
         .eq("user_id", userId);
 
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, googleMapsUrl: result.googleMapsUrl }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -592,14 +584,12 @@ serve(async (req) => {
             if (!parsed.isRestaurant) return r;
 
             if (parsed.isComplete && parsed.name && parsed.address && integration?.composio_connection_id) {
-              const ok = await bookmarkOnGoogleMaps(
+              const placeResult = await findOnGoogleMaps(
                 integration.composio_connection_id,
                 parsed.name,
                 parsed.address,
-                parsed.cuisine,
-                parsed.notes
               );
-              if (ok) {
+              if (placeResult.found) {
                 await sb.from("pending_restaurant_bookmarks").upsert({
                   user_id: userId,
                   memory_id: mem.id,
@@ -608,6 +598,8 @@ serve(async (req) => {
                   restaurant_address: parsed.address,
                   restaurant_cuisine: parsed.cuisine,
                   restaurant_notes: parsed.notes,
+                  place_id: placeResult.placeId,
+                  google_maps_url: placeResult.googleMapsUrl,
                   status: "completed",
                 }, { onConflict: "user_id,memory_id" });
                 r.bookmarked++;

@@ -92,6 +92,8 @@ export function useRestaurantBookmarkSync() {
             restaurantAddress: p.restaurant_address,
             restaurantCuisine: p.restaurant_cuisine,
             restaurantNotes: p.restaurant_notes,
+            placeId: p.place_id ?? null,
+            googleMapsUrl: p.google_maps_url ?? null,
             status: p.status,
             createdAt: p.created_at,
             updatedAt: p.updated_at,
@@ -124,7 +126,7 @@ export function useRestaurantBookmarkSync() {
 
       setConfig((prev) => prev ? { ...prev, isActive: true } : null);
       setPhase("active");
-      toast({ title: "Restaurant bookmark sync activated", description: "New restaurant memories will auto-bookmark to Google Maps" });
+      toast({ title: "Restaurant sync activated", description: "New restaurant memories will be found on Google Maps" });
       return true;
     } catch {
       toast({ title: "Activation failed", variant: "destructive" });
@@ -206,16 +208,23 @@ export function useRestaurantBookmarkSync() {
       });
 
       if (error) {
-        toast({ title: "Failed to bookmark restaurant", description: error.message, variant: "destructive" });
+        toast({ title: "Failed to find restaurant", description: error.message, variant: "destructive" });
         return false;
       }
 
-      setPendingBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+      const responseData = data as { googleMapsUrl?: string };
+
+      // Update the bookmark in local state with the Maps URL instead of removing it
+      setPendingBookmarks((prev) => prev.map((b) =>
+        b.id === bookmarkId
+          ? { ...b, status: "completed" as const, googleMapsUrl: responseData?.googleMapsUrl ?? b.googleMapsUrl }
+          : b
+      ));
       setConfig((prev) => prev ? { ...prev, restaurantsBookmarked: prev.restaurantsBookmarked + 1 } : null);
-      toast({ title: "Restaurant bookmarked", description: "Saved to Google Maps" });
+      toast({ title: "Restaurant found on Maps", description: "Tap the link to view and save it" });
       return true;
     } catch {
-      toast({ title: "Failed to bookmark restaurant", variant: "destructive" });
+      toast({ title: "Failed to find restaurant", variant: "destructive" });
       return false;
     } finally {
       setIsPushing(null);
@@ -257,7 +266,7 @@ export function useRestaurantBookmarkSync() {
       const result = data as { processed?: number; bookmarked?: number; queued?: number };
       toast({
         title: "Sync complete",
-        description: `Processed ${result.processed ?? 0} memories — ${result.bookmarked ?? 0} bookmarked, ${result.queued ?? 0} queued`,
+        description: `Processed ${result.processed ?? 0} memories — ${result.bookmarked ?? 0} found, ${result.queued ?? 0} queued`,
       });
 
       await loadConfig();
