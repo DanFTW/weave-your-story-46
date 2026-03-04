@@ -37,9 +37,12 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
   return (
     <div className="bg-card rounded-2xl border border-border overflow-hidden">
       {/* Header */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-5 py-4 flex items-center justify-between text-left"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpanded(!expanded); }}
+        className="w-full px-5 py-4 flex items-center justify-between text-left cursor-pointer"
       >
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground truncate">
@@ -69,7 +72,7 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
           )}
         </div>
-      </button>
+      </div>
 
       {/* Expanded form */}
       {expanded && (
