@@ -325,13 +325,14 @@ serve(async (req) => {
       try {
         const data = JSON.parse(raw);
         console.log("[GrocerySync] Raw create response:", JSON.stringify(data).slice(0, 2000));
-        const responseData = data?.response_data ?? data?.data ?? data;
+        // Composio wraps: { data: { response_data: { spreadsheet_id, sheets: [...] } } }
+        const innerData = data?.data?.response_data ?? data?.response_data ?? data?.data ?? data;
         const spreadsheetId =
-          responseData?.spreadsheetId ??
-          responseData?.id ??
-          responseData?.result?.spreadsheetId ??
-          responseData?.spreadsheet_id ??
-          responseData?.result?.id ??
+          innerData?.spreadsheet_id ??
+          innerData?.spreadsheetId ??
+          innerData?.id ??
+          data?.data?.spreadsheet_id ??
+          data?.spreadsheet_id ??
           data?.spreadsheetId ??
           data?.id;
         const spreadsheetName =
