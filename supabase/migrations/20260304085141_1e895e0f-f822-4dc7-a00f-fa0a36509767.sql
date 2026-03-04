@@ -1,0 +1,1 @@
+UPDATE user_integrations SET account_name = 'Daniel' WHERE id = 'b235f1c7-659b-4983-a935-de057d6bc8b0' AND integration_id = 'googlemaps' AND account_name IS NULL;
