@@ -286,6 +286,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "slack",
         status: "unconfigured",
       },
+      {
+        id: "googlecalendar",
+        name: "Google Calendar",
+        icon: "googlecalendar",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -931,6 +937,20 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#4A154B",
       secondary: "#611f69",
       tertiary: "#36C5F0",
+    },
+  },
+  "googlecalendar": {
+    id: "googlecalendar",
+    name: "Google Calendar",
+    icon: "googlecalendar",
+    status: "unconfigured",
+    description: "Google Calendar allows Weave to access your events, schedules, and reminders. Create memories from your calendar activities and stay on top of important dates.",
+    capabilities: ["View events", "Access calendars", "Read reminders", "View schedules"],
+    gradientColors: {
+      primary: "#4285F4",
+      secondary: "#EA4335",
+      tertiary: "#34A853",
+      quaternary: "#FBBC05",
     },
   },
   "ios-contacts": {

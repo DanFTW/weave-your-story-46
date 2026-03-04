@@ -137,6 +137,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "gdrive": "googledrive",
   "slack": "slack",
   "slack_bot": "slack",
+  "googlecalendar": "googlecalendar",
+  "google_calendar": "googlecalendar",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -487,7 +489,7 @@ async function fetchExistingGoogleProfile(
       .from("user_integrations")
       .select("integration_id, account_email, account_name, account_avatar_url")
       .eq("user_id", userId)
-      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube", "googledrive"])
+      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube", "googledrive", "googlecalendar"])
       .eq("status", "connected")
       .not("account_email", "is", null)
       .limit(1)
@@ -2881,6 +2883,30 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Google Tasks profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Google Calendar, fetch profile from Composio connection data (same pattern as Google Tasks)
+    if (toolkit === "googlecalendar") {
+      console.log("composio-callback: Fetching Google Calendar profile via Composio API...");
+      
+      let profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      if (!profileInfo.email && !profileInfo.name) {
+        console.log("composio-callback: Google userinfo failed, trying cross-integration lookup...");
+        profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
+      }
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Google Calendar profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // For WhatsApp Business, fetch profile via Composio tool execution
