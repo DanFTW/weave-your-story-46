@@ -1,54 +1,41 @@
 
 
-## Plan: Replace Sequential Loop with Promise.all for Full Concurrent Processing
+## Root Cause
 
-### Change (single file: `supabase/functions/calendar-event-sync/index.ts`, lines 552-606)
+The edge function finds 25 raw memories from LIAM, but **all are filtered out** before processing. The logs confirm:
 
-Remove the `BATCH_LIMIT` and sequential `for` loop. Replace with `Promise.all` that processes **all** unprocessed memories concurrently. Each promise handles its own try/catch and DB writes, then returns a result object `{ created, queued, processed }` that gets aggregated after.
-
-```typescript
-// Remove lines 552-554 (BATCH_LIMIT, batch, log)
-// Replace lines 556-606 (the for loop) with:
-
-console.log(`[CalendarSync] Processing all ${unprocessed.length} unprocessed memories concurrently`);
-
-const results = await Promise.all(
-  unprocessed.map(async (mem) => {
-    const result = { created: 0, queued: 0, processed: 0 };
-    try {
-      console.log(`[CalendarSync] Parsing memory ${mem.id}: "${mem.content.substring(0, 80)}..."`);
-      const parsed = await parseMemoryForEvent(mem.content);
-      console.log(`[CalendarSync] Parse result for ${mem.id}:`, JSON.stringify(parsed));
-      result.processed++;
-
-      if (!parsed.isEvent) return result;
-
-      if (parsed.isComplete && parsed.title && parsed.date && integration?.composio_connection_id) {
-        const ok = await createGCalEvent(/* same args */);
-        if (ok) {
-          await sb.from("pending_calendar_events").upsert({/* completed */});
-          result.created++;
-          return result;
-        }
-      }
-
-      await sb.from("pending_calendar_events").upsert({/* pending */});
-      result.queued++;
-    } catch (err) {
-      console.error(`[CalendarSync] Error processing memory ${mem.id}:`, err);
-      result.processed++;
-    }
-    return result;
-  })
-);
-
-// Aggregate
-for (const r of results) {
-  created += r.created;
-  queued += r.queued;
-  processed += r.processed;
-}
+```
+Found 25 raw memories
+Processing all 0 unprocessed memories concurrently
 ```
 
-The existing `AbortController` 10s timeout in `parseMemoryForEvent` stays untouched. No other files changed.
+`pending_calendar_events` table is empty, so the "already processed" filter isn't the culprit. The real problem is on **line 527** of `calendar-event-sync/index.ts`:
+
+```typescript
+.map((m: any) => ({ id: m.transactionNumber || m.id || ..., content: m.content }))
+.filter((m: any) => m.content);
+```
+
+The LIAM API returns memory text in the field **`memory`**, not `content`. This is confirmed by `useLiamMemory.ts` line 282:
+
+```typescript
+content: m.memory || m.content || '',
+```
+
+Since `m.content` is `undefined` for every LIAM record, every mapped object has `content: undefined`, and the `.filter((m: any) => m.content)` removes all 25 memories, leaving 0 to process.
+
+## Fix
+
+**File:** `supabase/functions/calendar-event-sync/index.ts`, line 527
+
+Change the content mapping from:
+```typescript
+content: m.content
+```
+to:
+```typescript
+content: m.memory || m.content || ''
+```
+
+This matches the pattern already used in `useLiamMemory.ts`. One-line change, then redeploy.
 
