@@ -1,32 +1,56 @@
 
 
-## Batch Memory Toast Notifications
+## Plan: Add Google Calendar Integration
 
-### Problem
-`createMemory()` in `useLiamMemory.ts` fires a toast on every single call — success or error. When batch-saving 14 memories, users see 14 separate notifications.
+### Overview
+Add Google Calendar as a new connectable integration following the exact patterns used by other Google services (Google Docs, Google Tasks, Google Drive). Profile fetching uses the Composio connection's access token to call Google userinfo, with cross-integration fallback.
 
-### Solution
-Add a `silent` option to `createMemory` that suppresses toasts. All batch callers already have their own summary toast after the loop, so they just need to pass `{ silent: true }`.
+### Files to modify
 
-### Changes
+**1. Copy icon asset**
+- Copy `user-uploads://Google_Calendar_icon_2020.svg` → `src/assets/integrations/googlecalendar.svg`
 
-**`src/hooks/useLiamMemory.ts`**
-- Change `createMemory` signature from `(content: string, tag?: string)` to `(content: string, tag?: string, options?: { silent?: boolean })`.
-- Wrap all 5 toast calls inside `createMemory` with `if (!options?.silent)` guards.
-- No changes to the public return type shape — just an optional third parameter.
+**2. `src/data/integrations.ts`**
+- Add entry in `integrationSections[0].integrations` array (Apps section):
+  ```
+  { id: "googlecalendar", name: "Google Calendar", icon: "googlecalendar", status: "unconfigured" }
+  ```
+- Add detail entry in `integrationDetails`:
+  ```
+  "googlecalendar": {
+    id: "googlecalendar", name: "Google Calendar", icon: "googlecalendar", status: "unconfigured",
+    description: "Google Calendar allows Weave to access your events, schedules, and reminders...",
+    capabilities: ["View events", "Access calendars", "Read reminders", "View schedules"],
+    gradientColors: { primary: "#4285F4", secondary: "#EA4335", tertiary: "#34A853", quaternary: "#FBBC05" }
+  }
+  ```
 
-**`src/pages/FlowPage.tsx`** — 3 batch call sites:
-- Line 410 (LLM import loop): pass `{ silent: true }` → existing summary toast at line 417 handles the notification.
-- Line 586 (standard flow confirm loop): pass `{ silent: true }` → existing summary toast at line 593 handles it.
-- Line 162 (single receipt save): leave as-is (not a batch).
+**3. `src/components/integrations/IntegrationIcon.tsx`** and **`IntegrationLargeIcon.tsx`**
+- Add import: `import googlecalendarIcon from "@/assets/integrations/googlecalendar.svg";`
+- Add to `iconImages` map: `googlecalendar: googlecalendarIcon`
 
-**`src/hooks/useEmailDump.ts`** — 1 batch call site:
-- Line 190: pass `{ silent: true }`. Check if there's already a summary toast after the loop; if not, add one.
+**4. `src/components/integrations/IntegrationSection.tsx`**
+- Add `"googlecalendar"` to the `availableIntegrations` array
 
-**No other files changed.** `ProfileEditDrawer` and `Home.tsx` are single-call sites — left as-is.
+**5. `supabase/functions/composio-connect/index.ts`**
+- Add to `COMPOSIO_TOOLKIT_NAMES`: `googlecalendar: "GOOGLECALENDAR"`
+- Add to `AUTH_CONFIGS`: `googlecalendar: "ac_Tahf9NrBD7Vy"`
+- Add `"googlecalendar"` to `VALID_TOOLKITS` array
 
-### Files modified
-1. `src/hooks/useLiamMemory.ts` — add `silent` option
-2. `src/pages/FlowPage.tsx` — pass `{ silent: true }` in batch loops
-3. `src/hooks/useEmailDump.ts` — pass `{ silent: true }` in batch loop
+**6. `supabase/functions/composio-callback/index.ts`**
+- Add to `APP_TO_TOOLKIT` map: `"googlecalendar": "googlecalendar"`, `"google_calendar": "googlecalendar"`
+- Add profile fetching block (same pattern as googletasks/googledrive — reuses `fetchGoogleDocsProfile` for Google userinfo, falls back to `fetchExistingGoogleProfile` cross-integration lookup):
+  ```
+  if (toolkit === "googlecalendar") {
+    let profileInfo = await fetchGoogleDocsProfile(connectionId);
+    if (!profileInfo.email && !profileInfo.name) {
+      profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
+    }
+    // assign accountEmail, accountName, accountAvatarUrl
+  }
+  ```
+- Add `"googlecalendar"` to the cross-integration lookup query in `fetchExistingGoogleProfile` (the `.in()` array)
+
+### No database changes needed
+The existing `user_integrations` table handles all integrations generically.
 
