@@ -492,7 +492,30 @@ serve(async (req) => {
       }
 
       const listJson = await listRes.json();
-      const memories: { id: string; content: string }[] = (listJson?.data || [])
+      console.log("[CalendarSync] LIAM list response keys:", JSON.stringify(Object.keys(listJson || {})));
+      
+      // LIAM API may return data as an array directly, nested in .data, or in .data.memories
+      let rawMemories: any[] = [];
+      if (Array.isArray(listJson)) {
+        rawMemories = listJson;
+      } else if (Array.isArray(listJson?.data)) {
+        rawMemories = listJson.data;
+      } else if (Array.isArray(listJson?.data?.memories)) {
+        rawMemories = listJson.data.memories;
+      } else if (listJson?.data && typeof listJson.data === "object") {
+        // Try to find any array property in data
+        for (const key of Object.keys(listJson.data)) {
+          if (Array.isArray(listJson.data[key])) {
+            rawMemories = listJson.data[key];
+            console.log(`[CalendarSync] Found memories in data.${key}`);
+            break;
+          }
+        }
+      }
+      
+      console.log(`[CalendarSync] Found ${rawMemories.length} raw memories`);
+      
+      const memories: { id: string; content: string }[] = rawMemories
         .slice(0, 50)
         .map((m: any) => ({ id: m.transactionNumber || m.id || String(Math.random()), content: m.content }))
         .filter((m: any) => m.content);
