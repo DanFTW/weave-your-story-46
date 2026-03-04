@@ -138,7 +138,7 @@ async function bookmarkOnGoogleMaps(
     // Search for the place using Composio Google Maps
     const searchQuery = `${name} ${address}`.trim();
     const searchRes = await fetch(
-      "https://backend.composio.dev/api/v3/tools/execute/GOOGLEMAPS_SEARCH_PLACES",
+      "https://backend.composio.dev/api/v3/tools/execute/GOOGLE_MAPS_TEXT_SEARCH",
       {
         method: "POST",
         headers: {
@@ -148,7 +148,7 @@ async function bookmarkOnGoogleMaps(
         body: JSON.stringify({
           connected_account_id: connectionId,
           arguments: {
-            query: searchQuery,
+            textQuery: searchQuery,
           },
         }),
       }
@@ -165,7 +165,7 @@ async function bookmarkOnGoogleMaps(
     // Try to save/star the place
     try {
       const saveRes = await fetch(
-        "https://backend.composio.dev/api/v3/tools/execute/GOOGLEMAPS_SAVE_PLACE",
+        "https://backend.composio.dev/api/v3/tools/execute/GOOGLE_MAPS_GET_PLACE_DETAILS",
         {
           method: "POST",
           headers: {
@@ -175,7 +175,7 @@ async function bookmarkOnGoogleMaps(
           body: JSON.stringify({
             connected_account_id: connectionId,
             arguments: {
-              query: searchQuery,
+              textQuery: searchQuery,
               name: name,
             },
           }),
