@@ -83,6 +83,9 @@ import { BirthdayReminderFlow } from "@/components/flows/birthday-reminder";
 // Calendar Event Sync components
 import { CalendarEventSyncFlow } from "@/components/flows/calendar-event-sync";
 
+// Restaurant Bookmark Sync components
+import { RestaurantBookmarkSyncFlow } from "@/components/flows/restaurant-bookmark-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -303,6 +306,12 @@ export default function FlowPage() {
 
   if (config.isCalendarEventSyncFlow) {
     return <CalendarEventSyncFlow />;
+  }
+
+  // === RESTAURANT BOOKMARK SYNC FLOW RENDER ===
+
+  if (config.isRestaurantBookmarkSyncFlow) {
+    return <RestaurantBookmarkSyncFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

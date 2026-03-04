@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -875,6 +875,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         type: "save",
         title: "Always-On Monitoring",
         description: "Events created automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
+  "restaurant-bookmark-sync": {
+    id: "restaurant-bookmark-sync",
+    title: "Restaurant Memories to Google Maps Bookmark",
+    subtitle: "Auto-bookmark restaurants",
+    description: "When you save a memory mentioning a restaurant, this thread parses it for name, address, and cuisine — then bookmarks it on Google Maps automatically. Incomplete entries sit in a queue for you to fill in.",
+    gradient: "teal",
+    icon: MapPin,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Google Maps",
+        description: "Authorize access to Google Maps",
+        iconUrl: "/src/assets/integrations/googlemaps.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Auto-Sync",
+        description: "Toggle automatic bookmarking",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Restaurants bookmarked automatically",
         icon: Wifi,
         badge: "LIVE",
       },

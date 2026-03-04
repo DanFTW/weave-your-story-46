@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "restaurant-bookmark-sync",
+    title: "Restaurant Memories to Google Maps Bookmark",
+    description: "Automatically bookmark restaurants from memories on Google Maps",
+    icon: MapPin,
+    gradient: "teal",
+    status: "active",
+    type: "automation",
+    category: "personal",
+    integrations: ["googlemaps"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "calendar-event-sync",
     title: "Event Memory to Google Calendar",

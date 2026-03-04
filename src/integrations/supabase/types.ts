@@ -859,6 +859,48 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_restaurant_bookmarks: {
+        Row: {
+          created_at: string
+          id: string
+          memory_content: string
+          memory_id: string
+          restaurant_address: string | null
+          restaurant_cuisine: string | null
+          restaurant_name: string | null
+          restaurant_notes: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          memory_content: string
+          memory_id: string
+          restaurant_address?: string | null
+          restaurant_cuisine?: string | null
+          restaurant_name?: string | null
+          restaurant_notes?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          memory_content?: string
+          memory_id?: string
+          restaurant_address?: string | null
+          restaurant_cuisine?: string | null
+          restaurant_name?: string | null
+          restaurant_notes?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -881,6 +923,33 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      restaurant_bookmark_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          restaurants_bookmarked: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          restaurants_bookmarked?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          restaurants_bookmarked?: number
           updated_at?: string
           user_id?: string
         }
