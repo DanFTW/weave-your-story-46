@@ -101,6 +101,33 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_event_sync_config: {
+        Row: {
+          created_at: string
+          events_created: number
+          id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          events_created?: number
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          events_created?: number
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       discord_automation_config: {
         Row: {
           channel_id: string | null
@@ -787,6 +814,48 @@ export type Database = {
           share_token?: string
           thread_tag?: string | null
           visibility?: string
+        }
+        Relationships: []
+      }
+      pending_calendar_events: {
+        Row: {
+          created_at: string
+          event_date: string | null
+          event_description: string | null
+          event_time: string | null
+          event_title: string | null
+          id: string
+          memory_content: string
+          memory_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_date?: string | null
+          event_description?: string | null
+          event_time?: string | null
+          event_title?: string | null
+          id?: string
+          memory_content: string
+          memory_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_date?: string | null
+          event_description?: string | null
+          event_time?: string | null
+          event_title?: string | null
+          id?: string
+          memory_content?: string
+          memory_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

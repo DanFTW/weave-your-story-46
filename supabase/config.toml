@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.birthday-reminder]
 verify_jwt = false
+
+[functions.calendar-event-sync]
+verify_jwt = false
