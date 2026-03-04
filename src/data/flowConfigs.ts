@@ -533,6 +533,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     fields: [],
     isRestaurantBookmarkSyncFlow: true,
   },
+  "grocery-sheet-sync": {
+    id: "grocery-sheet-sync",
+    title: "Grocery Memory to Google Sheet",
+    subtitle: "Auto-post grocery items",
+    description: "Parse memories for grocery items and post them to a Google Sheet automatically.",
+    gradient: "teal",
+    icon: ShoppingCart,
+    entryName: "item",
+    entryNamePlural: "items",
+    memoryTag: "GROCERY",
+    fields: [],
+    isGrocerySheetSyncFlow: true,
+  },
 };
 
 export function getFlowConfig(flowId: string): FlowConfig | undefined {

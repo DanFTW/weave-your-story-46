@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "grocery-sheet-sync",
+    title: "Grocery Memory to Google Sheet",
+    description: "Automatically post grocery items from memories to a Google Sheet",
+    icon: ShoppingCart,
+    gradient: "teal",
+    status: "active",
+    type: "automation",
+    category: "personal",
+    integrations: ["googlesheets"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "restaurant-bookmark-sync",
     title: "Restaurant Memories to Google Maps Bookmark",

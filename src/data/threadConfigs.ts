@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -907,6 +907,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         type: "save",
         title: "Always-On Monitoring",
         description: "Restaurants bookmarked automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
+  "grocery-sheet-sync": {
+    id: "grocery-sheet-sync",
+    title: "Grocery Memory to Google Sheet",
+    subtitle: "Auto-post grocery items",
+    description: "When you save a memory mentioning grocery items, this thread parses it and posts the items to your selected Google Sheet automatically. Use Sync Now to scan existing memories.",
+    gradient: "teal",
+    icon: ShoppingCart,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Google Sheets",
+        description: "Authorize access to your spreadsheets",
+        iconUrl: "/src/assets/integrations/googlesheets.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Select Sheet",
+        description: "Choose or create a target spreadsheet",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Grocery items posted automatically",
         icon: Wifi,
         badge: "LIVE",
       },

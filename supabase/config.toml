@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.restaurant-bookmark-sync]
 verify_jwt = false
+
+[functions.grocery-sheet-sync]
+verify_jwt = false
