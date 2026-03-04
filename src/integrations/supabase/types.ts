@@ -395,6 +395,63 @@ export type Database = {
         }
         Relationships: []
       }
+      grocery_sheet_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          items_posted: number
+          sheet_name: string | null
+          spreadsheet_id: string | null
+          spreadsheet_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          items_posted?: number
+          sheet_name?: string | null
+          spreadsheet_id?: string | null
+          spreadsheet_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          items_posted?: number
+          sheet_name?: string | null
+          spreadsheet_id?: string | null
+          spreadsheet_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      grocery_sheet_processed_memories: {
+        Row: {
+          created_at: string
+          id: string
+          memory_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          memory_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          memory_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       hubspot_automation_config: {
         Row: {
           contacts_tracked: number | null
