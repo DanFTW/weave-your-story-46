@@ -1,8 +1,20 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-// Helper function to get initials from name (e.g., "Daniel Figueroa" → "DF")
-const getInitials = (name: string): string => {
+// Generic fallback names that should not be used for initials
+const GENERIC_NAMES = new Set(["connected account", "unknown", ""]);
+
+// Helper function to get initials from name or email
+const getInitials = (name: string, email?: string): string => {
+  // If name is generic/empty and email is available, derive initials from email
+  if (GENERIC_NAMES.has(name.trim().toLowerCase()) && email) {
+    const prefix = email.split("@")[0];
+    const segments = prefix.split(/[._-]/).filter(Boolean);
+    if (segments.length >= 2) {
+      return `${segments[0].charAt(0)}${segments[segments.length - 1].charAt(0)}`.toUpperCase();
+    }
+    return prefix.charAt(0).toUpperCase();
+  }
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
     return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
@@ -56,7 +68,7 @@ export function IntegrationConnectedAccount({
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-primary/10">
               <span className="text-lg font-semibold text-primary">
-                {getInitials(name)}
+                {getInitials(name, email)}
               </span>
             </div>
           )}

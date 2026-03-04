@@ -1,0 +1,1 @@
+UPDATE user_integrations SET account_name = initcap(split_part(account_email, '@', 1)) WHERE integration_id = 'googlecalendar' AND account_name IS NULL AND account_email IS NOT NULL;
