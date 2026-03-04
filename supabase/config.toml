@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.calendar-event-sync]
 verify_jwt = false
+
+[functions.restaurant-bookmark-sync]
+verify_jwt = false
