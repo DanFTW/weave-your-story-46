@@ -48,6 +48,7 @@ export interface FlowConfig {
   isGoogleDriveAutomationFlow?: boolean; // If true, uses Google Drive automation UI
   isDiscordAutomationFlow?: boolean; // If true, uses Discord automation UI
   isBirthdayReminderFlow?: boolean; // If true, uses Birthday Reminder UI
+  isCalendarEventSyncFlow?: boolean; // If true, uses Calendar Event Sync UI
 }
 
 // Single data entry (e.g., one family member)

@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -506,6 +506,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "DISCORD",
     fields: [],
     isDiscordAutomationFlow: true,
+  },
+  "calendar-event-sync": {
+    id: "calendar-event-sync",
+    title: "Event Memory to Google Calendar",
+    subtitle: "Auto-create calendar events",
+    description: "Parse memories for event details and create Google Calendar events automatically.",
+    gradient: "blue",
+    icon: Calendar,
+    entryName: "event",
+    entryNamePlural: "events",
+    memoryTag: "CALENDAR",
+    fields: [],
+    isCalendarEventSyncFlow: true,
   },
 };
 

@@ -80,6 +80,9 @@ import { DiscordAutomationFlow } from "@/components/flows/discord-automation";
 // Birthday Reminder components
 import { BirthdayReminderFlow } from "@/components/flows/birthday-reminder";
 
+// Calendar Event Sync components
+import { CalendarEventSyncFlow } from "@/components/flows/calendar-event-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -294,6 +297,12 @@ export default function FlowPage() {
 
   if (config.isBirthdayReminderFlow) {
     return <BirthdayReminderFlow />;
+  }
+
+  // === CALENDAR EVENT SYNC FLOW RENDER ===
+
+  if (config.isCalendarEventSyncFlow) {
+    return <CalendarEventSyncFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "calendar-event-sync",
+    title: "Event Memory to Google Calendar",
+    description: "Automatically create Google Calendar events from memories with event details",
+    icon: Calendar,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "productivity",
+    integrations: ["googlecalendar"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "birthday-reminder",
     title: "Auto Birthday Reminder",

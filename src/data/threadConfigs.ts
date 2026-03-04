@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -843,6 +843,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         type: "save",
         title: "Always-On Monitoring",
         description: "Messages saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
+  "calendar-event-sync": {
+    id: "calendar-event-sync",
+    title: "Event Memory to Google Calendar",
+    subtitle: "Auto-create calendar events",
+    description: "When you save a memory with event details, this thread parses it for title, date, and time — then creates a Google Calendar event automatically. Incomplete events sit in a queue for you to fill in.",
+    gradient: "blue",
+    icon: Calendar,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Google Calendar",
+        description: "Authorize access to your calendar",
+        iconUrl: "/src/assets/integrations/googlecalendar.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Auto-Sync",
+        description: "Toggle automatic event creation",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Events created automatically",
         icon: Wifi,
         badge: "LIVE",
       },
