@@ -1,51 +1,54 @@
 
 
-## Plan: Fix Manual Sync Not Detecting Events
+## Plan: Replace Sequential Loop with Promise.all for Full Concurrent Processing
 
-### Root Cause
+### Change (single file: `supabase/functions/calendar-event-sync/index.ts`, lines 552-606)
 
-The edge function logs show it successfully finds 25 raw memories but then immediately shuts down with no further output — no parse results, no errors, no completion message. This is a **timeout issue**: the function tries to call the AI gateway (`parseMemoryForEvent`) for all 25 unprocessed memories sequentially, which exceeds the edge function's execution time limit (typically ~25s for Supabase).
-
-Additionally, there's no logging between finding memories and processing them, so failures are silent.
-
-### Fix (single file: `supabase/functions/calendar-event-sync/index.ts`)
-
-1. **Limit batch size to 5 memories per sync** — Process at most 5 unprocessed memories per manual-sync invocation instead of all 25+. This keeps execution well within the timeout window.
-
-2. **Add diagnostic logging** — Log each memory being parsed and each AI response so we can trace exactly what happens.
-
-3. **Add try/catch around each memory's processing** — If one memory's AI call fails/times out, skip it and continue to the next rather than crashing the whole function.
-
-4. **Add AI timeout** — Use `AbortController` with a 10-second timeout on the AI fetch call so a single slow response doesn't kill the whole function.
-
-### Specific Changes
-
-In the `manual-sync` action block:
+Remove the `BATCH_LIMIT` and sequential `for` loop. Replace with `Promise.all` that processes **all** unprocessed memories concurrently. Each promise handles its own try/catch and DB writes, then returns a result object `{ created, queued, processed }` that gets aggregated after.
 
 ```typescript
-// Before the processing loop:
-const BATCH_LIMIT = 5;
-const batch = unprocessed.slice(0, BATCH_LIMIT);
-console.log(`[CalendarSync] Processing ${batch.length} of ${unprocessed.length} unprocessed memories`);
+// Remove lines 552-554 (BATCH_LIMIT, batch, log)
+// Replace lines 556-606 (the for loop) with:
 
-for (const mem of batch) {
-  try {
-    console.log(`[CalendarSync] Parsing memory ${mem.id}: "${mem.content.substring(0, 80)}..."`);
-    const parsed = await parseMemoryForEvent(mem.content);
-    console.log(`[CalendarSync] Parse result for ${mem.id}:`, JSON.stringify(parsed));
-    processed++;
-    // ... rest of logic unchanged
-  } catch (err) {
-    console.error(`[CalendarSync] Error processing memory ${mem.id}:`, err);
-    processed++;
-    continue;
-  }
+console.log(`[CalendarSync] Processing all ${unprocessed.length} unprocessed memories concurrently`);
+
+const results = await Promise.all(
+  unprocessed.map(async (mem) => {
+    const result = { created: 0, queued: 0, processed: 0 };
+    try {
+      console.log(`[CalendarSync] Parsing memory ${mem.id}: "${mem.content.substring(0, 80)}..."`);
+      const parsed = await parseMemoryForEvent(mem.content);
+      console.log(`[CalendarSync] Parse result for ${mem.id}:`, JSON.stringify(parsed));
+      result.processed++;
+
+      if (!parsed.isEvent) return result;
+
+      if (parsed.isComplete && parsed.title && parsed.date && integration?.composio_connection_id) {
+        const ok = await createGCalEvent(/* same args */);
+        if (ok) {
+          await sb.from("pending_calendar_events").upsert({/* completed */});
+          result.created++;
+          return result;
+        }
+      }
+
+      await sb.from("pending_calendar_events").upsert({/* pending */});
+      result.queued++;
+    } catch (err) {
+      console.error(`[CalendarSync] Error processing memory ${mem.id}:`, err);
+      result.processed++;
+    }
+    return result;
+  })
+);
+
+// Aggregate
+for (const r of results) {
+  created += r.created;
+  queued += r.queued;
+  processed += r.processed;
 }
 ```
 
-In `parseMemoryForEvent`:
-- Add `AbortController` with 10s timeout on the AI fetch
-- Add logging of the AI response status
-
-No other files changed.
+The existing `AbortController` 10s timeout in `parseMemoryForEvent` stays untouched. No other files changed.
 
