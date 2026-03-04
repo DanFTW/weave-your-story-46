@@ -549,60 +549,67 @@ serve(async (req) => {
       let queued = 0;
       let processed = 0;
 
-      const BATCH_LIMIT = 5;
-      const batch = unprocessed.slice(0, BATCH_LIMIT);
-      console.log(`[CalendarSync] Processing ${batch.length} of ${unprocessed.length} unprocessed memories`);
+      console.log(`[CalendarSync] Processing all ${unprocessed.length} unprocessed memories concurrently`);
 
-      for (const mem of batch) {
-        try {
-          console.log(`[CalendarSync] Parsing memory ${mem.id}: "${mem.content.substring(0, 80)}..."`);
-          const parsed = await parseMemoryForEvent(mem.content);
-          console.log(`[CalendarSync] Parse result for ${mem.id}:`, JSON.stringify(parsed));
-          processed++;
+      const results = await Promise.all(
+        unprocessed.map(async (mem) => {
+          const r = { created: 0, queued: 0, processed: 0 };
+          try {
+            console.log(`[CalendarSync] Parsing memory ${mem.id}: "${mem.content.substring(0, 80)}..."`);
+            const parsed = await parseMemoryForEvent(mem.content);
+            console.log(`[CalendarSync] Parse result for ${mem.id}:`, JSON.stringify(parsed));
+            r.processed++;
 
-          if (!parsed.isEvent) continue;
+            if (!parsed.isEvent) return r;
 
-          if (parsed.isComplete && parsed.title && parsed.date && integration?.composio_connection_id) {
-            const ok = await createGCalEvent(
-              integration.composio_connection_id,
-              parsed.title,
-              parsed.date,
-              parsed.time,
-              parsed.description
-            );
-            if (ok) {
-              await sb.from("pending_calendar_events").upsert({
-                user_id: userId,
-                memory_id: mem.id,
-                memory_content: mem.content,
-                event_title: parsed.title,
-                event_date: parsed.date,
-                event_time: parsed.time,
-                event_description: parsed.description,
-                status: "completed",
-              }, { onConflict: "user_id,memory_id" });
-              created++;
-              continue;
+            if (parsed.isComplete && parsed.title && parsed.date && integration?.composio_connection_id) {
+              const ok = await createGCalEvent(
+                integration.composio_connection_id,
+                parsed.title,
+                parsed.date,
+                parsed.time,
+                parsed.description
+              );
+              if (ok) {
+                await sb.from("pending_calendar_events").upsert({
+                  user_id: userId,
+                  memory_id: mem.id,
+                  memory_content: mem.content,
+                  event_title: parsed.title,
+                  event_date: parsed.date,
+                  event_time: parsed.time,
+                  event_description: parsed.description,
+                  status: "completed",
+                }, { onConflict: "user_id,memory_id" });
+                r.created++;
+                return r;
+              }
             }
-          }
 
-          // Queue incomplete or failed
-          await sb.from("pending_calendar_events").upsert({
-            user_id: userId,
-            memory_id: mem.id,
-            memory_content: mem.content,
-            event_title: parsed.title,
-            event_date: parsed.date,
-            event_time: parsed.time,
-            event_description: parsed.description,
-            status: "pending",
-          }, { onConflict: "user_id,memory_id" });
-          queued++;
-        } catch (err) {
-          console.error(`[CalendarSync] Error processing memory ${mem.id}:`, err);
-          processed++;
-          continue;
-        }
+            // Queue incomplete or failed
+            await sb.from("pending_calendar_events").upsert({
+              user_id: userId,
+              memory_id: mem.id,
+              memory_content: mem.content,
+              event_title: parsed.title,
+              event_date: parsed.date,
+              event_time: parsed.time,
+              event_description: parsed.description,
+              status: "pending",
+            }, { onConflict: "user_id,memory_id" });
+            r.queued++;
+          } catch (err) {
+            console.error(`[CalendarSync] Error processing memory ${mem.id}:`, err);
+            r.processed++;
+          }
+          return r;
+        })
+      );
+
+      for (const r of results) {
+        created += r.created;
+        queued += r.queued;
+        processed += r.processed;
       }
 
       // Update events_created counter
