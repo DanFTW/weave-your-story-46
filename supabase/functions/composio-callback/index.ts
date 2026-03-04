@@ -141,6 +141,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "google_calendar": "googlecalendar",
   "googlemaps": "googlemaps",
   "google_maps": "googlemaps",
+  "googlesheets": "googlesheets",
+  "google_sheets": "googlesheets",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -491,7 +493,7 @@ async function fetchExistingGoogleProfile(
       .from("user_integrations")
       .select("integration_id, account_email, account_name, account_avatar_url")
       .eq("user_id", userId)
-      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube", "googledrive", "googlecalendar", "googlemaps"])
+      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube", "googledrive", "googlecalendar", "googlemaps", "googlesheets"])
       .eq("status", "connected")
       .not("account_email", "is", null)
       .limit(1)
@@ -2920,6 +2922,40 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Google Calendar profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Google Sheets, fetch profile from Composio connection data (same pattern as Google Calendar)
+    if (toolkit === "googlesheets") {
+      console.log("composio-callback: Fetching Google Sheets profile via Composio API...");
+      
+      let profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      if (!profileInfo.email && !profileInfo.name) {
+        console.log("composio-callback: Google userinfo failed, trying cross-integration lookup...");
+        profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
+      }
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      // Fallback: derive name from email prefix if Google userinfo returned no name
+      if (!accountName && accountEmail) {
+        const emailPrefix = accountEmail.split("@")[0];
+        accountName = emailPrefix
+          .split(/[._-]/)
+          .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())
+          .join(" ");
+        console.log(`composio-callback: Derived name from email: ${accountName}`);
+      }
+      
+      console.log(`composio-callback: Google Sheets profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // For WhatsApp Business, fetch profile via Composio tool execution

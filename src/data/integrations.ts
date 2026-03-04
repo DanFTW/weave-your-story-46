@@ -101,6 +101,12 @@ export const integrationSections: IntegrationSection[] = [
         status: "unconfigured",
       },
       {
+        id: "googlesheets",
+        name: "Google Sheets",
+        icon: "googlesheets",
+        status: "unconfigured",
+      },
+      {
         id: "trello",
         name: "Trello",
         icon: "trello",
@@ -537,6 +543,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#4285F4",    // Google blue
       secondary: "#3367D6",  // Google dark blue
       tertiary: "#669DF6",   // Google light blue
+    },
+  },
+  "googlesheets": {
+    id: "googlesheets",
+    name: "Google Sheets",
+    icon: "googlesheets",
+    status: "unconfigured",
+    description: "Google Sheets allows Weave to access your spreadsheets and workbooks. Create memories from your data, track changes, and organize your spreadsheet content.",
+    capabilities: ["View spreadsheets", "Read cell data", "Access workbooks", "Browse files"],
+    gradientColors: {
+      primary: "#0F9D58",    // Google Sheets green
+      secondary: "#137333",  // Sheets dark green
+      tertiary: "#34A853",   // Sheets light green
     },
   },
   "trello": {
