@@ -3363,24 +3363,21 @@ serve(async (req) => {
     }
 
     // For Google Maps, fetch profile via Composio connection data (Google OAuth)
+    // IMPORTANT: Do NOT fall back to cross-integration identity lookup.
+    // Maps tokens lack the `profile` scope so userinfo returns 401.
+    // Inheriting identity from Gmail/Drive would show a stale/wrong account
+    // after account switching. Accept null identity if userinfo fails.
     if (toolkit === "googlemaps") {
       console.log("composio-callback: Fetching Google Maps profile via Composio API...");
       
-      let profileInfo = await fetchGoogleDocsProfile(connectionId);
+      const profileInfo = await fetchGoogleDocsProfile(connectionId);
       
-      if (!profileInfo.email && !profileInfo.name) {
-        console.log("composio-callback: Google userinfo failed, trying cross-integration lookup...");
-        profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
-      }
-      
-      if (profileInfo.email) {
-        accountEmail = profileInfo.email;
-      }
-      if (profileInfo.name) {
-        accountName = profileInfo.name;
-      }
-      if (profileInfo.avatarUrl) {
-        accountAvatarUrl = profileInfo.avatarUrl;
+      if (profileInfo.email || profileInfo.name) {
+        if (profileInfo.email) accountEmail = profileInfo.email;
+        if (profileInfo.name) accountName = profileInfo.name;
+        if (profileInfo.avatarUrl) accountAvatarUrl = profileInfo.avatarUrl;
+      } else {
+        console.log("composio-callback: Google Maps userinfo unavailable (401). Storing null identity — no cross-integration inheritance.");
       }
       
       console.log(`composio-callback: Google Maps profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
