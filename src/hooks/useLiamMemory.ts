@@ -202,10 +202,13 @@ export function useLiamMemory(): UseLiamMemoryReturn {
 
       console.log('Memory created successfully:', data);
       
-      // Fire-and-forget: trigger restaurant bookmark sync
+      // Fire-and-forget: trigger restaurant bookmark sync + grocery sheet sync
       const memoryId = data?.data?.transactionNumber || data?.transactionNumber || `mem-${Date.now()}`;
       import('@/utils/triggerRestaurantBookmarkSync').then(({ triggerRestaurantBookmarkSync }) => {
         triggerRestaurantBookmarkSync(content, memoryId);
+      }).catch(() => {});
+      import('@/utils/triggerGrocerySheetSync').then(({ triggerGrocerySheetSync }) => {
+        triggerGrocerySheetSync(content, memoryId);
       }).catch(() => {});
 
       if (!silent) {

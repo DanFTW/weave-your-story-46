@@ -50,6 +50,7 @@ export interface FlowConfig {
   isBirthdayReminderFlow?: boolean; // If true, uses Birthday Reminder UI
   isCalendarEventSyncFlow?: boolean; // If true, uses Calendar Event Sync UI
   isRestaurantBookmarkSyncFlow?: boolean; // If true, uses Restaurant Bookmark Sync UI
+  isGrocerySheetSyncFlow?: boolean; // If true, uses Grocery Sheet Sync UI
 }
 
 // Single data entry (e.g., one family member)

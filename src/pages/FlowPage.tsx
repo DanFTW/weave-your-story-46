@@ -86,6 +86,9 @@ import { CalendarEventSyncFlow } from "@/components/flows/calendar-event-sync";
 // Restaurant Bookmark Sync components
 import { RestaurantBookmarkSyncFlow } from "@/components/flows/restaurant-bookmark-sync";
 
+// Grocery Sheet Sync components
+import { GrocerySheetSyncFlow } from "@/components/flows/grocery-sheet-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -312,6 +315,12 @@ export default function FlowPage() {
 
   if (config.isRestaurantBookmarkSyncFlow) {
     return <RestaurantBookmarkSyncFlow />;
+  }
+
+  // === GROCERY SHEET SYNC FLOW RENDER ===
+
+  if (config.isGrocerySheetSyncFlow) {
+    return <GrocerySheetSyncFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===
