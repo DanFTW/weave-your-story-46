@@ -3386,6 +3386,14 @@ serve(async (req) => {
       console.log(`composio-callback: Google Maps profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
+    // Derive display name from email if still missing (common for Google Maps, etc.)
+    if (!accountName && accountEmail && accountEmail.includes("@")) {
+      const prefix = accountEmail.split("@")[0];
+      const segments = prefix.split(/[._-]/).filter(Boolean);
+      accountName = segments.map(s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()).join(" ");
+      console.log(`composio-callback: Derived name from email - name=${accountName}`);
+    }
+
     const { data: savedData, error: dbError } = await supabase
       .from("user_integrations")
       .upsert({
