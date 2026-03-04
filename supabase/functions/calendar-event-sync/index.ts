@@ -524,7 +524,7 @@ serve(async (req) => {
       
       const memories: { id: string; content: string }[] = rawMemories
         .slice(0, 50)
-        .map((m: any) => ({ id: m.transactionNumber || m.id || String(Math.random()), content: m.content }))
+        .map((m: any) => ({ id: m.transactionNumber || m.id || String(Math.random()), content: m.memory || m.content || '' }))
         .filter((m: any) => m.content);
 
       // Get already-processed memory IDs
