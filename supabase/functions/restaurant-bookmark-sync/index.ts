@@ -123,19 +123,22 @@ async function parseMemoryForRestaurant(content: string): Promise<ParsedRestaura
   }
 }
 
-// ── Bookmark via Composio Google Maps ──
+// ── Find place via Composio Google Maps ──
 
-async function bookmarkOnGoogleMaps(
+interface PlaceResult {
+  found: boolean;
+  placeId: string | null;
+  googleMapsUrl: string | null;
+}
+
+async function findOnGoogleMaps(
   connectionId: string,
   name: string,
   address: string,
-  cuisine: string | null,
-  notes: string | null
-): Promise<boolean> {
+): Promise<PlaceResult> {
   try {
     console.log(`[RestaurantSync] Searching Google Maps for: "${name}" at "${address}"`);
 
-    // Search for the place using Composio Google Maps
     const searchQuery = `${name} ${address}`.trim();
     const searchRes = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/GOOGLE_MAPS_TEXT_SEARCH",
@@ -147,9 +150,7 @@ async function bookmarkOnGoogleMaps(
         },
         body: JSON.stringify({
           connected_account_id: connectionId,
-          arguments: {
-            textQuery: searchQuery,
-          },
+          arguments: { textQuery: searchQuery },
         }),
       }
     );
@@ -157,47 +158,40 @@ async function bookmarkOnGoogleMaps(
     const searchRaw = await searchRes.text();
     if (!searchRes.ok) {
       console.error(`[RestaurantSync] Composio search error ${searchRes.status}:`, searchRaw);
-      return false;
+      return { found: false, placeId: null, googleMapsUrl: null };
     }
 
-    console.log("[RestaurantSync] Search result:", searchRaw.substring(0, 200));
+    console.log("[RestaurantSync] Search result:", searchRaw.substring(0, 300));
 
-    // Try to save/star the place
+    // Extract place_id from search results
     try {
-      const saveRes = await fetch(
-        "https://backend.composio.dev/api/v3/tools/execute/GOOGLE_MAPS_GET_PLACE_DETAILS",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": COMPOSIO_API_KEY,
-          },
-          body: JSON.stringify({
-            connected_account_id: connectionId,
-            arguments: {
-              textQuery: searchQuery,
-              name: name,
-            },
-          }),
+      const searchData = JSON.parse(searchRaw);
+      const responseData = searchData?.response_data ?? searchData?.data ?? searchData;
+      const places = responseData?.places ?? responseData?.results ?? [];
+      const firstPlace = Array.isArray(places) ? places[0] : null;
+
+      if (firstPlace) {
+        const placeId = firstPlace.id ?? firstPlace.place_id ?? firstPlace.placeId ?? null;
+        const placeName = firstPlace.displayName?.text ?? firstPlace.name ?? name;
+        if (placeId) {
+          const googleMapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`;
+          console.log(`[RestaurantSync] Found place: ${placeName} (${placeId})`);
+          return { found: true, placeId, googleMapsUrl };
         }
-      );
-
-      const saveRaw = await saveRes.text();
-      if (!saveRes.ok) {
-        console.warn(`[RestaurantSync] Save place returned ${saveRes.status}:`, saveRaw);
-        // Search succeeded, so we still consider this a partial success
-      } else {
-        console.log("[RestaurantSync] Place saved/bookmarked successfully");
       }
-    } catch (saveErr) {
-      console.warn("[RestaurantSync] Save place error (non-fatal):", saveErr);
-    }
 
-    // Consider the search itself as a successful bookmark action
-    return true;
+      // Fallback: generate a search URL even without place_id
+      const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+      console.log(`[RestaurantSync] No place_id found, using search URL fallback`);
+      return { found: true, placeId: null, googleMapsUrl: fallbackUrl };
+    } catch (parseErr) {
+      console.warn("[RestaurantSync] Could not parse search response:", parseErr);
+      const fallbackUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+      return { found: true, placeId: null, googleMapsUrl: fallbackUrl };
+    }
   } catch (e) {
-    console.error("[RestaurantSync] Bookmark error:", e);
-    return false;
+    console.error("[RestaurantSync] Search error:", e);
+    return { found: false, placeId: null, googleMapsUrl: null };
   }
 }
 

@@ -862,9 +862,11 @@ export type Database = {
       pending_restaurant_bookmarks: {
         Row: {
           created_at: string
+          google_maps_url: string | null
           id: string
           memory_content: string
           memory_id: string
+          place_id: string | null
           restaurant_address: string | null
           restaurant_cuisine: string | null
           restaurant_name: string | null
@@ -875,9 +877,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          google_maps_url?: string | null
           id?: string
           memory_content: string
           memory_id: string
+          place_id?: string | null
           restaurant_address?: string | null
           restaurant_cuisine?: string | null
           restaurant_name?: string | null
@@ -888,9 +892,11 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          google_maps_url?: string | null
           id?: string
           memory_content?: string
           memory_id?: string
+          place_id?: string | null
           restaurant_address?: string | null
           restaurant_cuisine?: string | null
           restaurant_name?: string | null
