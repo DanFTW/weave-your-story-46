@@ -92,6 +92,8 @@ export function useRestaurantBookmarkSync() {
             restaurantAddress: p.restaurant_address,
             restaurantCuisine: p.restaurant_cuisine,
             restaurantNotes: p.restaurant_notes,
+            placeId: p.place_id ?? null,
+            googleMapsUrl: p.google_maps_url ?? null,
             status: p.status,
             createdAt: p.created_at,
             updatedAt: p.updated_at,
@@ -206,16 +208,23 @@ export function useRestaurantBookmarkSync() {
       });
 
       if (error) {
-        toast({ title: "Failed to bookmark restaurant", description: error.message, variant: "destructive" });
+        toast({ title: "Failed to find restaurant", description: error.message, variant: "destructive" });
         return false;
       }
 
-      setPendingBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+      const responseData = data as { googleMapsUrl?: string };
+
+      // Update the bookmark in local state with the Maps URL instead of removing it
+      setPendingBookmarks((prev) => prev.map((b) =>
+        b.id === bookmarkId
+          ? { ...b, status: "completed" as const, googleMapsUrl: responseData?.googleMapsUrl ?? b.googleMapsUrl }
+          : b
+      ));
       setConfig((prev) => prev ? { ...prev, restaurantsBookmarked: prev.restaurantsBookmarked + 1 } : null);
-      toast({ title: "Restaurant bookmarked", description: "Saved to Google Maps" });
+      toast({ title: "Restaurant found on Maps", description: "Tap the link to view and save it" });
       return true;
     } catch {
-      toast({ title: "Failed to bookmark restaurant", variant: "destructive" });
+      toast({ title: "Failed to find restaurant", variant: "destructive" });
       return false;
     } finally {
       setIsPushing(null);

@@ -22,6 +22,8 @@ export interface PendingRestaurantBookmark {
   restaurantAddress: string | null;
   restaurantCuisine: string | null;
   restaurantNotes: string | null;
+  placeId: string | null;
+  googleMapsUrl: string | null;
   status: "pending" | "completed" | "dismissed";
   createdAt: string;
   updatedAt: string;
