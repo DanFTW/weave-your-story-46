@@ -40,7 +40,7 @@ export function AutomationConfig({
 
   const handleCreate = async () => {
     const sheet = await onCreateSheet();
-    if (sheet) {
+    if (sheet && sheet.id) {
       setSelectedId(sheet.id);
       await onSelectSheet(sheet.id, sheet.name);
     }

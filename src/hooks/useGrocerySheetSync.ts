@@ -123,9 +123,13 @@ export function useGrocerySheetSync() {
         return null;
       }
 
-      const newSheet: SpreadsheetOption = { id: data.spreadsheetId, name: data.spreadsheetName };
+      if (!data?.spreadsheetId) {
+        toast({ title: "Spreadsheet created but ID missing", description: "Please try again or select manually", variant: "destructive" });
+        return null;
+      }
+      const newSheet: SpreadsheetOption = { id: data.spreadsheetId, name: data.spreadsheetName ?? "Weave — Grocery Items" };
       setSpreadsheets((prev) => [newSheet, ...prev]);
-      toast({ title: "Spreadsheet created", description: data.spreadsheetName });
+      toast({ title: "Spreadsheet created", description: newSheet.name });
       return newSheet;
     } catch {
       toast({ title: "Failed to create spreadsheet", variant: "destructive" });

@@ -246,7 +246,7 @@ serve(async (req) => {
       }
 
       const res = await fetch(
-        "https://backend.composio.dev/api/v3/tools/execute/GOOGLESHEETS_LIST_SPREADSHEETS",
+        "https://backend.composio.dev/api/v3/tools/execute/GOOGLESHEETS_SEARCH_SPREADSHEETS",
         {
           method: "POST",
           headers: {
@@ -324,9 +324,29 @@ serve(async (req) => {
 
       try {
         const data = JSON.parse(raw);
+        console.log("[GrocerySync] Raw create response:", JSON.stringify(data).slice(0, 2000));
         const responseData = data?.response_data ?? data?.data ?? data;
-        const spreadsheetId = responseData?.spreadsheetId ?? responseData?.id;
-        const spreadsheetName = responseData?.properties?.title ?? "Weave — Grocery Items";
+        const spreadsheetId =
+          responseData?.spreadsheetId ??
+          responseData?.id ??
+          responseData?.result?.spreadsheetId ??
+          responseData?.spreadsheet_id ??
+          responseData?.result?.id ??
+          data?.spreadsheetId ??
+          data?.id;
+        const spreadsheetName =
+          responseData?.properties?.title ??
+          responseData?.result?.properties?.title ??
+          responseData?.title ??
+          "Weave — Grocery Items";
+
+        if (!spreadsheetId) {
+          console.error("[GrocerySync] No spreadsheetId found in create response");
+          return new Response(JSON.stringify({ error: "Spreadsheet created but ID not returned" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         // Add headers row
         if (spreadsheetId) {
