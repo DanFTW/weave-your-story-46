@@ -100,7 +100,7 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
               className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 transition-opacity"
             >
               <ExternalLink className="w-4 h-4" />
-              Open in Google Maps
+              Bookmark on Google Maps
             </a>
           )}
           <div>
@@ -150,7 +150,7 @@ export function PendingBookmarkCard({ bookmark, onUpdate, onPush, onDismiss, isP
               ) : (
                 <>
                   <Search className="w-4 h-4" />
-                  Find on Google Maps
+                  Bookmark on Google Maps
                 </>
               )}
             </button>

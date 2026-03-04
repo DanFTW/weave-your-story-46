@@ -58,7 +58,7 @@ export function ActiveMonitoring({
         </div>
         <div>
           <p className="text-2xl font-bold text-foreground">{stats.restaurantsBookmarked}</p>
-          <p className="text-sm text-muted-foreground">Restaurants found</p>
+          <p className="text-sm text-muted-foreground">Restaurants bookmarked</p>
         </div>
       </div>
 

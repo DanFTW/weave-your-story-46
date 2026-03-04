@@ -171,8 +171,13 @@ async function findOnGoogleMaps(
       const firstPlace = Array.isArray(places) ? places[0] : null;
 
       if (firstPlace) {
-        const placeId = firstPlace.id ?? firstPlace.place_id ?? firstPlace.placeId ?? null;
-        const placeName = firstPlace.displayName?.text ?? firstPlace.name ?? name;
+        // New Google Places API returns resource name as "places/ChIJ..." in the `name` field
+        let placeId = firstPlace.id ?? firstPlace.place_id ?? firstPlace.placeId ?? null;
+        if (!placeId && typeof firstPlace.name === "string" && firstPlace.name.startsWith("places/")) {
+          placeId = firstPlace.name.replace("places/", "");
+        }
+        const placeName = firstPlace.displayName?.text ?? firstPlace.formattedAddress ?? name;
+        console.log(`[RestaurantSync] Raw firstPlace keys: ${Object.keys(firstPlace).join(", ")}`);
         if (placeId) {
           const googleMapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`;
           console.log(`[RestaurantSync] Found place: ${placeName} (${placeId})`);
