@@ -1,115 +1,44 @@
+## Root Cause Analysis
 
+The edge function logs reveal two critical issues:
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+1. `**GOOGLE_MAPS_GET_PLACE_DETAILS` returns 404** — this Composio tool does not exist:
+  ```
+   Save place returned 404: {"error":{"message":"Tool GOOGLE_MAPS_GET_PLACE_DETAILS not found"}}
+  ```
+2. **The function lies about success** — line 197 of the edge function says `return true` after the search alone, treating a search as a bookmark. The counter increments, the UI says "bookmarked", but nothing was actually saved to Google Maps.
+3. **Google Maps Platform does not expose a "save place" API** — starring/saving places to a user's personal list is a consumer-only feature with no public API endpoint. No Composio tool exists for this because Google doesn't offer it.
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+### What actually happens today
 
-### 1. Database Tables (2 new tables via migration)
-
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
-
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
-
-### 2. Edge Function: `restaurant-bookmark-sync`
-
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
-
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
-
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
-
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
-
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
-
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
-
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
+```text
+User clicks "Bookmark" → search succeeds → save tool 404s → function returns true anyway → counter increments → nothing in Google Maps
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+### Fix: Use the place_id from search results to generate actionable Google Maps links
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+Since we cannot programmatically save a place to a user's Google Maps account, we should:
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+1. **Extract `place_id` from the `GOOGLE_MAPS_TEXT_SEARCH` response** (which already returns it successfully)
+2. **Store the place_id and generate a Google Maps URL** (`https://www.google.com/maps/place/?q=place_id:{place_id}`) in our pending/completed bookmarks table
+3. **Update the UI** to show a "View on Google Maps" link that opens the place directly, allowing the user to save it themselves
+4. **Stop pretending the bookmark was saved** — rename the action to "Found on Maps" and provide the link
+5. **Add a `google_maps_url` and `place_id` column** to `pending_restaurant_bookmarks`
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+### Files to modify
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+- `**supabase/functions/restaurant-bookmark-sync/index.ts**` — rewrite `bookmarkOnGoogleMaps` to extract `place_id` from search results and return it; stop calling the non-existent save tool; return the place_id and maps URL instead of a boolean
+- **DB migration** — add `place_id text` and `google_maps_url text` columns to `pending_restaurant_bookmarks`
+- `**src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx**` — show "View on Google Maps" link when a maps URL is available
+- `**src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx**` — update copy from "bookmarked" to "found" where appropriate
+- `**src/types/restaurantBookmarkSync.ts**` — add `placeId` and `googleMapsUrl` optional fields to `PendingRestaurantBookmark`
+- `**src/hooks/useRestaurantBookmarkSync.ts**` — map new fields from DB
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+### Key behavior change
 
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+- "Bookmark on Google Maps" button becomes "Find on Google Maps" — searches for the place and stores the result with a direct link
+- After finding, a "Open in Google Maps" link lets the user tap to view (and manually save/star) the place
+- The counter reflects "restaurants found" rather than "restaurants bookmarked"
+- No more false positives — the user gets an honest, useful result  
 
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
-
+  note: Do not change the thread title "Restaurant Memories to Google Maps Bookmark". Do not make any other changes.
