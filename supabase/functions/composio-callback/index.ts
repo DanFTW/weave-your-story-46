@@ -139,6 +139,8 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "slack_bot": "slack",
   "googlecalendar": "googlecalendar",
   "google_calendar": "googlecalendar",
+  "googlemaps": "googlemaps",
+  "google_maps": "googlemaps",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -489,7 +491,7 @@ async function fetchExistingGoogleProfile(
       .from("user_integrations")
       .select("integration_id, account_email, account_name, account_avatar_url")
       .eq("user_id", userId)
-      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube", "googledrive", "googlecalendar"])
+      .in("integration_id", ["gmail", "googledocs", "googlephotos", "youtube", "googledrive", "googlecalendar", "googlemaps"])
       .eq("status", "connected")
       .not("account_email", "is", null)
       .limit(1)
@@ -3358,6 +3360,30 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Slack profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Google Maps, fetch profile via Composio connection data (Google OAuth)
+    if (toolkit === "googlemaps") {
+      console.log("composio-callback: Fetching Google Maps profile via Composio API...");
+      
+      let profileInfo = await fetchGoogleDocsProfile(connectionId);
+      
+      if (!profileInfo.email && !profileInfo.name) {
+        console.log("composio-callback: Google userinfo failed, trying cross-integration lookup...");
+        profileInfo = await fetchExistingGoogleProfile(supabase, resolvedUserId);
+      }
+      
+      if (profileInfo.email) {
+        accountEmail = profileInfo.email;
+      }
+      if (profileInfo.name) {
+        accountName = profileInfo.name;
+      }
+      if (profileInfo.avatarUrl) {
+        accountAvatarUrl = profileInfo.avatarUrl;
+      }
+      
+      console.log(`composio-callback: Google Maps profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     const { data: savedData, error: dbError } = await supabase
