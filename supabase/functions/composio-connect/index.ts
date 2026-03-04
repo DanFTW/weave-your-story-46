@@ -16,6 +16,7 @@ const COMPOSIO_TOOLKIT_NAMES: Record<string, string> = {
   googletasks: "GOOGLE_TASKS",
   googlesuper: "GOOGLE",
   googlecalendar: "GOOGLECALENDAR",
+  googlesheets: "GOOGLESHEETS",
 };
 
 // Fetch the default Composio-managed auth config for a toolkit
@@ -118,13 +119,14 @@ const AUTH_CONFIGS: Record<string, string> = {
   slack: "ac_H9kYZsVaw_gS",
   googlecalendar: "ac_Tahf9NrBD7Vy",
   googlemaps: "ac_dg71KiJ5nLgN",
+  googlesheets: "ac_P0DYB0XdGLn3",
 };
 
 // All valid toolkits (includes those using Composio default auth)
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "discordbot", "googledocs", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps"
+  "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps"
 ];
 
 serve(async (req) => {

@@ -51,6 +51,7 @@ import firefliesIcon from "@/assets/integrations/fireflies.png";
 import googledriveIcon from "@/assets/integrations/googledrive.svg";
 import googlecalendarIcon from "@/assets/integrations/googlecalendar.svg";
 import googlemapsIcon from "@/assets/integrations/googlemaps.svg";
+import googlesheetsIcon from "@/assets/integrations/googlesheets.svg";
 
 interface IntegrationIconProps {
   icon: string;
@@ -109,6 +110,7 @@ const iconImages: Record<string, string> = {
   slack: slackIcon,
   googlecalendar: googlecalendarIcon,
   googlemaps: googlemapsIcon,
+  googlesheets: googlesheetsIcon,
 };
 
 export function IntegrationIcon({ icon, className }: IntegrationIconProps) {
