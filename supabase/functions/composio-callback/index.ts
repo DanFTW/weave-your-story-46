@@ -2906,6 +2906,17 @@ serve(async (req) => {
         accountAvatarUrl = profileInfo.avatarUrl;
       }
       
+      // Fallback: derive name from email prefix if Google userinfo returned no name
+      if (!accountName && accountEmail) {
+        const emailPrefix = accountEmail.split("@")[0];
+        // Capitalize first letter of each segment (e.g., "daniel.figueroa" → "Daniel Figueroa")
+        accountName = emailPrefix
+          .split(/[._-]/)
+          .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())
+          .join(" ");
+        console.log(`composio-callback: Derived name from email: ${accountName}`);
+      }
+      
       console.log(`composio-callback: Google Calendar profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
