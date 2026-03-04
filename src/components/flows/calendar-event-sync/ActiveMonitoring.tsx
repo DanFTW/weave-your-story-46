@@ -1,4 +1,4 @@
-import { Calendar, CalendarCheck, Pause } from "lucide-react";
+import { Calendar, CalendarCheck, Pause, RefreshCw, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { CalendarEventSyncStats, PendingCalendarEvent } from "@/types/calendarEventSync";
 import { PendingEventCard } from "./PendingEventCard";
@@ -11,6 +11,8 @@ interface ActiveMonitoringProps {
   onPushToCalendar: (eventId: string) => Promise<boolean>;
   onDismiss: (eventId: string) => Promise<void>;
   isPushing: string | null;
+  onManualSync?: () => Promise<void>;
+  isSyncing?: boolean;
 }
 
 export function ActiveMonitoring({
@@ -21,6 +23,8 @@ export function ActiveMonitoring({
   onPushToCalendar,
   onDismiss,
   isPushing,
+  onManualSync,
+  isSyncing = false,
 }: ActiveMonitoringProps) {
   return (
     <div className="space-y-6">
@@ -57,6 +61,31 @@ export function ActiveMonitoring({
           <p className="text-sm text-muted-foreground">Events created</p>
         </div>
       </div>
+
+      {/* Sync now button */}
+      {onManualSync && (
+        <button
+          onClick={onManualSync}
+          disabled={isSyncing}
+          className="w-full bg-card rounded-2xl border border-border p-5 flex items-center gap-4 hover:bg-accent/50 transition-colors disabled:opacity-60"
+        >
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            {isSyncing ? (
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            ) : (
+              <RefreshCw className="w-5 h-5 text-primary" />
+            )}
+          </div>
+          <div className="text-left">
+            <p className="font-semibold text-foreground text-base">
+              {isSyncing ? "Syncing…" : "Sync now"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Scan existing memories for events
+            </p>
+          </div>
+        </button>
+      )}
 
       {/* Pending queue */}
       {pendingEvents.length > 0 && (

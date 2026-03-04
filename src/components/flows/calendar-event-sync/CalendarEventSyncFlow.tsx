@@ -24,9 +24,9 @@ export function CalendarEventSyncFlow() {
 
   const {
     phase, setPhase, config, stats, pendingEvents,
-    isLoading, isActivating, isPushing,
+    isLoading, isActivating, isPushing, isSyncing,
     loadConfig, activate, deactivate,
-    updatePendingEvent, pushToCalendar, dismissPending,
+    updatePendingEvent, pushToCalendar, dismissPending, manualSync,
   } = useCalendarEventSync();
 
   useEffect(() => {
@@ -109,6 +109,8 @@ export function CalendarEventSyncFlow() {
             onPushToCalendar={pushToCalendar}
             onDismiss={dismissPending}
             isPushing={isPushing}
+            onManualSync={manualSync}
+            isSyncing={isSyncing}
           />
         )}
       </div>
