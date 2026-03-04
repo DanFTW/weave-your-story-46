@@ -126,7 +126,7 @@ export function useRestaurantBookmarkSync() {
 
       setConfig((prev) => prev ? { ...prev, isActive: true } : null);
       setPhase("active");
-      toast({ title: "Restaurant bookmark sync activated", description: "New restaurant memories will auto-bookmark to Google Maps" });
+      toast({ title: "Restaurant sync activated", description: "New restaurant memories will be found on Google Maps" });
       return true;
     } catch {
       toast({ title: "Activation failed", variant: "destructive" });
@@ -266,7 +266,7 @@ export function useRestaurantBookmarkSync() {
       const result = data as { processed?: number; bookmarked?: number; queued?: number };
       toast({
         title: "Sync complete",
-        description: `Processed ${result.processed ?? 0} memories — ${result.bookmarked ?? 0} bookmarked, ${result.queued ?? 0} queued`,
+        description: `Processed ${result.processed ?? 0} memories — ${result.bookmarked ?? 0} found, ${result.queued ?? 0} queued`,
       });
 
       await loadConfig();
