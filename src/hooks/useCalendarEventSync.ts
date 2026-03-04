@@ -16,6 +16,7 @@ export function useCalendarEventSync() {
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isPushing, setIsPushing] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const stats: CalendarEventSyncStats = {
     eventsCreated: config?.eventsCreated ?? 0,
@@ -237,10 +238,40 @@ export function useCalendarEventSync() {
     }
   }, [toast]);
 
+  const manualSync = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase.functions.invoke("calendar-event-sync", {
+        body: { action: "manual-sync" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      const result = data as { processed?: number; created?: number; queued?: number };
+      toast({
+        title: "Sync complete",
+        description: `Processed ${result.processed ?? 0} memories — ${result.created ?? 0} created, ${result.queued ?? 0} queued`,
+      });
+
+      await loadConfig();
+    } catch {
+      toast({ title: "Sync failed", variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [toast, loadConfig]);
+
   return {
     phase, setPhase, config, stats, pendingEvents,
-    isLoading, isActivating, isPushing,
+    isLoading, isActivating, isPushing, isSyncing,
     loadConfig, activate, deactivate,
-    updatePendingEvent, pushToCalendar, dismissPending,
+    updatePendingEvent, pushToCalendar, dismissPending, manualSync,
   };
 }

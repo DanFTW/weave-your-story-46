@@ -418,6 +418,169 @@ serve(async (req) => {
       });
     }
 
+    // ── MANUAL-SYNC ──
+    if (action === "manual-sync") {
+      // Fetch user's LIAM API keys
+      const { data: apiKeys } = await sb
+        .from("user_api_keys")
+        .select("api_key, private_key, user_key")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!apiKeys) {
+        return new Response(JSON.stringify({ error: "LIAM API keys not configured" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Import private key and sign the request
+      const pemContents = apiKeys.private_key
+        .replace(/-----BEGIN PRIVATE KEY-----/, "")
+        .replace(/-----END PRIVATE KEY-----/, "")
+        .replace(/\s/g, "");
+      const binaryString = atob(pemContents);
+      const keyBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        keyBytes[i] = binaryString.charCodeAt(i);
+      }
+      const privateKey = await crypto.subtle.importKey(
+        "pkcs8",
+        keyBytes.buffer,
+        { name: "ECDSA", namedCurve: "P-256" },
+        false,
+        ["sign"]
+      );
+
+      const listBody = { userKey: apiKeys.user_key };
+      const bodyStr = JSON.stringify(listBody);
+      const rawSig = await crypto.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" },
+        privateKey,
+        new TextEncoder().encode(bodyStr)
+      );
+
+      // Convert to DER
+      const sigBytes = new Uint8Array(rawSig);
+      let r = Array.from(sigBytes.slice(0, 32));
+      let s = Array.from(sigBytes.slice(32));
+      if (r[0] & 0x80) r = [0, ...r];
+      if (s[0] & 0x80) s = [0, ...s];
+      while (r.length > 1 && r[0] === 0 && !(r[1] & 0x80)) r = r.slice(1);
+      while (s.length > 1 && s[0] === 0 && !(s[1] & 0x80)) s = s.slice(1);
+      let derInner = [0x02, r.length, ...r, 0x02, s.length, ...s];
+      let der = [0x30, derInner.length, ...derInner];
+      const signature = btoa(String.fromCharCode(...der));
+
+      // Fetch memories from LIAM
+      const listRes = await fetch("https://web.askbuddy.ai/devspacexdb/api/memory/list", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apiKey: apiKeys.api_key,
+          signature,
+        },
+        body: bodyStr,
+      });
+
+      if (!listRes.ok) {
+        console.error("[CalendarSync] LIAM list error:", listRes.status);
+        return new Response(JSON.stringify({ error: "Failed to fetch memories" }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const listJson = await listRes.json();
+      const memories: { id: string; content: string }[] = (listJson?.data || [])
+        .slice(0, 50)
+        .map((m: any) => ({ id: m.transactionNumber || m.id || String(Math.random()), content: m.content }))
+        .filter((m: any) => m.content);
+
+      // Get already-processed memory IDs
+      const { data: existing } = await sb
+        .from("pending_calendar_events")
+        .select("memory_id")
+        .eq("user_id", userId);
+      const processedIds = new Set((existing || []).map((e: any) => e.memory_id));
+
+      const unprocessed = memories.filter((m) => !processedIds.has(m.id));
+
+      // Get GCal connection
+      const { data: integration } = await sb
+        .from("user_integrations")
+        .select("composio_connection_id")
+        .eq("user_id", userId)
+        .eq("integration_id", "googlecalendar")
+        .eq("status", "connected")
+        .maybeSingle();
+
+      let created = 0;
+      let queued = 0;
+      let processed = 0;
+
+      for (const mem of unprocessed) {
+        const parsed = await parseMemoryForEvent(mem.content);
+        processed++;
+
+        if (!parsed.isEvent) continue;
+
+        if (parsed.isComplete && parsed.title && parsed.date && integration?.composio_connection_id) {
+          const ok = await createGCalEvent(
+            integration.composio_connection_id,
+            parsed.title,
+            parsed.date,
+            parsed.time,
+            parsed.description
+          );
+          if (ok) {
+            await sb.from("pending_calendar_events").upsert({
+              user_id: userId,
+              memory_id: mem.id,
+              memory_content: mem.content,
+              event_title: parsed.title,
+              event_date: parsed.date,
+              event_time: parsed.time,
+              event_description: parsed.description,
+              status: "completed",
+            }, { onConflict: "user_id,memory_id" });
+            created++;
+            continue;
+          }
+        }
+
+        // Queue incomplete or failed
+        await sb.from("pending_calendar_events").upsert({
+          user_id: userId,
+          memory_id: mem.id,
+          memory_content: mem.content,
+          event_title: parsed.title,
+          event_date: parsed.date,
+          event_time: parsed.time,
+          event_description: parsed.description,
+          status: "pending",
+        }, { onConflict: "user_id,memory_id" });
+        queued++;
+      }
+
+      // Update events_created counter
+      if (created > 0) {
+        const { data: cfg } = await sb
+          .from("calendar_event_sync_config")
+          .select("events_created")
+          .eq("user_id", userId)
+          .single();
+        await sb
+          .from("calendar_event_sync_config")
+          .update({ events_created: ((cfg as any)?.events_created ?? 0) + created })
+          .eq("user_id", userId);
+      }
+
+      return new Response(JSON.stringify({ processed, created, queued }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
