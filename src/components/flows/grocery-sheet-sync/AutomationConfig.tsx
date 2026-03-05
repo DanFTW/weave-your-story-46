@@ -48,7 +48,7 @@ export function AutomationConfig({
 
   const selectedName =
     spreadsheets.find((s) => s.id === selectedId)?.name ??
-    config.spreadsheetName ??
+    (selectedId ? config.spreadsheetName : null) ??
     "Select a spreadsheet";
 
   return (
