@@ -143,7 +143,7 @@ async function appendToSheet(
   items: { name: string; quantity: string; notes: string }[],
 ): Promise<boolean> {
   try {
-    const values = items.map((item) => [item.name, item.quantity, item.notes, new Date().toISOString()]);
+    const values = items.map((item) => [item.name, item.quantity, item.notes, new Date().toISOString().replace(/\.\d{3}Z$/, '')]);
 
     const res = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/GOOGLESHEETS_BATCH_UPDATE",
