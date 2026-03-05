@@ -270,18 +270,21 @@ serve(async (req) => {
 
       try {
         const data = JSON.parse(raw);
-        const responseData = data?.response_data ?? data?.data ?? data;
-        const files = responseData?.files ?? responseData?.items ?? responseData ?? [];
+        console.log("[GrocerySync] Raw list response keys:", JSON.stringify(data).slice(0, 2000));
+        // Normalize: Composio nests as data.data.response_data or data.response_data
+        const innerData = data?.data?.response_data ?? data?.response_data ?? data?.data ?? data;
+        const files = innerData?.files ?? innerData?.items ?? innerData?.spreadsheets ?? (Array.isArray(innerData) ? innerData : []);
         const spreadsheets = (Array.isArray(files) ? files : []).map((f: any) => ({
-          id: f.id ?? f.spreadsheetId,
-          name: f.name ?? f.properties?.title ?? "Untitled",
+          id: f.id ?? f.spreadsheetId ?? f.spreadsheet_id,
+          name: f.name ?? f.properties?.title ?? f.title ?? "Untitled",
         })).filter((s: any) => s.id);
 
+        console.log("[GrocerySync] Parsed spreadsheets count:", spreadsheets.length);
         return new Response(JSON.stringify({ spreadsheets }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-      } catch {
-        console.error("[GrocerySync] Failed to parse spreadsheets response");
+      } catch (e) {
+        console.error("[GrocerySync] Failed to parse spreadsheets response:", e);
         return new Response(JSON.stringify({ spreadsheets: [] }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -336,9 +339,10 @@ serve(async (req) => {
           data?.spreadsheetId ??
           data?.id;
         const spreadsheetName =
-          responseData?.properties?.title ??
-          responseData?.result?.properties?.title ??
-          responseData?.title ??
+          innerData?.properties?.title ??
+          innerData?.title ??
+          innerData?.name ??
+          data?.data?.properties?.title ??
           "Weave — Grocery Items";
 
         if (!spreadsheetId) {
