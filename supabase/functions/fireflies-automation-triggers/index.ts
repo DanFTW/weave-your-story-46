@@ -214,6 +214,8 @@ async function getAccessToken(connectionId: string): Promise<string | null> {
       data?.access_token ||
       data?.connectionParams?.access_token ||
       data?.connectionParams?.headers?.Authorization?.replace("Bearer ", "") ||
+      data?.generic_api_key ||
+      data?.headers?.Authorization?.replace("Bearer ", "") ||
       null;
 
     if (!accessToken) {
