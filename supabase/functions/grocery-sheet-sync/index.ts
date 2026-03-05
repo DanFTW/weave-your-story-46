@@ -157,9 +157,8 @@ async function appendToSheet(
           connected_account_id: connectionId,
           arguments: {
             spreadsheet_id: spreadsheetId,
-            range: "Sheet1!A:D",
+            sheet_name: "Sheet1",
             values,
-            value_input_option: "USER_ENTERED",
           },
         }),
       },
