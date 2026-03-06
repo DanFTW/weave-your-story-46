@@ -202,7 +202,7 @@ async function pollInstagramInsights(
   const insightsResult = await executeComposioAction(
     "INSTAGRAM_GET_USER_INSIGHTS",
     connectionId,
-    { metric: ["impressions", "reach", "profile_views", "follower_count"], period: "day" }
+    { metric: ["reach", "profile_views", "follower_count", "accounts_engaged"], period: "day" }
   );
 
   // Record dedup
