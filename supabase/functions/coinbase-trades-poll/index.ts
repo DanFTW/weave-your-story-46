@@ -111,10 +111,16 @@ async function executeComposioAction(actionName: string, connectionId: string, i
 
   try {
     const parsed = JSON.parse(text);
+    // Check if Composio reports the action as unsuccessful
+    if (parsed.successful === false || parsed.data?.successful === false) {
+      const errMsg = parsed.error || parsed.data?.error || parsed.data?.message || "Unknown Composio error";
+      throw new Error(`Composio action ${actionName} unsuccessful: ${errMsg}`);
+    }
     // Composio wraps data in various structures
     return parsed.data?.response_data || parsed.response_data || parsed.data || parsed;
-  } catch {
-    return text;
+  } catch (e) {
+    if (e instanceof SyntaxError) return text;
+    throw e;
   }
 }
 
