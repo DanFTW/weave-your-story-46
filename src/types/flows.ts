@@ -52,6 +52,7 @@ export interface FlowConfig {
   isRestaurantBookmarkSyncFlow?: boolean; // If true, uses Restaurant Bookmark Sync UI
   isGrocerySheetSyncFlow?: boolean; // If true, uses Grocery Sheet Sync UI
   isCoinbaseTradesFlow?: boolean; // If true, uses Coinbase Trades UI
+  isInstagramAnalyticsFlow?: boolean; // If true, uses Instagram Analytics UI
 }
 
 // Single data entry (e.g., one family member)

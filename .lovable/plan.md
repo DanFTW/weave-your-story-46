@@ -1,134 +1,115 @@
-# Plan: Instagram Analytics to Memory Thread
 
-## Summary
 
-Create a new thread "Instagram Analytics to Memory" that uses `INSTAGRAM_GET_USER_INSIGHTS` via Composio to save Instagram analytics as memories. The flow: 1) Connect to Instagram, 2) Toggle analytics tracking on/off with a log of collected analytics memories.
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-**Note:** The user mentioned "Connect to Coinbase" in the flow description, but since this is an Instagram analytics thread, the connection step will be Instagram. Proceeding with that assumption.
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-## Files to Create
+### 1. Database Tables (2 new tables via migration)
 
-### 1. `src/types/instagramAnalytics.ts`
-
-Type definitions following `coinbaseTradesAutomation.ts` pattern:
-
-- `InstagramAnalyticsPhase`: `'auth-check' | 'configure' | 'activating' | 'active'`
-- `InstagramAnalyticsConfig`: id, userId, isActive, insightsCollected, lastPolledAt, timestamps
-- `InstagramAnalyticsStats`: insightsCollected, isActive, lastPolledAt
-
-### 2. `src/hooks/useInstagramAnalytics.ts`
-
-Hook following `useCoinbaseTradesAutomation.ts` pattern:
-
-- Reads/creates config from `instagram_analytics_config` table
-- `activateMonitoring()` / `deactivateMonitoring()` / `manualPoll()` calling edge function `instagram-analytics-poll`
-- Phase management and toast feedback
-
-### 3. `src/components/flows/instagram-analytics/InstagramAnalyticsFlow.tsx`
-
-Main flow component following `CoinbaseTradesFlow.tsx` pattern:
-
-- Uses `useComposio('INSTAGRAM')` for auth gate
-- Uses `useInstagramAnalytics()` for state
-- Redirects to `/integration/instagram` if not connected
-- Renders AutomationConfig or ActiveMonitoring based on phase
-- Reuse existing Instagram thread/integration styling patterns from the codebase
-
-### 4. `src/components/flows/instagram-analytics/AutomationConfig.tsx`
-
-Configure screen following Coinbase's `AutomationConfig.tsx`:
-
-- Explains what gets tracked from the insights returned by `INSTAGRAM_GET_USER_INSIGHTS`
-- Single "Activate Analytics Tracking" button
-
-### 5. `src/components/flows/instagram-analytics/ActiveMonitoring.tsx`
-
-Active state following Coinbase's `ActiveMonitoring.tsx`:
-
-- Green pulse "Monitoring Active" indicator
-- Stats card showing insights collected count
-- Last polled timestamp
-- Simple recent log of collected analytics memories
-- Check Now / Pause buttons
-
-### 6. `src/components/flows/instagram-analytics/ActivatingScreen.tsx`
-
-Loading screen with Instagram-branded pink spinner
-
-### 7. `src/components/flows/instagram-analytics/index.ts`
-
-Barrel export file
-
-### 8. `supabase/functions/instagram-analytics-poll/index.ts`
-
-Edge function following `coinbase-trades-poll` pattern:
-
-- Actions: `activate`, `deactivate`, `manual-poll`
-- Uses `INSTAGRAM_GET_USER_INSIGHTS` via Composio tool execution
-- Formats returned insights as structured memory text
-- Deduplicates via `instagram_analytics_processed` table using a normalized insight snapshot/dedupe key
-- Creates memories via LIAM API (same crypto signing pattern)
-
-## Files to Modify
-
-### 9. `src/data/threads.ts`
-
-Add thread entry:
-
-```
-{ id: "instagram-analytics", title: "Instagram Analytics to Memory", description: "Save Instagram analytics like profile views, reach, and follower count as memories", icon: BarChart3, gradient: "pink", status: "active", type: "automation", category: "social", integrations: ["instagram"], triggerType: "automatic", flowMode: "thread" }
-
-```
-
-### 10. `src/pages/Threads.tsx`
-
-Add `"instagram-analytics"` to `flowEnabledThreads` array
-
-### 11. `src/data/flowConfigs.ts`
-
-Add flow config entry with `isInstagramAnalyticsFlow: true`
-
-### 12. `src/types/flows.ts`
-
-Add `isInstagramAnalyticsFlow?: boolean` to `FlowConfig` interface
-
-### 13. `src/data/threadConfigs.ts`
-
-Add thread config with steps: Connect Instagram → Enable Monitoring → Always-On Monitoring
-
-### 14. `src/pages/FlowPage.tsx`
-
-- Import `InstagramAnalyticsFlow`
-- Add conditional render block: `if (config.isInstagramAnalyticsFlow) return <InstagramAnalyticsFlow />;`
-
-### 15. `supabase/config.toml`
-
-Add `[functions.instagram-analytics-poll]` with auth configuration matching the project's established pattern for comparable functions
-
-## Database Migration
-
-Create table `instagram_analytics_config`:
-
-- `id uuid PK default gen_random_uuid()`
-- `user_id uuid NOT NULL`
-- `is_active boolean NOT NULL DEFAULT false`
-- `insights_collected integer NOT NULL DEFAULT 0`
-- `last_polled_at timestamptz NULL`
-- `created_at timestamptz NOT NULL DEFAULT now()`
-- `updated_at timestamptz NOT NULL DEFAULT now()`
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
 - RLS: user can SELECT/INSERT/UPDATE own rows
 
-Create table `instagram_analytics_processed`:
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-- `id uuid PK default gen_random_uuid()`
-- `user_id uuid NOT NULL`
-- `dedupe_key text NOT NULL`
-- `created_at timestamptz NOT NULL DEFAULT now()`
-- RLS: user can SELECT/INSERT own rows
+### 2. Edge Function: `restaurant-bookmark-sync`
 
-## Design Consistency
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
 
-- Reuse existing Instagram thread/integration styling patterns from the codebase
-- Same card/button patterns as Coinbase Trades flow
-- Instagram icon from existing assets
-- `BarChart3` lucide icon for the thread card (analytics-specific)
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
+
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+
+### 6. Registration (data + routing)
+
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
+```
+
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+
+### 8. Wire trigger into memory save
+
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+
+### Summary of files to create/modify
+
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
+
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+
+**Database migration:** 2 tables + RLS policies
+

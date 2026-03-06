@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3 } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "instagram-analytics": {
+    id: "instagram-analytics",
+    title: "Instagram Analytics to Memory",
+    subtitle: "Automatic analytics tracking",
+    description: "Save Instagram analytics as memories automatically.",
+    gradient: "pink",
+    icon: BarChart3,
+    entryName: "insight",
+    entryNamePlural: "insights",
+    memoryTag: "INSTAGRAM",
+    fields: [],
+    isInstagramAnalyticsFlow: true,
+  },
   "coinbase-trades": {
     id: "coinbase-trades",
     title: "Coinbase Trades to Memory",

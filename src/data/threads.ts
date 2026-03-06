@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3 } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "instagram-analytics",
+    title: "Instagram Analytics to Memory",
+    description: "Save Instagram analytics like profile views, reach, and follower count as memories",
+    icon: BarChart3,
+    gradient: "pink",
+    status: "active",
+    type: "automation",
+    category: "social",
+    integrations: ["instagram"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "coinbase-trades",
     title: "Coinbase Trades to Memory",

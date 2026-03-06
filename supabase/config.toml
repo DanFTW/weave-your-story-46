@@ -101,3 +101,6 @@ verify_jwt = false
 
 [functions.coinbase-trades-poll]
 verify_jwt = false
+
+[functions.instagram-analytics-poll]
+verify_jwt = false
