@@ -1,115 +1,58 @@
+## IInvestigation Findings
 
+### Error Location Clarified
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+The reported error `{"error":"Composio API error: 400"}` originates from `composio-connect/index.ts` (line 332), not from `coinbase-trades-poll`. This is a **connection creation** failure, not a polling failure.
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+### Root Cause: Auth Scheme Mismatch in Connect Flow
 
-### 1. Database Tables (2 new tables via migration)
+The Composio Coinbase toolkit uses **API Key** authentication (not OAuth). The `composio-connect` edge function calls Composio's `/api/v3/connected_accounts/link` endpoint, which is designed for **OAuth** flows (it returns a `redirect_url`). This endpoint does not support API Key auth configs, so it rejects `ac_fCVi2K8lFafl` with a 400 error.
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+The dynamic fallback also fails because any Coinbase auth config will be API Key type.
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+### Tool Availability Confirmed
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+`COINBASE_LIST_PRODUCTS_TRADES` **exists** in the Composio Coinbase toolkit (29 tools total, confirmed via official docs at v3.docs.composio.dev/tools/coinbase). The previous diagnosis of "tool does not exist" was incorrect.
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+### Current Connection State
 
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+- `user_integrations` has `composio_connection_id: ca_SkPdaHWbhndP` with `status: connected`
+- This connection was likely created via the Composio dashboard/playground, not through the app's connect flow
+- If this connection is valid and linked to the correct API Key auth, `coinbase-trades-poll` should work -- but we have **no recent logs** from that function to verify (logs have rotated)
 
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
+### What Needs Verification (requires a live poll attempt)
 
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+1. Whether `ca_SkPdaHWbhndP` is still active and linked to the correct Coinbase API Key credentials
+2. The actual Composio error response when `coinbase-trades-poll` calls `COINBASE_LIST_PRODUCTS_TRADES` with this connection ID
+3. Whether the 404 errors from earlier conversation were `Tool_ToolNotFound` or `ConnectedAccount` related
 
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+### Plan: Three Fixes
 
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+**Fix 1:** `coinbase-trades-poll/index.ts` **-- Add diagnostic logging**
 
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+Before changing the tool call, add verbose logging to capture:
 
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+- The exact `connectionId` being passed
+- The full raw Composio response (status + body) for each tool execution attempt
+- Whether errors are `Tool_ToolNotFound` vs `ConnectedAccountExpired` vs `Auth_Config` errors
 
-### 6. Registration (data + routing)
+This will definitively prove whether the poll failure is a connection issue or a tool resolution issue.
 
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
-```
+**Fix 2:** `composio-connect/index.ts` **-- Support API Key auth scheme for Coinbase**
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+The connect flow needs a separate code path for API Key-based toolkits. Instead of calling `/connected_accounts/link` (OAuth only), Coinbase connections should either:
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+- Use Composio's `/api/v3/connected_accounts` POST endpoint with `auth_scheme: "API_KEY"` and the user's Coinbase API credentials
+- Or skip the OAuth redirect flow entirely and prompt the user to enter their Coinbase API key/secret directly in the app, which gets sent to Composio to create the connected account
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+This requires adding Coinbase to a list of "API Key auth" toolkits that bypass the OAuth link flow.
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+**Fix 3:** `useCoinbaseTradesAutomation.ts` **-- Surface errors to user**
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+Add toast feedback for `manualPoll()` failures and zero-result scenarios so the user always gets feedback.
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+### Files to Change
 
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
-
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
-
+- `supabase/functions/composio-connect/index.ts` -- Add API Key auth path for Coinbase (and future API Key toolkits)
+- `supabase/functions/coinbase-trades-poll/index.ts` -- Add diagnostic logging; truncate error-swallowing in per-pair catch blocks
+- `src/hooks/useCoinbaseTradesAutomation.ts` -- Add error/zero-result toast feedback
