@@ -65,7 +65,7 @@ async function signRequest(privateKey: CryptoKey, body: object): Promise<string>
 async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   try {
     const privateKey = await importPrivateKey(apiKeys.private_key);
-    const body = { userKey: apiKeys.user_key, content };
+    const body = { userKey: apiKeys.user_key, content, tag: "INSTAGRAM" };
     const signature = await signRequest(privateKey, body);
     const response = await fetch(`${LIAM_API_BASE}/create`, {
       method: "POST",
