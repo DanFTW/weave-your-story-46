@@ -88,7 +88,7 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
 // deno-lint-ignore no-explicit-any
 async function executeComposioAction(actionName: string, connectionId: string, input: Record<string, any> = {}): Promise<any> {
   const response = await fetch(
-    `https://backend.composio.dev/api/v3/actions/${actionName}/execute`,
+    `https://backend.composio.dev/api/v3/tools/execute/${actionName}`,
     {
       method: "POST",
       headers: {
@@ -97,7 +97,7 @@ async function executeComposioAction(actionName: string, connectionId: string, i
       },
       body: JSON.stringify({
         connected_account_id: connectionId,
-        input,
+        arguments: input,
       }),
     }
   );
