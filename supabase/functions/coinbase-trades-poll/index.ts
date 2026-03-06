@@ -9,6 +9,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api/memory";
+const COINBASE_API_BASE = "https://api.coinbase.com";
 
 // === CRYPTO UTILITIES FOR LIAM API ===
 
@@ -61,6 +62,7 @@ async function signRequest(privateKey: CryptoKey, body: object): Promise<string>
   return toDER(new Uint8Array(signature));
 }
 
+// deno-lint-ignore no-explicit-any
 async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   try {
     const privateKey = await importPrivateKey(apiKeys.private_key);
@@ -82,53 +84,97 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   }
 }
 
+// === GET COINBASE ACCESS TOKEN FROM COMPOSIO ===
+
+async function getCoinbaseAccessToken(connectionId: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+      {
+        method: "GET",
+        headers: { "x-api-key": COMPOSIO_API_KEY },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Coinbase] Composio connection fetch error:", response.status, errorText.slice(0, 500));
+      return null;
+    }
+
+    const connData = await response.json();
+    const data = connData.data || connData;
+    const accessToken = data.access_token || data.connectionParams?.access_token;
+
+    if (!accessToken || accessToken.includes("...")) {
+      console.error("[Coinbase] Access token missing or masked. Ensure masking is disabled in Composio org settings.");
+      return null;
+    }
+
+    return accessToken;
+  } catch (error) {
+    console.error("[Coinbase] Error getting access token:", error);
+    return null;
+  }
+}
+
+// === COINBASE ADVANCED TRADE API HELPERS ===
+
+// deno-lint-ignore no-explicit-any
+async function coinbaseGet(path: string, accessToken: string): Promise<any> {
+  const url = `${COINBASE_API_BASE}${path}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[Coinbase] API error ${path}: ${response.status} ${errorText.slice(0, 500)}`);
+    throw new Error(`Coinbase API ${response.status}: ${path}`);
+  }
+
+  return await response.json();
+}
+
 // === FORMAT TRADE AS MEMORY ===
 
-function formatTradeAsMemory(trade: any, productId: string): string {
+// deno-lint-ignore no-explicit-any
+function formatFillAsMemory(fill: any): string {
   const parts = ["Coinbase Trade", ""];
-  parts.push(`Pair: ${productId}`);
-  if (trade.side) parts.push(`Side: ${trade.side}`);
-  if (trade.size) parts.push(`Size: ${trade.size}`);
-  if (trade.price) parts.push(`Price: $${Number(trade.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}`);
-  if (trade.time) parts.push(`Time: ${trade.time}`);
-  if (trade.trade_id) parts.push(`Trade ID: ${trade.trade_id}`);
+  if (fill.product_id) parts.push(`Pair: ${fill.product_id}`);
+  if (fill.side) parts.push(`Side: ${fill.side}`);
+  if (fill.size) parts.push(`Size: ${fill.size}`);
+  if (fill.price) parts.push(`Price: $${Number(fill.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}`);
+  if (fill.trade_time) parts.push(`Time: ${fill.trade_time}`);
+  if (fill.trade_id) parts.push(`Trade ID: ${fill.trade_id}`);
+  if (fill.order_id) parts.push(`Order ID: ${fill.order_id}`);
+  if (fill.commission) parts.push(`Fee: $${fill.commission}`);
   parts.push("");
   parts.push("A trade was executed on Coinbase.");
   return parts.join("\n");
 }
 
-// === SAFE JSON PARSE ===
-
-function safeJsonParse(text: string): any {
-  try {
-    return text ? JSON.parse(text) : null;
-  } catch {
-    console.error("[Coinbase] Failed to parse JSON:", text.slice(0, 200));
-    return null;
-  }
-}
-
-// === EXTRACT DATA FROM COMPOSIO RESPONSE ===
-
-function extractResponseData(toolData: any): any {
-  if (toolData?.data?.response_data) return toolData.data.response_data;
-  if (toolData?.data?.data?.response_data) return toolData.data.data.response_data;
-  if (toolData?.data?.data) return toolData.data.data;
-  if (toolData?.data) return toolData.data;
-  if (toolData?.response_data) return toolData.response_data;
-  return toolData;
-}
-
-// === POLL COINBASE TRADES VIA COMPOSIO ===
+// === POLL COINBASE TRADES VIA ADVANCED TRADE API ===
 
 async function pollCoinbaseTrades(
+  // deno-lint-ignore no-explicit-any
   supabaseClient: any,
   userId: string,
   connectionId: string
 ): Promise<{ newTrades: number; totalTracked: number }> {
   console.log(`[Coinbase Poll] Fetching trades for user ${userId}`);
 
-  // Get current config for last_trade_timestamp cursor
+  // Get access token from Composio
+  const accessToken = await getCoinbaseAccessToken(connectionId);
+  if (!accessToken) {
+    throw new Error("Could not retrieve Coinbase access token from Composio");
+  }
+
+  // Get current config for cursor
   const { data: currentConfig } = await supabaseClient
     .from("coinbase_trades_config")
     .select("last_trade_timestamp, trades_tracked")
@@ -139,37 +185,6 @@ async function pollCoinbaseTrades(
   const isBackfill = !lastTradeTimestamp;
   console.log(`[Coinbase Poll] Mode: ${isBackfill ? 'full backfill' : 'incremental'}, cursor: ${lastTradeTimestamp || 'none'}`);
 
-  // Step 1: Get all trading products
-  const productsResponse = await fetch(
-    "https://backend.composio.dev/api/v3/tools/execute/COINBASE_LIST_PRODUCTS",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": COMPOSIO_API_KEY },
-      body: JSON.stringify({ connected_account_id: connectionId, arguments: {} }),
-    }
-  );
-
-  const productsText = await productsResponse.text();
-  if (!productsResponse.ok) {
-    console.error("[Coinbase Poll] Products fetch error:", productsText.slice(0, 500));
-    throw new Error(`Failed to fetch products: ${productsResponse.status}`);
-  }
-
-  const productsData = safeJsonParse(productsText);
-  const rawProducts = extractResponseData(productsData);
-  let products: any[] = Array.isArray(rawProducts) ? rawProducts : (rawProducts?.products || rawProducts?.data || []);
-
-  // Limit to active trading pairs to avoid excessive API calls
-  products = products.filter((p: any) => p.status === 'online' || !p.status);
-  console.log(`[Coinbase Poll] Found ${products.length} active products`);
-
-  // Cap products to prevent timeouts (most relevant pairs first)
-  const maxProducts = isBackfill ? 20 : 50;
-  if (products.length > maxProducts) {
-    products = products.slice(0, maxProducts);
-    console.log(`[Coinbase Poll] Capped to ${maxProducts} products`);
-  }
-
   // Get user API keys for LIAM
   const { data: apiKeys } = await supabaseClient
     .from("user_api_keys")
@@ -179,120 +194,95 @@ async function pollCoinbaseTrades(
 
   let totalNewTrades = 0;
   let latestTimestamp = lastTradeTimestamp;
+  let cursor: string | undefined;
+  let hasMore = true;
 
-  // Step 2: For each product, fetch trades with pagination
-  for (const product of products) {
-    const productId = product.id || product.product_id;
-    if (!productId) continue;
+  // Paginate through all fills using the Advanced Trade API
+  // GET /api/v3/brokerage/orders/historical/fills
+  while (hasMore) {
+    let path = `/api/v3/brokerage/orders/historical/fills?limit=100`;
+    if (cursor) path += `&cursor=${encodeURIComponent(cursor)}`;
+    if (lastTradeTimestamp) {
+      path += `&start_sequence_timestamp=${encodeURIComponent(lastTradeTimestamp)}`;
+    }
 
-    let hasMore = true;
-    let cursor: string | undefined;
-    let productTradeCount = 0;
-    const maxTradesPerProduct = isBackfill ? 100 : 50;
+    try {
+      const fillsData = await coinbaseGet(path, accessToken);
+      const fills = fillsData.fills || [];
+      cursor = fillsData.cursor || undefined;
 
-    while (hasMore && productTradeCount < maxTradesPerProduct) {
-      const args: Record<string, any> = { product_id: productId, limit: 100 };
-      if (cursor) args.after = cursor;
+      console.log(`[Coinbase Poll] Got ${fills.length} fills, cursor: ${cursor ? 'yes' : 'none'}`);
 
-      try {
-        const tradesResponse = await fetch(
-          "https://backend.composio.dev/api/v3/tools/execute/COINBASE_LIST_PRODUCTS_TRADES",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-api-key": COMPOSIO_API_KEY },
-            body: JSON.stringify({ connected_account_id: connectionId, arguments: args }),
-          }
-        );
-
-        if (!tradesResponse.ok) {
-          console.error(`[Coinbase Poll] Trades error for ${productId}: ${tradesResponse.status}`);
-          break;
-        }
-
-        const tradesText = await tradesResponse.text();
-        const tradesData = safeJsonParse(tradesText);
-        const rawTrades = extractResponseData(tradesData);
-        const trades: any[] = Array.isArray(rawTrades) ? rawTrades : (rawTrades?.trades || rawTrades?.data || []);
-
-        if (trades.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        // Filter trades newer than cursor (incremental mode)
-        const filteredTrades = lastTradeTimestamp
-          ? trades.filter((t: any) => t.time && new Date(t.time) > new Date(lastTradeTimestamp))
-          : trades;
-
-        if (filteredTrades.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        // Batch check for already-processed trade IDs
-        const tradeIds = filteredTrades.map((t: any) => String(t.trade_id));
-        const { data: existing } = await supabaseClient
-          .from("coinbase_processed_trades")
-          .select("coinbase_trade_id")
-          .eq("user_id", userId)
-          .in("coinbase_trade_id", tradeIds);
-
-        const existingIds = new Set((existing || []).map((e: any) => e.coinbase_trade_id));
-        const newTrades = filteredTrades.filter((t: any) => !existingIds.has(String(t.trade_id)));
-
-        // Process new trades
-        for (let i = 0; i < newTrades.length; i++) {
-          const trade = newTrades[i];
-          const tradeId = String(trade.trade_id);
-
-          // Insert into processed trades (dedup)
-          const { error: insertError } = await supabaseClient
-            .from("coinbase_processed_trades")
-            .insert({ user_id: userId, coinbase_trade_id: tradeId });
-
-          if (insertError) {
-            // Duplicate — skip
-            if (insertError.code === '23505') continue;
-            console.error(`[Coinbase Poll] Insert error:`, insertError);
-            continue;
-          }
-
-          // Create memory
-          if (apiKeys) {
-            const memoryContent = formatTradeAsMemory(trade, productId);
-            const success = await createMemory(apiKeys, memoryContent);
-            if (success) totalNewTrades++;
-          }
-
-          // Track latest timestamp
-          if (trade.time && (!latestTimestamp || new Date(trade.time) > new Date(latestTimestamp))) {
-            latestTimestamp = trade.time;
-          }
-
-          // Rate limit: 500ms every 10 writes
-          if (i > 0 && i % 10 === 0) {
-            await new Promise((r) => setTimeout(r, 500));
-          }
-        }
-
-        productTradeCount += trades.length;
-
-        // Pagination: use last trade_id as cursor if available
-        if (trades.length < 100) {
-          hasMore = false;
-        } else {
-          cursor = String(trades[trades.length - 1]?.trade_id);
-        }
-      } catch (err) {
-        console.error(`[Coinbase Poll] Error fetching trades for ${productId}:`, err);
+      if (fills.length === 0) {
+        hasMore = false;
         break;
       }
+
+      // Filter out already-processed fills by trade_id
+      const tradeIds = fills
+        // deno-lint-ignore no-explicit-any
+        .filter((f: any) => f.trade_id)
+        // deno-lint-ignore no-explicit-any
+        .map((f: any) => String(f.trade_id));
+
+      const { data: existing } = await supabaseClient
+        .from("coinbase_processed_trades")
+        .select("coinbase_trade_id")
+        .eq("user_id", userId)
+        .in("coinbase_trade_id", tradeIds);
+
+      // deno-lint-ignore no-explicit-any
+      const existingIds = new Set((existing || []).map((e: any) => e.coinbase_trade_id));
+      // deno-lint-ignore no-explicit-any
+      const newFills = fills.filter((f: any) => f.trade_id && !existingIds.has(String(f.trade_id)));
+
+      // Process new fills
+      for (let i = 0; i < newFills.length; i++) {
+        const fill = newFills[i];
+        const tradeId = String(fill.trade_id);
+
+        // Insert into processed trades (dedup)
+        const { error: insertError } = await supabaseClient
+          .from("coinbase_processed_trades")
+          .insert({ user_id: userId, coinbase_trade_id: tradeId });
+
+        if (insertError) {
+          if (insertError.code === '23505') continue; // duplicate
+          console.error(`[Coinbase Poll] Insert error:`, insertError);
+          continue;
+        }
+
+        // Create memory
+        if (apiKeys) {
+          const memoryContent = formatFillAsMemory(fill);
+          const success = await createMemory(apiKeys, memoryContent);
+          if (success) totalNewTrades++;
+        }
+
+        // Track latest timestamp
+        if (fill.trade_time && (!latestTimestamp || new Date(fill.trade_time) > new Date(latestTimestamp))) {
+          latestTimestamp = fill.trade_time;
+        }
+
+        // Rate limit: 500ms every 10 writes
+        if (i > 0 && i % 10 === 0) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+
+      // If cursor is empty or all fills were already seen, stop
+      if (!cursor || cursor === "" || newFills.length === 0) {
+        hasMore = false;
+      }
+    } catch (err) {
+      console.error(`[Coinbase Poll] Error fetching fills:`, err);
+      hasMore = false;
     }
   }
 
   // Update config stats
   const newTotal = (currentConfig?.trades_tracked || 0) + totalNewTrades;
-
+  // deno-lint-ignore no-explicit-any
   const updatePayload: Record<string, any> = {
     trades_tracked: newTotal,
     last_polled_at: new Date().toISOString(),
