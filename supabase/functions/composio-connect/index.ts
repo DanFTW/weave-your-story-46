@@ -275,192 +275,44 @@ serve(async (req) => {
     if (API_KEY_TOOLKITS.includes(toolkitLower)) {
       console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);
       
-      // For API Key toolkits, create connected account directly using auth_config + connection payload
-      const { data: userApiKeys, error: userApiKeysError } = await supabaseAuth
-        .from("user_api_keys")
-        .select("api_key, private_key, user_key")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (userApiKeysError) {
-        console.warn(`[${toolkitLower}] Failed to load user_api_keys for ${user.id}:`, userApiKeysError.message);
-      }
-
-      const connectionFields: Record<string, unknown> | null =
-        userApiKeys?.api_key && userApiKeys?.private_key
-          ? {
-              // Use exact field labels required by Coinbase custom auth config in Composio
-              "API Key Name": userApiKeys.api_key,
-              "api key private key": userApiKeys.private_key,
-              ...(userApiKeys.user_key ? { "api key user key": userApiKeys.user_key } : {}),
-            }
-          : null;
-
-      if (!connectionFields) {
-        return new Response(
-          JSON.stringify({
-            error:
-              "Missing Coinbase API credentials. Please save API Key Name and Private Key in API Configuration before connecting Coinbase.",
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const parseComposioError = (rawText: string): { slug?: string; message?: string } => {
-        try {
-          const parsed = JSON.parse(rawText);
-          return {
-            slug: parsed?.error?.error_slug || parsed?.error?.slug,
-            message: parsed?.error?.message,
-          };
-        } catch {
-          return {};
-        }
+      // For API Key toolkits, we create a connected account directly
+      // The user's API credentials are already configured in the Composio auth config
+      const requestBody = {
+        auth_config_id: authConfigId,
+        user_id: user.id,
+        ...(forceReauth && { force_reauth: true }),
       };
-
-      type ApiKeyPayloadMode =
-        | "connection_state_val"
-        | "connection_data"
-        | "auth_config_root"
-        | "auth_config_data";
-
-      const callConnectedAccountsCreate = async (
-        authConfigIdToUse: string,
-        payloadMode: ApiKeyPayloadMode
-      ) => {
-        const connectionPayload: Record<string, unknown> = {
-          user_id: user.id,
-          ...(forceReauth && { force_reauth: true }),
-        };
-
-        const authConfigPayload: Record<string, unknown> = {
-          id: authConfigIdToUse,
-        };
-
-        // Try API-key credentials in all Composio-supported locations for custom auth configs
-        if (payloadMode === "connection_state_val") {
-          connectionPayload.state = {
-            authScheme: "API_KEY",
-            val: connectionFields,
-          };
-        } else if (payloadMode === "connection_data") {
-          connectionPayload.data = connectionFields;
-        } else if (payloadMode === "auth_config_root") {
-          Object.assign(authConfigPayload, connectionFields);
-        } else if (payloadMode === "auth_config_data") {
-          authConfigPayload.data = connectionFields;
-        }
-
-        const requestBody = {
-          auth_config: authConfigPayload,
-          connection: connectionPayload,
-          validate_credentials: true,
-        };
-
-        console.log(
-          `[${toolkitLower}] Creating connected account (auth=${authConfigIdToUse}, mode=${payloadMode}) with body:`,
-          JSON.stringify(requestBody)
-        );
-
-        const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
-          method: "POST",
-          headers: {
-            "x-api-key": COMPOSIO_API_KEY!,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        const responseText = await response.text();
-        const parsedError = parseComposioError(responseText);
-
-        console.log(
-          `[${toolkitLower}] Connected accounts response (auth=${authConfigIdToUse}, mode=${payloadMode}) status=${response.status}, body=${responseText}`
-        );
-
-        return {
-          response,
-          responseText,
-          slug: parsedError.slug,
-          message: parsedError.message,
-          mode: payloadMode,
-        };
-      };
-
-      const createWithAuthConfig = async (authConfigIdToUse: string) => {
-        const attempts: ApiKeyPayloadMode[] = [
-          "connection_state_val",
-          "connection_data",
-          "auth_config_root",
-          "auth_config_data",
-        ];
-        let lastResult: Awaited<ReturnType<typeof callConnectedAccountsCreate>> | null = null;
-
-        for (const mode of attempts) {
-          const result = await callConnectedAccountsCreate(authConfigIdToUse, mode);
-          lastResult = result;
-
-          if (result.response.ok) return result;
-
-          // Continue trying alternate payload shapes only for missing-required-fields errors
-          if (result.slug === "ConnectedAccount_MissingRequiredFields") {
-            console.warn(
-              `[${toolkitLower}] Missing required fields with mode=${mode}, retrying with next payload mode...`
-            );
-            continue;
-          }
-
-          return result;
-        }
-
-        return lastResult!;
-      };
-
-      let activeAuthConfigId = authConfigId!;
-      let createResult = await createWithAuthConfig(activeAuthConfigId);
-
-      // If static auth config is stale, dynamically resolve and retry
-      if (
-        !createResult.response.ok &&
-        createResult.slug === "Auth_Config_NotFound" &&
-        activeAuthConfigId === AUTH_CONFIGS[toolkitLower]
-      ) {
-        console.warn(
-          `[${toolkitLower}] Static auth config ${activeAuthConfigId} not found, attempting dynamic fallback...`
-        );
-        const fallbackId = await getDefaultAuthConfigId(toolkitLower);
-
-        if (fallbackId && fallbackId !== activeAuthConfigId) {
-          console.log(`[${toolkitLower}] Retrying with dynamic auth config: ${fallbackId}`);
-          activeAuthConfigId = fallbackId;
-          createResult = await createWithAuthConfig(activeAuthConfigId);
-        }
+      
+      console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
+      
+      const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
+        method: "POST",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      const responseText = await response.text();
+      console.log(`[${toolkitLower}] Connected accounts response status: ${response.status}`);
+      console.log(`[${toolkitLower}] Connected accounts response: ${responseText}`);
+      
+      if (!response.ok) {
+        console.error(`[${toolkitLower}] API Key connection failed:`, response.status, responseText);
+        throw new Error(`Composio API error: ${response.status}`);
       }
-
-      if (!createResult.response.ok) {
-        console.error(
-          `[${toolkitLower}] API Key connection failed (auth=${activeAuthConfigId}):`,
-          createResult.response.status,
-          createResult.responseText
-        );
-
-        const detailedError = createResult.message
-          ? `Composio API error: ${createResult.response.status}${createResult.slug ? ` (${createResult.slug})` : ""} - ${createResult.message}`
-          : `Composio API error: ${createResult.response.status}`;
-
-        throw new Error(detailedError);
-      }
-
-      const composioData = JSON.parse(createResult.responseText);
+      
+      const composioData = JSON.parse(responseText);
       const connectionId = composioData.connected_account_id || composioData.id;
-
-      console.log(`[${toolkitLower}] API Key connection created (auth=${activeAuthConfigId}): ${connectionId}`);
-
+      
+      console.log(`[${toolkitLower}] API Key connection created: ${connectionId}`);
+      
       // API Key connections don't need a redirect — return connectionId directly
       return new Response(
         JSON.stringify({
           connectionId,
-          redirectUrl: null,
+          redirectUrl: null, // No redirect needed for API Key auth
           apiKeyAuth: true,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
