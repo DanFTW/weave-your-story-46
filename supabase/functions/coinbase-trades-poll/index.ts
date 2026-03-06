@@ -194,27 +194,16 @@ async function pollCoinbaseTrades(
   let latestTimestamp = currentConfig?.last_trade_timestamp;
   const cutoffTimestamp = currentConfig?.last_trade_timestamp || null;
 
-  // Step 1: Fetch all available trading products
-  console.log("[Coinbase Poll] Fetching exchange products via COINBASE_LIST_EXCHANGE_PRODUCTS...");
-  const productsResult = await executeComposioAction("COINBASE_LIST_EXCHANGE_PRODUCTS", connectionId);
-  const products = extractArray(productsResult, "products");
+  // Use hardcoded major trading pairs since COINBASE_LIST_EXCHANGE_PRODUCTS is not available
+  const productsToScan = [
+    "BTC-USD", "ETH-USD", "SOL-USD", "DOGE-USD", "ADA-USD",
+    "XRP-USD", "DOT-USD", "AVAX-USD", "MATIC-USD", "LINK-USD",
+    "BTC-USDT", "ETH-USDT", "BTC-EUR", "ETH-EUR",
+  ];
+  console.log(`[Coinbase Poll] Scanning ${productsToScan.length} major trading pairs`);
 
-  // Filter to major quote currencies and cap to avoid timeout
-  const majorQuotes = ["USD", "USDT", "USDC", "EUR", "BTC", "ETH"];
-  // deno-lint-ignore no-explicit-any
-  const activeProducts = products.filter((p: any) => {
-    const isActive = p.status === "online" || p.status === undefined || p.trading_disabled === false;
-    const quote = p.quote_currency || p.id?.split("-")?.[1];
-    return isActive && majorQuotes.includes(quote);
-  });
-
-  const productsToScan = activeProducts.slice(0, 20);
-  console.log(`[Coinbase Poll] ${products.length} total products, scanning ${productsToScan.length} major pairs`);
-
-  // Step 2: For each product, fetch recent trades via COINBASE_LIST_PRODUCTS_TRADES
-  for (const product of productsToScan) {
-    const productId = product.id || product.product_id;
-    if (!productId) continue;
+  // For each product, fetch recent trades via COINBASE_LIST_PRODUCTS_TRADES
+  for (const productId of productsToScan) {
 
     try {
       let cursor: number | null = null;
