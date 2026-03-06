@@ -306,6 +306,46 @@ serve(async (req) => {
       if (!response.ok) {
         console.error(`[${toolkitLower}] API Key connection failed:`, response.status, responseText);
 
+        // If auth config not found, try dynamic fallback
+        const isAuthConfigNotFound = responseText.includes("Auth_Config_NotFound") || responseText.includes("Auth config not found");
+        if (isAuthConfigNotFound && authConfigId === AUTH_CONFIGS[toolkitLower]) {
+          console.warn(`[${toolkitLower}] Static auth config ${authConfigId} not found, attempting dynamic fallback...`);
+          const fallbackId = await getDefaultAuthConfigId(toolkitLower);
+          
+          if (fallbackId && fallbackId !== authConfigId) {
+            console.log(`[${toolkitLower}] Retrying with dynamic auth config: ${fallbackId}`);
+            const retryBody = {
+              auth_config: { id: fallbackId },
+              connection: {
+                user_id: user.id,
+                ...(forceReauth && { force_reauth: true }),
+              },
+            };
+            
+            const retryResponse = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
+              method: "POST",
+              headers: {
+                "x-api-key": COMPOSIO_API_KEY!,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(retryBody),
+            });
+            
+            const retryText = await retryResponse.text();
+            console.log(`[${toolkitLower}] Retry response status: ${retryResponse.status}, body: ${retryText}`);
+            
+            if (retryResponse.ok) {
+              const retryData = JSON.parse(retryText);
+              const retryConnectionId = retryData.connected_account_id || retryData.id;
+              console.log(`[${toolkitLower}] API Key connection created via fallback: ${retryConnectionId}`);
+              return new Response(
+                JSON.stringify({ connectionId: retryConnectionId, redirectUrl: null, apiKeyAuth: true }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+          }
+        }
+
         let detailedError = `Composio API error: ${response.status}`;
         try {
           const parsedError = JSON.parse(responseText);
@@ -315,7 +355,7 @@ serve(async (req) => {
             detailedError = `Composio API error: ${response.status}${slug ? ` (${slug})` : ""} - ${message}`;
           }
         } catch {
-          // Keep generic error if response is not valid JSON
+          // Keep generic error
         }
 
         throw new Error(detailedError);
