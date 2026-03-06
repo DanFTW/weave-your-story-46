@@ -19,50 +19,121 @@ const COMPOSIO_TOOLKIT_NAMES: Record<string, string> = {
   googlesheets: "GOOGLESHEETS",
 };
 
-// Fetch the default Composio-managed auth config for a toolkit
+type ComposioAuthConfig = {
+  id?: string;
+  status?: string;
+  is_composio_managed?: boolean;
+  toolkit_slug?: string;
+  toolkit?: {
+    slug?: string;
+    name?: string;
+  };
+};
+
+function normalizeToolkitSlug(value: string): string {
+  return value.replace(/[-_]/g, "").toUpperCase();
+}
+
+async function fetchAuthConfigs(query: string, logLabel: string): Promise<ComposioAuthConfig[]> {
+  const url = `https://backend.composio.dev/api/v3/auth_configs${query ? `?${query}` : ""}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "x-api-key": COMPOSIO_API_KEY!,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const responseText = await response.text();
+  console.log(`Auth config API response (${logLabel}) status ${response.status}: ${responseText}`);
+
+  if (!response.ok) {
+    console.error(`Failed ${logLabel}: ${response.status}`);
+    return [];
+  }
+
+  let parsed: { items?: ComposioAuthConfig[] };
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
+    console.error(`Non-JSON auth config response for ${logLabel}: ${responseText}`);
+    return [];
+  }
+
+  return Array.isArray(parsed.items) ? parsed.items : [];
+}
+
+function isConfigEnabled(config: ComposioAuthConfig): boolean {
+  const status = String(config.status ?? "").toUpperCase();
+  return status === "ENABLED" || status === "ACTIVE";
+}
+
+function configMatchesToolkit(config: ComposioAuthConfig, composioName: string): boolean {
+  const target = normalizeToolkitSlug(composioName);
+  const candidates = [
+    config.toolkit_slug,
+    config.toolkit?.slug,
+    config.toolkit?.name,
+  ].filter((value): value is string => Boolean(value));
+
+  return candidates.some((candidate) => normalizeToolkitSlug(candidate) === target);
+}
+
+function pickBestAuthConfig(
+  configs: ComposioAuthConfig[],
+  composioName: string,
+  preferManaged: boolean
+): string | null {
+  const enabled = configs.filter((config) => isConfigEnabled(config) && config.id);
+  const matchingToolkit = enabled.filter((config) => configMatchesToolkit(config, composioName));
+
+  if (preferManaged) {
+    const managedMatch = matchingToolkit.find((config) => config.is_composio_managed);
+    if (managedMatch?.id) return managedMatch.id;
+  }
+
+  const firstToolkitMatch = matchingToolkit[0];
+  if (firstToolkitMatch?.id) return firstToolkitMatch.id;
+
+  const firstEnabled = enabled[0];
+  if (firstEnabled?.id) return firstEnabled.id;
+
+  return null;
+}
+
+// Fetch the best auth config for a toolkit (managed first, then custom fallbacks)
 async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
   try {
     const composioName = COMPOSIO_TOOLKIT_NAMES[toolkit] || toolkit.toUpperCase();
-    const response = await fetch(
-      `https://backend.composio.dev/api/v3/auth_configs?toolkit_slug=${composioName}&is_composio_managed=true`,
-      {
-        method: "GET",
-        headers: {
-          "x-api-key": COMPOSIO_API_KEY!,
-          "Content-Type": "application/json",
-        },
-      }
+
+    const managedConfigs = await fetchAuthConfigs(
+      `toolkit_slug=${encodeURIComponent(composioName)}&is_composio_managed=true`,
+      `managed toolkit=${composioName}`
     );
-
-    const responseText = await response.text();
-    console.log(`Auth config API response for ${composioName} (status ${response.status}): ${responseText}`);
-
-    if (!response.ok) {
-      console.error(`Failed to fetch auth configs for ${toolkit}: ${response.status}`);
-      return null;
+    const managedConfigId = pickBestAuthConfig(managedConfigs, composioName, true);
+    if (managedConfigId) {
+      console.log(`Found managed auth config for ${toolkit}: ${managedConfigId}`);
+      return managedConfigId;
     }
 
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      console.error(`Non-JSON response for ${composioName}: ${responseText}`);
-      return null;
-    }
-    
-    // Find the default/enabled Composio-managed auth config
-    const authConfigs = data.items || [];
-    const defaultConfig = authConfigs.find(
-      (config: { is_composio_managed?: boolean; status?: string }) => 
-        config.is_composio_managed && config.status === "ENABLED"
+    const toolkitConfigs = await fetchAuthConfigs(
+      `toolkit_slug=${encodeURIComponent(composioName)}`,
+      `toolkit=${composioName}`
     );
-
-    if (defaultConfig) {
-      console.log(`Found default auth config for ${toolkit}: ${defaultConfig.id}`);
-      return defaultConfig.id;
+    const toolkitConfigId = pickBestAuthConfig(toolkitConfigs, composioName, false);
+    if (toolkitConfigId) {
+      console.log(`Found toolkit auth config for ${toolkit}: ${toolkitConfigId}`);
+      return toolkitConfigId;
     }
 
-    console.log(`No default auth config found for ${toolkit}`);
+    const globalConfigs = await fetchAuthConfigs("", `global fallback toolkit=${composioName}`);
+    const globalConfigId = pickBestAuthConfig(globalConfigs, composioName, false);
+    if (globalConfigId) {
+      console.log(`Found global fallback auth config for ${toolkit}: ${globalConfigId}`);
+      return globalConfigId;
+    }
+
+    console.log(`No auth config found for ${toolkit} after all fallbacks`);
     return null;
   } catch (error) {
     console.error(`Error fetching auth config for ${toolkit}:`, error);
