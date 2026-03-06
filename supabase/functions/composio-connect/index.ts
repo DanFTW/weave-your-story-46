@@ -192,13 +192,14 @@ const AUTH_CONFIGS: Record<string, string> = {
   googlemaps: "ac_dg71KiJ5nLgN",
   googlesheets: "ac_P0DYB0XdGLn3",
   coinbase: "ac_fCVi2K8lFafl",
+  apibible: "ac_sBgIg_zusGDy",
 };
 
 // All valid toolkits (includes those using Composio default auth)
 const VALID_TOOLKITS = [
   "gmail", "instagram", "dropbox", "googlephotos", "twitter",
   "youtube", "whatsapp", "outlook", "teams", "excel",
-  "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps", "coinbase"
+  "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps", "coinbase", "apibible"
 ];
 
 serve(async (req) => {
@@ -270,7 +271,7 @@ serve(async (req) => {
     }
     
     // === API Key auth toolkits bypass OAuth link flow ===
-    const API_KEY_TOOLKITS = ["coinbase"];
+    const API_KEY_TOOLKITS = ["coinbase", "apibible"];
     
     if (API_KEY_TOOLKITS.includes(toolkitLower)) {
       console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);

@@ -146,6 +146,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "coinbase": "coinbase",
   "coinbase_wallet": "coinbase",
   "coinbase_commerce": "coinbase",
+  "api_bible": "apibible",
+  "apibible": "apibible",
+  "api-bible": "apibible",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -3518,6 +3521,53 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Coinbase profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For API.Bible, fetch profile from Composio connection metadata
+    if (toolkit === "apibible") {
+      console.log("composio-callback: Fetching API.Bible profile from Composio connection...");
+      
+      try {
+        const connResp = await fetch(
+          `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+          {
+            method: "GET",
+            headers: {
+              "x-api-key": COMPOSIO_API_KEY!,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        
+        if (connResp.ok) {
+          const connJson = await connResp.json();
+          const connData = connJson.data || connJson;
+          console.log(`composio-callback: API.Bible connection data keys: ${Object.keys(connData).join(",")}`);
+          
+          // Extract any metadata Composio stores about the connection
+          const meta = connData.metadata || connData.connectionParams || connData;
+          if (meta.email) accountEmail = meta.email;
+          if (meta.name || meta.display_name) accountName = meta.name || meta.display_name;
+          
+          // API.Bible is API Key auth — set a friendly display name if none available
+          if (!accountName) {
+            accountName = "API.Bible User";
+          }
+          if (!accountEmail) {
+            accountEmail = "Connected via API Key";
+          }
+        } else {
+          console.error(`composio-callback: Failed to fetch API.Bible connection: ${connResp.status}`);
+          accountName = "API.Bible User";
+          accountEmail = "Connected via API Key";
+        }
+      } catch (err) {
+        console.error("composio-callback: Error fetching API.Bible connection metadata:", err);
+        accountName = "API.Bible User";
+        accountEmail = "Connected via API Key";
+      }
+      
+      console.log(`composio-callback: API.Bible profile - name=${accountName}, email=${accountEmail}`);
     }
 
     // For Google Maps, fetch profile via Composio connection data (Google OAuth)
