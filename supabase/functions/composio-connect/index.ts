@@ -286,22 +286,25 @@ serve(async (req) => {
         console.warn(`[${toolkitLower}] Failed to load user_api_keys for ${user.id}:`, userApiKeysError.message);
       }
 
-      const connectionFields: Record<string, unknown> = userApiKeys
-        ? {
-            // Human-readable labels often used in Composio custom API-key auth configs
-            "API Key Name": userApiKeys.api_key,
-            "api key private key": userApiKeys.private_key,
-            ...(userApiKeys.user_key ? { "api key user key": userApiKeys.user_key } : {}),
-            // Common snake_case aliases
-            api_key_name: userApiKeys.api_key,
-            api_key_private_key: userApiKeys.private_key,
-            ...(userApiKeys.user_key ? { api_key_user_key: userApiKeys.user_key } : {}),
-            // Generic aliases
-            key_name: userApiKeys.api_key,
-            private_key: userApiKeys.private_key,
-            ...(userApiKeys.user_key ? { user_key: userApiKeys.user_key } : {}),
-          }
-        : {};
+      const connectionFields: Record<string, unknown> | null =
+        userApiKeys?.api_key && userApiKeys?.private_key
+          ? {
+              // Use exact field labels required by Coinbase custom auth config in Composio
+              "API Key Name": userApiKeys.api_key,
+              "api key private key": userApiKeys.private_key,
+              ...(userApiKeys.user_key ? { "api key user key": userApiKeys.user_key } : {}),
+            }
+          : null;
+
+      if (!connectionFields) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Missing Coinbase API credentials. Please save API Key Name and Private Key in API Configuration before connecting Coinbase.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const parseComposioError = (rawText: string): { slug?: string; message?: string } => {
         try {
@@ -315,28 +318,47 @@ serve(async (req) => {
         }
       };
 
+      type ApiKeyPayloadMode =
+        | "connection_state_val"
+        | "connection_data"
+        | "auth_config_root"
+        | "auth_config_data";
+
       const callConnectedAccountsCreate = async (
         authConfigIdToUse: string,
-        useNestedDataFields: boolean
+        payloadMode: ApiKeyPayloadMode
       ) => {
         const connectionPayload: Record<string, unknown> = {
           user_id: user.id,
           ...(forceReauth && { force_reauth: true }),
         };
 
-        // Place credential fields inside auth_config (Composio expects them there for API key auth)
         const authConfigPayload: Record<string, unknown> = {
           id: authConfigIdToUse,
-          ...(useNestedDataFields ? { data: connectionFields } : connectionFields),
         };
+
+        // Try API-key credentials in all Composio-supported locations for custom auth configs
+        if (payloadMode === "connection_state_val") {
+          connectionPayload.state = {
+            authScheme: "API_KEY",
+            val: connectionFields,
+          };
+        } else if (payloadMode === "connection_data") {
+          connectionPayload.data = connectionFields;
+        } else if (payloadMode === "auth_config_root") {
+          Object.assign(authConfigPayload, connectionFields);
+        } else if (payloadMode === "auth_config_data") {
+          authConfigPayload.data = connectionFields;
+        }
 
         const requestBody = {
           auth_config: authConfigPayload,
           connection: connectionPayload,
+          validate_credentials: true,
         };
 
         console.log(
-          `[${toolkitLower}] Creating connected account (auth=${authConfigIdToUse}, nestedData=${useNestedDataFields}) with body:`,
+          `[${toolkitLower}] Creating connected account (auth=${authConfigIdToUse}, mode=${payloadMode}) with body:`,
           JSON.stringify(requestBody)
         );
 
@@ -353,7 +375,7 @@ serve(async (req) => {
         const parsedError = parseComposioError(responseText);
 
         console.log(
-          `[${toolkitLower}] Connected accounts response (auth=${authConfigIdToUse}, nestedData=${useNestedDataFields}) status=${response.status}, body=${responseText}`
+          `[${toolkitLower}] Connected accounts response (auth=${authConfigIdToUse}, mode=${payloadMode}) status=${response.status}, body=${responseText}`
         );
 
         return {
@@ -361,28 +383,29 @@ serve(async (req) => {
           responseText,
           slug: parsedError.slug,
           message: parsedError.message,
+          mode: payloadMode,
         };
       };
 
       const createWithAuthConfig = async (authConfigIdToUse: string) => {
-        // Try both common payload shapes for API-key fields
-        const attempts = [false, true];
+        const attempts: ApiKeyPayloadMode[] = [
+          "connection_state_val",
+          "connection_data",
+          "auth_config_root",
+          "auth_config_data",
+        ];
         let lastResult: Awaited<ReturnType<typeof callConnectedAccountsCreate>> | null = null;
 
-        for (const useNestedData of attempts) {
-          const result = await callConnectedAccountsCreate(authConfigIdToUse, useNestedData);
+        for (const mode of attempts) {
+          const result = await callConnectedAccountsCreate(authConfigIdToUse, mode);
           lastResult = result;
 
           if (result.response.ok) return result;
 
-          // If fields are missing, try alternate shape before giving up
-          if (
-            result.slug === "ConnectedAccount_MissingRequiredFields" &&
-            useNestedData === false &&
-            Object.keys(connectionFields).length > 0
-          ) {
+          // Continue trying alternate payload shapes only for missing-required-fields errors
+          if (result.slug === "ConnectedAccount_MissingRequiredFields") {
             console.warn(
-              `[${toolkitLower}] Missing required fields with flat connection payload, retrying with connection.data payload...`
+              `[${toolkitLower}] Missing required fields with mode=${mode}, retrying with next payload mode...`
             );
             continue;
           }
