@@ -277,10 +277,15 @@ serve(async (req) => {
       
       // For API Key toolkits, we create a connected account directly
       // The user's API credentials are already configured in the Composio auth config
+      // Composio v3 expects nested payload keys: auth_config + connection
       const requestBody = {
-        auth_config_id: authConfigId,
-        user_id: user.id,
-        ...(forceReauth && { force_reauth: true }),
+        auth_config: {
+          id: authConfigId,
+        },
+        connection: {
+          user_id: user.id,
+          ...(forceReauth && { force_reauth: true }),
+        },
       };
       
       console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
@@ -300,7 +305,20 @@ serve(async (req) => {
       
       if (!response.ok) {
         console.error(`[${toolkitLower}] API Key connection failed:`, response.status, responseText);
-        throw new Error(`Composio API error: ${response.status}`);
+
+        let detailedError = `Composio API error: ${response.status}`;
+        try {
+          const parsedError = JSON.parse(responseText);
+          const slug = parsedError?.error?.error_slug || parsedError?.error?.slug;
+          const message = parsedError?.error?.message;
+          if (message) {
+            detailedError = `Composio API error: ${response.status}${slug ? ` (${slug})` : ""} - ${message}`;
+          }
+        } catch {
+          // Keep generic error if response is not valid JSON
+        }
+
+        throw new Error(detailedError);
       }
       
       const composioData = JSON.parse(responseText);
