@@ -199,10 +199,12 @@ async function pollInstagramInsights(
   }
 
   // Execute INSTAGRAM_GET_USER_INSIGHTS via Composio
+  const insightsPayload = { metric: ["reach", "profile_views", "follower_count", "accounts_engaged"], period: "day" };
+  console.log("[Instagram Analytics] Outbound Composio payload:", JSON.stringify(insightsPayload));
   const insightsResult = await executeComposioAction(
     "INSTAGRAM_GET_USER_INSIGHTS",
     connectionId,
-    { metric: ["reach", "profile_views", "follower_count", "accounts_engaged"], period: "day" }
+    insightsPayload
   );
 
   // Record dedup
@@ -284,15 +286,23 @@ Deno.serve(async (req) => {
     const connectionId = integration.composio_connection_id;
 
     if (action === "activate") {
-      await supabaseClient
-        .from("instagram_analytics_config")
-        .update({ is_active: true })
-        .eq("user_id", userId);
-
-      const result = await pollInstagramInsights(supabaseClient, userId, connectionId);
-      return new Response(JSON.stringify({ success: true, ...result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      try {
+        const result = await pollInstagramInsights(supabaseClient, userId, connectionId);
+        // Only set is_active=true after a successful first poll
+        await supabaseClient
+          .from("instagram_analytics_config")
+          .update({ is_active: true })
+          .eq("user_id", userId);
+        return new Response(JSON.stringify({ success: true, ...result }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (activateErr) {
+        console.error("[Instagram Analytics] Activate poll failed, leaving is_active=false:", activateErr);
+        return new Response(
+          JSON.stringify({ error: activateErr instanceof Error ? activateErr.message : "Activation poll failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     if (action === "deactivate") {
