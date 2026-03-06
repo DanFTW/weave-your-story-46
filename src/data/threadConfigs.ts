@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "coinbase-trades": {
+    id: "coinbase-trades",
+    title: "Coinbase Trades to Memory",
+    subtitle: "Track every trade",
+    description: "Connects to Coinbase and saves all trades across every trading pair as structured memories. Full historical backfill on first run, incremental after.",
+    gradient: "blue",
+    icon: ArrowRightLeft,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Coinbase",
+        description: "Authorize access to your trades",
+        iconUrl: "/src/assets/integrations/coinbase.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Monitoring",
+        description: "Toggle trade tracking on/off",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Trades saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "birthday-reminder": {
     id: "birthday-reminder",
     title: "Auto Birthday Reminder",

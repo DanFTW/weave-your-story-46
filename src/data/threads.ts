@@ -1,7 +1,20 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
+  {
+    id: "coinbase-trades",
+    title: "Coinbase Trades to Memory",
+    description: "Automatically save all Coinbase trades across every trading pair as memories",
+    icon: ArrowRightLeft,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "finance",
+    integrations: ["coinbase"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
   {
     id: "grocery-sheet-sync",
     title: "Grocery Memory to Google Sheet",

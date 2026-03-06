@@ -1,7 +1,20 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "coinbase-trades": {
+    id: "coinbase-trades",
+    title: "Coinbase Trades to Memory",
+    subtitle: "Automatic trade tracking",
+    description: "Automatically save all Coinbase trades as memories.",
+    gradient: "blue",
+    icon: ArrowRightLeft,
+    entryName: "trade",
+    entryNamePlural: "trades",
+    memoryTag: "COINBASE",
+    fields: [],
+    isCoinbaseTradesFlow: true,
+  },
   "birthday-reminder": {
     id: "birthday-reminder",
     title: "Auto Birthday Reminder",

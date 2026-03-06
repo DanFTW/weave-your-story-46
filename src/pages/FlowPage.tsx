@@ -89,6 +89,9 @@ import { RestaurantBookmarkSyncFlow } from "@/components/flows/restaurant-bookma
 // Grocery Sheet Sync components
 import { GrocerySheetSyncFlow } from "@/components/flows/grocery-sheet-sync";
 
+// Coinbase Trades components
+import { CoinbaseTradesFlow } from "@/components/flows/coinbase-trades";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -321,6 +324,12 @@ export default function FlowPage() {
 
   if (config.isGrocerySheetSyncFlow) {
     return <GrocerySheetSyncFlow />;
+  }
+
+  // === COINBASE TRADES FLOW RENDER ===
+
+  if (config.isCoinbaseTradesFlow) {
+    return <CoinbaseTradesFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

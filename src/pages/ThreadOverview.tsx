@@ -33,7 +33,7 @@ export default function ThreadOverview() {
 
   const handleGetStarted = () => {
     // Navigate to flow page for supported flows
-    const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests', 'llm-import', 'email-dump', 'email-automation', 'google-photos-sync', 'instagram-sync', 'instagram-live', 'twitter-sync', 'twitter-live', 'youtube-sync', 'linkedin-live', 'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker', 'todoist-task-tracker', 'fireflies-tracker', 'googledrive-tracker', 'discord-tracker', 'birthday-reminder', 'calendar-event-sync', 'restaurant-bookmark-sync', 'grocery-sheet-sync'];
+    const flowEnabledThreads = ['family', 'food-preferences', 'receipts', 'interests', 'llm-import', 'email-dump', 'email-automation', 'google-photos-sync', 'instagram-sync', 'instagram-live', 'twitter-sync', 'twitter-live', 'youtube-sync', 'linkedin-live', 'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker', 'todoist-task-tracker', 'fireflies-tracker', 'googledrive-tracker', 'discord-tracker', 'birthday-reminder', 'calendar-event-sync', 'restaurant-bookmark-sync', 'grocery-sheet-sync', 'coinbase-trades'];
     if (flowEnabledThreads.includes(config.id)) {
       const flowId = config.id === 'food-preferences' ? 'food' : config.id;
       navigate(`/flow/${flowId}`);

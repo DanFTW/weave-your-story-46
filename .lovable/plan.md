@@ -1,113 +1,115 @@
 
 
-## Plan: Coinbase Trades to Memory Thread
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-### Overview
-Create a new "Coinbase Trades to Memory" thread that connects to Coinbase via Composio, fetches all trades across every trading pair using `COINBASE_LIST_PRODUCTS_TRADES`, paginates through all results, deduplicates against a processed-trades table, and writes each trade as a structured LIAM memory. Follows the exact Todoist automation pattern.
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-### Files to Create/Modify
+### 1. Database Tables (2 new tables via migration)
 
-**1. Database Migration** -- New table + RLS
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-```sql
--- Config table
-CREATE TABLE public.coinbase_trades_config (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  is_active boolean NOT NULL DEFAULT false,
-  trades_tracked integer NOT NULL DEFAULT 0,
-  last_polled_at timestamptz,
-  last_trade_timestamp timestamptz,  -- cursor for incremental fetches
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.coinbase_trades_config ENABLE ROW LEVEL SECURITY;
--- Standard user-scoped RLS (select, insert, update)
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
--- Deduplication table
-CREATE TABLE public.coinbase_processed_trades (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  coinbase_trade_id text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (user_id, coinbase_trade_id)
-);
-ALTER TABLE public.coinbase_processed_trades ENABLE ROW LEVEL SECURITY;
--- RLS: select + insert for own rows
+### 2. Edge Function: `restaurant-bookmark-sync`
+
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
+
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+
+### 6. Registration (data + routing)
+
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
 ```
 
-**2. `src/data/threads.ts`** -- Add thread entry
-- New entry with `id: "coinbase-trades"`, `title: "Coinbase Trades to Memory"`, `icon: Zap` (or a coin-like icon), `gradient: "orange"`, `integrations: ["coinbase"]`, `flowMode: "thread"`, `triggerType: "automatic"`.
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
 
-**3. `src/data/threadConfigs.ts`** -- Add thread config
-- Steps: Connect Coinbase (integration), Trade Monitoring toggle (setup), Always-On Monitoring (save/LIVE badge).
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
 
-**4. `src/data/flowConfigs.ts`** -- Add flow config
-- `id: "coinbase-trades"`, `isCoinbaseTradesFlow: true`.
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
 
-**5. `src/types/flows.ts`** -- Add flag
-- `isCoinbaseTradesFlow?: boolean`
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
 
-**6. `src/types/coinbaseTradesAutomation.ts`** -- Types
-- Phase, Config, Stats, UpdatePayload interfaces (mirrors Todoist pattern).
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
 
-**7. `src/hooks/useCoinbaseTradesAutomation.ts`** -- Hook
-- Mirrors `useTodoistAutomation`: loadConfig, updateConfig, activateMonitoring, deactivateMonitoring, manualPoll against `coinbase_trades_config` table and `coinbase-trades-poll` edge function.
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
 
-**8. `src/components/flows/coinbase-trades/` -- UI components**
-- `CoinbaseTradesFlow.tsx` -- Main flow (mirrors TodoistAutomationFlow, uses `useComposio('COINBASE')`)
-- `AutomationConfig.tsx` -- Toggle + activate button
-- `ActiveMonitoring.tsx` -- Stats, Check Now, Pause
-- `ActivatingScreen.tsx` -- Loading spinner
-- `index.ts` -- Barrel exports
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
 
-**9. `src/pages/FlowPage.tsx`** -- Wire up
-- Import `CoinbaseTradesFlow`, add `if (config.isCoinbaseTradesFlow) return <CoinbaseTradesFlow />;`
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
 
-**10. `src/pages/Threads.tsx`** -- Add to `flowEnabledThreads`
-- Add `'coinbase-trades'` to the array.
+### 8. Wire trigger into memory save
 
-**11. `src/pages/ThreadOverview.tsx`** -- Add to `flowEnabledThreads`
-- Add `'coinbase-trades'` to the array.
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
 
-**12. `supabase/functions/coinbase-trades-poll/index.ts`** -- Edge function
+### Summary of files to create/modify
 
-Core logic:
-- Auth: Bearer token validation (same as Todoist).
-- Actions: `activate`, `deactivate`, `manual-poll`.
-- On activate/poll:
-  1. Get user's Coinbase `composio_connection_id` from `user_integrations`.
-  2. Fetch all trading pairs via `COINBASE_LIST_PRODUCTS` Composio action.
-  3. For each product, paginate through `COINBASE_LIST_PRODUCTS_TRADES` until no more results.
-  4. On first run (`last_trade_timestamp` is null): full backfill of all trades.
-  5. On subsequent runs: only fetch trades newer than `last_trade_timestamp`.
-  6. Deduplicate against `coinbase_processed_trades` table (check `coinbase_trade_id`).
-  7. For each new trade, write to LIAM via the existing crypto utilities (same as Todoist's `createMemory`).
-  8. Insert processed trade IDs, update `coinbase_trades_config` stats.
-- Memory format:
-  ```
-  Coinbase Trade
-  
-  Pair: BTC-USD
-  Side: buy
-  Size: 0.005 BTC
-  Price: $67,432.10
-  Time: 2026-03-06T12:34:56Z
-  Trade ID: 12345678
-  
-  A trade was executed on Coinbase.
-  ```
-- Rate limiting: 500ms delay every 10 memory writes (same as Todoist).
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
 
-**13. `supabase/config.toml`** -- Add entry
-```toml
-[functions.coinbase-trades-poll]
-verify_jwt = false
-```
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
 
-### Key Decisions
-- Reuses the exact same patterns as Todoist: hook structure, UI components, edge function auth, LIAM crypto signing, dedup table, Composio tool execution.
-- First activation does a full historical backfill; subsequent polls use `last_trade_timestamp` as a cursor.
-- Pagination handled by looping through Composio action responses until empty.
-- `COINBASE_LIST_PRODUCTS` fetches all trading pairs dynamically rather than hardcoding.
+**Database migration:** 2 tables + RLS policies
 

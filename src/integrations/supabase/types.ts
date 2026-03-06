@@ -128,6 +128,60 @@ export type Database = {
         }
         Relationships: []
       }
+      coinbase_processed_trades: {
+        Row: {
+          coinbase_trade_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          coinbase_trade_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          coinbase_trade_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      coinbase_trades_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_polled_at: string | null
+          last_trade_timestamp: string | null
+          trades_tracked: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_polled_at?: string | null
+          last_trade_timestamp?: string | null
+          trades_tracked?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_polled_at?: string | null
+          last_trade_timestamp?: string | null
+          trades_tracked?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       discord_automation_config: {
         Row: {
           channel_id: string | null
