@@ -563,6 +563,57 @@ export type Database = {
         }
         Relationships: []
       }
+      instagram_analytics_config: {
+        Row: {
+          created_at: string
+          id: string
+          insights_collected: number
+          is_active: boolean
+          last_polled_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          insights_collected?: number
+          is_active?: boolean
+          last_polled_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          insights_collected?: number
+          is_active?: boolean
+          last_polled_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      instagram_analytics_processed: {
+        Row: {
+          created_at: string
+          dedupe_key: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dedupe_key: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dedupe_key?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       instagram_automation_config: {
         Row: {
           comments_tracked: number | null
