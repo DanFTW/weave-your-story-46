@@ -310,6 +310,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "coinbase",
         status: "unconfigured",
       },
+      {
+        id: "apibible",
+        name: "API.Bible",
+        icon: "apibible",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -1009,6 +1015,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       primary: "#0052FF",
       secondary: "#0033CC",
       tertiary: "#1652F0",
+    },
+  },
+  "apibible": {
+    id: "apibible",
+    name: "API.Bible",
+    icon: "apibible",
+    status: "unconfigured",
+    description: "API.Bible allows Weave to access Scripture content from hundreds of Bible versions. Create memories from your favorite verses, passages, and devotional readings.",
+    capabilities: ["Search verses", "Browse books", "Access Bible versions", "Read passages"],
+    gradientColors: {
+      primary: "#2862D7",
+      secondary: "#1a4ba8",
+      tertiary: "#4A90D9",
     },
   },
   "ios-contacts": {

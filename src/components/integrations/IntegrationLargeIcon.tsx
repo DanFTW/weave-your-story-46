@@ -53,6 +53,7 @@ import googlecalendarIcon from "@/assets/integrations/googlecalendar.svg";
 import googlemapsIcon from "@/assets/integrations/googlemaps.svg";
 import googlesheetsIcon from "@/assets/integrations/googlesheets.svg";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
+import apibibleIcon from "@/assets/integrations/apibible.svg";
 
 interface IntegrationLargeIconProps {
   icon: string;
@@ -113,6 +114,7 @@ const iconImages: Record<string, string> = {
   googlemaps: googlemapsIcon,
   googlesheets: googlesheetsIcon,
   coinbase: coinbaseIcon,
+  apibible: apibibleIcon,
 };
 
 export function IntegrationLargeIcon({ icon, className }: IntegrationLargeIconProps) {
