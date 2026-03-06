@@ -168,6 +168,15 @@ export function useComposio(toolkit: string): UseComposioReturn {
 
       console.log("Connect response:", data);
 
+      // Handle API Key auth (no redirect needed — connection is immediate)
+      if (data.apiKeyAuth && data.connectionId) {
+        console.log(`API Key auth completed for ${toolkit}, connectionId: ${data.connectionId}`);
+        pendingConnectionIdRef.current = data.connectionId;
+        // Immediately check connection status since no OAuth redirect is needed
+        startPolling();
+        return;
+      }
+
       if (!data?.redirectUrl) {
         toast.error("No redirect URL received");
         setConnecting(false);
@@ -180,7 +189,6 @@ export function useComposio(toolkit: string): UseComposioReturn {
       }
 
       // Start polling for connection status
-      // This works regardless of localStorage isolation in Median
       startPolling();
 
       // Handle OAuth redirect based on platform
