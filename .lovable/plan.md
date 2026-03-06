@@ -1,28 +1,115 @@
 
 
-## Fix: Coinbase profile data not populating on connected account card
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-### Root cause
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-The `composio-callback` edge function's Coinbase handler at line 3408 does `const accessToken = data.access_token`, but the Composio v3 API typically nests the OAuth access token under `connectionParams` within the response (e.g., `accountData.connectionParams.access_token` or `accountData.data.connectionParams.access_token`). Since `data` is set from `accountData.data || accountData.connection_params || {}` at line 2356, the `access_token` is likely nested one level deeper and not found, causing the entire Coinbase API call to be skipped silently. This leaves `account_name`, `account_email`, and `account_avatar_url` as null in the database.
+### 1. Database Tables (2 new tables via migration)
 
-### Fix (single file change)
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-**`supabase/functions/composio-callback/index.ts`** -- Update the Coinbase block (lines 3404-3446):
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-1. Expand access token resolution to check multiple nested locations, matching the pattern used by Canva (line 1843-1848):
-   - `data.access_token`
-   - `data.connectionParams?.access_token`
-   - `accountData.connectionParams?.access_token`
-   - `accountData.data?.connectionParams?.access_token`
+### 2. Edge Function: `restaurant-bookmark-sync`
 
-2. If no token is found from the main `accountData`, make a dedicated fetch to the Composio connected account endpoint (`GET /api/v3/connected_accounts/{connectionId}`) to retrieve `connectionParams.access_token` -- the same approach used by Canva, Discord, and Mailchimp handlers.
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
 
-3. Add logging for the resolved token source to aid future debugging.
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
 
-4. Redeploy the `composio-callback` edge function.
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
 
-### After deployment
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
 
-The user will need to disconnect and reconnect Coinbase (or use the "Change" button) to trigger the callback again and populate the profile fields.
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+
+### 6. Registration (data + routing)
+
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
+```
+
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+
+### 8. Wire trigger into memory save
+
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+
+### Summary of files to create/modify
+
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
+
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+
+**Database migration:** 2 tables + RLS policies
 
