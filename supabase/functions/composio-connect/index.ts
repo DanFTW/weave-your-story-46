@@ -278,29 +278,54 @@ serve(async (req) => {
     console.log(`Callback URL (our app): ${callbackUrl}`);
     console.log(`============================`);
 
-    // Build request body - always use auth_config_id (required by Composio v3 API)
-    const requestBody: Record<string, unknown> = {
-      auth_config_id: authConfigId,
+    // Build reusable request body for Composio v3 /link endpoint
+    const baseRequestBody: Record<string, unknown> = {
       user_id: user.id,
       callback_url: callbackUrl,
       ...(forceReauth && { force_reauth: true }),
     };
 
-    console.log(`Composio request body:`, JSON.stringify(requestBody));
+    const callComposioLink = async (authConfigIdToUse: string) => {
+      const requestBody: Record<string, unknown> = {
+        ...baseRequestBody,
+        auth_config_id: authConfigIdToUse,
+      };
 
-    // Call Composio v3 API /link endpoint
-    const composioResponse = await fetch("https://backend.composio.dev/api/v3/connected_accounts/link", {
-      method: "POST",
-      headers: {
-        "x-api-key": COMPOSIO_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+      console.log(`Composio request body:`, JSON.stringify(requestBody));
 
-    const responseText = await composioResponse.text();
-    console.log(`Composio response status: ${composioResponse.status}`);
-    console.log(`Composio response: ${responseText}`);
+      const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts/link", {
+        method: "POST",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const text = await response.text();
+      console.log(`Composio response status: ${response.status}`);
+      console.log(`Composio response: ${text}`);
+
+      return { response, text };
+    };
+
+    let activeAuthConfigId = authConfigId!;
+    let { response: composioResponse, text: responseText } = await callComposioLink(activeAuthConfigId);
+
+    if (
+      !composioResponse.ok &&
+      composioResponse.status === 400 &&
+      responseText.includes("Auth_Config_NotFound")
+    ) {
+      console.warn(`Auth config ${activeAuthConfigId} not found for ${toolkitLower}, attempting dynamic fallback...`);
+      const fallbackAuthConfigId = await getDefaultAuthConfigId(toolkitLower);
+
+      if (fallbackAuthConfigId && fallbackAuthConfigId !== activeAuthConfigId) {
+        console.log(`Retrying OAuth link with fallback auth config: ${fallbackAuthConfigId}`);
+        activeAuthConfigId = fallbackAuthConfigId;
+        ({ response: composioResponse, text: responseText } = await callComposioLink(activeAuthConfigId));
+      }
+    }
 
     if (!composioResponse.ok) {
       console.error("Composio API error:", composioResponse.status, responseText);
