@@ -143,6 +143,9 @@ const APP_TO_TOOLKIT: Record<string, string> = {
   "google_maps": "googlemaps",
   "googlesheets": "googlesheets",
   "google_sheets": "googlesheets",
+  "coinbase": "coinbase",
+  "coinbase_wallet": "coinbase",
+  "coinbase_commerce": "coinbase",
 };
 
 // Fetch Instagram user profile using Composio tool execution API
@@ -3396,6 +3399,50 @@ serve(async (req) => {
       }
       
       console.log(`composio-callback: Slack profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+    }
+
+    // For Coinbase, fetch user profile via Coinbase API directly
+    if (toolkit === "coinbase") {
+      console.log("composio-callback: Fetching Coinbase profile info via Coinbase API...");
+      
+      const accessToken = data.access_token;
+      
+      if (accessToken) {
+        try {
+          const cbResponse = await fetch("https://api.coinbase.com/v2/user", {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "CB-VERSION": "2024-01-01",
+              "Content-Type": "application/json",
+            },
+          });
+
+          const cbText = await cbResponse.text();
+          console.log(`composio-callback: Coinbase API /v2/user status=${cbResponse.status}`);
+          console.log(`composio-callback: Coinbase API response=${cbText.slice(0, 500)}`);
+
+          if (cbResponse.ok) {
+            const cbData = JSON.parse(cbText);
+            const user = cbData.data || cbData;
+            
+            if (user.email) accountEmail = user.email;
+            if (user.name) accountName = user.name;
+            if (user.avatar_url) accountAvatarUrl = user.avatar_url;
+            
+            // Fallback: use username if name is empty
+            if (!accountName && user.username) {
+              accountName = user.username;
+            }
+          }
+        } catch (error) {
+          console.error("composio-callback: Error fetching Coinbase profile:", error);
+        }
+        
+        console.log(`composio-callback: Coinbase profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
+      } else {
+        console.log("composio-callback: No access_token found for Coinbase connection");
+      }
     }
 
     // For Google Maps, fetch profile via Composio connection data (Google OAuth)

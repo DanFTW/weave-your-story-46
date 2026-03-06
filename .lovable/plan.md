@@ -1,59 +1,115 @@
 
 
-## Add Coinbase Integration
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-This plan adds Coinbase as a new integration across the frontend and backend, following the exact patterns used by existing integrations like Dropbox, Slack, and GitHub.
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-### 1. Copy the official Coinbase SVG icon
+### 1. Database Tables (2 new tables via migration)
 
-Copy the uploaded `coinbase_1_1.svg` to `src/assets/integrations/coinbase.svg`.
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-### 2. Register icon in both icon components
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-**`IntegrationIcon.tsx` and `IntegrationLargeIcon.tsx`**: Import `coinbase.svg` and add `coinbase: coinbaseIcon` to the `iconImages` map in both files.
+### 2. Edge Function: `restaurant-bookmark-sync`
 
-### 3. Add Coinbase to integrations data
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
 
-**`src/data/integrations.ts`**:
-- Add entry to the "Apps" section in `integrationSections`:
-  ```ts
-  { id: "coinbase", name: "Coinbase", icon: "coinbase", status: "unconfigured" }
-  ```
-- Add detail entry in `integrationDetails`:
-  ```ts
-  "coinbase": {
-    id: "coinbase", name: "Coinbase", icon: "coinbase", status: "unconfigured",
-    description: "Coinbase allows Weave to access your crypto portfolio, transactions, and account info. Create memories from your trading activity and track your financial journey.",
-    capabilities: ["View portfolio", "View transactions", "Access accounts", "Read profile"],
-    gradientColors: { primary: "#0052FF", secondary: "#0033CC", tertiary: "#1652F0" },
-  }
-  ```
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
 
-### 4. Register auth config and toolkit in `composio-connect`
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
 
-**`supabase/functions/composio-connect/index.ts`**:
-- Add `coinbase: "ac_cxfInPfbyIho"` to `AUTH_CONFIGS`
-- Add `"coinbase"` to `VALID_TOOLKITS`
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
 
-### 5. Add Coinbase profile fetching in `composio-callback`
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
 
-**`supabase/functions/composio-callback/index.ts`**:
-- Add `"coinbase": "coinbase"` and `"coinbase_wallet": "coinbase"` to `APP_TO_TOOLKIT`
-- Add a `fetchCoinbaseProfile(connectionId)` function that uses the Composio tool execution API pattern (same as GitHub, LinkedIn, Trello). It will call the Composio connected account endpoint to get the access token, then use it to call `GET https://api.coinbase.com/v2/user` with `Authorization: Bearer {token}` and `CB-VERSION: 2024-01-01`. The Coinbase `/v2/user` endpoint returns `{ data: { name, email, avatar_url, username } }`.
-- Add the profile-fetching block in the main handler (after existing toolkit blocks):
-  ```ts
-  if (toolkit === "coinbase") {
-    // Fetch via Composio connection → Coinbase /v2/user API
-  }
-  ```
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
 
-### 6. Redeploy edge functions
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
 
-Redeploy `composio-connect` and `composio-callback`.
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
 
-### Technical notes
+### 6. Registration (data + routing)
 
-- Coinbase uses OAuth2, so the access token from Composio's connection data (`data.access_token`) is used to call `GET https://api.coinbase.com/v2/user` directly. This mirrors the Dropbox/Strava pattern.
-- The `/v2/user` endpoint returns `name`, `email`, `username`, and `avatar_url` fields, which populate the connected account card.
-- The Coinbase brand color is `#0052FF` (Coinbase Blue).
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
+```
+
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+
+### 8. Wire trigger into memory save
+
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+
+### Summary of files to create/modify
+
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
+
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+
+**Database migration:** 2 tables + RLS policies
 
