@@ -304,6 +304,12 @@ export const integrationSections: IntegrationSection[] = [
         icon: "googlemaps",
         status: "unconfigured",
       },
+      {
+        id: "coinbase",
+        name: "Coinbase",
+        icon: "coinbase",
+        status: "unconfigured",
+      },
     ],
   },
   {
@@ -990,6 +996,19 @@ export const integrationDetails: Record<string, IntegrationDetail> = {
       secondary: "#ea4335",
       tertiary: "#34a853",
       quaternary: "#fbbc04",
+    },
+  },
+  "coinbase": {
+    id: "coinbase",
+    name: "Coinbase",
+    icon: "coinbase",
+    status: "unconfigured",
+    description: "Coinbase allows Weave to access your crypto portfolio, transactions, and account info. Create memories from your trading activity and track your financial journey.",
+    capabilities: ["View portfolio", "View transactions", "Access accounts", "Read profile"],
+    gradientColors: {
+      primary: "#0052FF",
+      secondary: "#0033CC",
+      tertiary: "#1652F0",
     },
   },
   "ios-contacts": {
