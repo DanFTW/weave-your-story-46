@@ -9,7 +9,6 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LIAM_API_BASE = "https://web.askbuddy.ai/devspacexdb/api/memory";
-const COINBASE_API_BASE = "https://api.coinbase.com";
 
 // === CRYPTO UTILITIES FOR LIAM API ===
 
@@ -84,56 +83,108 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   }
 }
 
-// === GET COINBASE ACCESS TOKEN FROM COMPOSIO ===
+// === COINBASE AUTH — resolve credentials from Composio connected account ===
 
-async function getCoinbaseAccessToken(connectionId: string): Promise<string | null> {
+interface CoinbaseAuth {
+  type: "oauth" | "apikey";
+  accessToken?: string;
+  apiKey?: string;
+  apiSecret?: string;
+}
+
+async function resolveCoinbaseAuth(connectionId: string): Promise<CoinbaseAuth | null> {
   try {
     const response = await fetch(
       `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
-      {
-        method: "GET",
-        headers: { "x-api-key": COMPOSIO_API_KEY },
-      }
+      { method: "GET", headers: { "x-api-key": COMPOSIO_API_KEY } }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Coinbase] Composio connection fetch error:", response.status, errorText.slice(0, 500));
+      console.error("[Coinbase Auth] Composio fetch error:", response.status, errorText.slice(0, 500));
       return null;
     }
 
     const connData = await response.json();
     const data = connData.data || connData;
-    const accessToken = data.access_token || data.connectionParams?.access_token;
+    const connParams = data.connectionParams || connData.connectionParams || {};
+    const authScheme = data.auth_scheme || connData.auth_scheme || "";
 
-    if (!accessToken || accessToken.includes("...")) {
-      console.error("[Coinbase] Access token missing or masked. Ensure masking is disabled in Composio org settings.");
-      return null;
+    console.log(`[Coinbase Auth] auth_scheme=${authScheme}, connParams keys=${Object.keys(connParams).join(",")}`);
+
+    // Try OAuth access_token first
+    const accessToken =
+      data.access_token ||
+      connParams.access_token ||
+      connData.access_token;
+
+    if (accessToken && !String(accessToken).includes("...")) {
+      console.log("[Coinbase Auth] Resolved OAuth access_token");
+      return { type: "oauth", accessToken };
     }
 
-    return accessToken;
+    // Try API key credentials
+    const apiKey = connParams.api_key || connParams.apiKey || connParams.API_KEY || connParams.key;
+    const apiSecret = connParams.api_secret || connParams.apiSecret || connParams.API_SECRET || connParams.secret;
+
+    if (apiKey && apiSecret) {
+      console.log("[Coinbase Auth] Resolved API key credentials");
+      return { type: "apikey", apiKey, apiSecret };
+    }
+
+    // Log all available keys for debugging
+    console.error(`[Coinbase Auth] Could not resolve credentials. Data keys: ${Object.keys(data).join(",")}, connParams keys: ${Object.keys(connParams).join(",")}`);
+    return null;
   } catch (error) {
-    console.error("[Coinbase] Error getting access token:", error);
+    console.error("[Coinbase Auth] Error:", error);
     return null;
   }
 }
 
-// === COINBASE ADVANCED TRADE API HELPERS ===
+// === COINBASE API HELPERS ===
+
+// HMAC-SHA256 signing for Coinbase API_KEY auth
+async function hmacSign(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
+  // Coinbase expects hex-encoded HMAC
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 // deno-lint-ignore no-explicit-any
-async function coinbaseGet(path: string, accessToken: string): Promise<any> {
-  const url = `${COINBASE_API_BASE}${path}`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-  });
+async function coinbaseApiGet(path: string, auth: CoinbaseAuth): Promise<any> {
+  const url = `https://api.coinbase.com${path}`;
+  // deno-lint-ignore no-explicit-any
+  const headers: Record<string, any> = {
+    "Content-Type": "application/json",
+    "CB-VERSION": "2024-01-01",
+  };
+
+  if (auth.type === "oauth") {
+    headers["Authorization"] = `Bearer ${auth.accessToken}`;
+  } else {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const message = timestamp + "GET" + path + "";
+    const signature = await hmacSign(auth.apiSecret!, message);
+    headers["CB-ACCESS-KEY"] = auth.apiKey!;
+    headers["CB-ACCESS-SIGN"] = signature;
+    headers["CB-ACCESS-TIMESTAMP"] = timestamp;
+  }
+
+  const response = await fetch(url, { method: "GET", headers });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`[Coinbase] API error ${path}: ${response.status} ${errorText.slice(0, 500)}`);
+    console.error(`[Coinbase API] ${path}: ${response.status} ${errorText.slice(0, 500)}`);
     throw new Error(`Coinbase API ${response.status}: ${path}`);
   }
 
@@ -143,22 +194,31 @@ async function coinbaseGet(path: string, accessToken: string): Promise<any> {
 // === FORMAT TRADE AS MEMORY ===
 
 // deno-lint-ignore no-explicit-any
-function formatFillAsMemory(fill: any): string {
+function formatTransactionAsMemory(tx: any, accountName: string): string {
   const parts = ["Coinbase Trade", ""];
-  if (fill.product_id) parts.push(`Pair: ${fill.product_id}`);
-  if (fill.side) parts.push(`Side: ${fill.side}`);
-  if (fill.size) parts.push(`Size: ${fill.size}`);
-  if (fill.price) parts.push(`Price: $${Number(fill.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}`);
-  if (fill.trade_time) parts.push(`Time: ${fill.trade_time}`);
-  if (fill.trade_id) parts.push(`Trade ID: ${fill.trade_id}`);
-  if (fill.order_id) parts.push(`Order ID: ${fill.order_id}`);
-  if (fill.commission) parts.push(`Fee: $${fill.commission}`);
+  
+  const type = tx.type || "unknown"; // buy, sell, send, receive, trade
+  const amount = tx.amount || {};
+  const nativeAmount = tx.native_amount || {};
+  
+  parts.push(`Type: ${type.charAt(0).toUpperCase() + type.slice(1)}`);
+  if (accountName) parts.push(`Account: ${accountName}`);
+  if (amount.amount && amount.currency) parts.push(`Amount: ${amount.amount} ${amount.currency}`);
+  if (nativeAmount.amount && nativeAmount.currency) {
+    parts.push(`Value: ${nativeAmount.currency === "USD" ? "$" : ""}${Number(nativeAmount.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${nativeAmount.currency}`);
+  }
+  if (tx.created_at) parts.push(`Time: ${tx.created_at}`);
+  if (tx.id) parts.push(`Transaction ID: ${tx.id}`);
+  if (tx.status) parts.push(`Status: ${tx.status}`);
+  if (tx.details?.title) parts.push(`Details: ${tx.details.title}`);
+  if (tx.details?.subtitle) parts.push(`Note: ${tx.details.subtitle}`);
+  
   parts.push("");
-  parts.push("A trade was executed on Coinbase.");
+  parts.push("A transaction was recorded on Coinbase.");
   return parts.join("\n");
 }
 
-// === POLL COINBASE TRADES VIA ADVANCED TRADE API ===
+// === POLL COINBASE TRADES VIA V2 API ===
 
 async function pollCoinbaseTrades(
   // deno-lint-ignore no-explicit-any
@@ -168,10 +228,10 @@ async function pollCoinbaseTrades(
 ): Promise<{ newTrades: number; totalTracked: number }> {
   console.log(`[Coinbase Poll] Fetching trades for user ${userId}`);
 
-  // Get access token from Composio
-  const accessToken = await getCoinbaseAccessToken(connectionId);
-  if (!accessToken) {
-    throw new Error("Could not retrieve Coinbase access token from Composio");
+  // Resolve auth credentials
+  const auth = await resolveCoinbaseAuth(connectionId);
+  if (!auth) {
+    throw new Error("Could not resolve Coinbase credentials from Composio. Check that the connection is active and credentials are not masked.");
   }
 
   // Get current config for cursor
@@ -183,7 +243,7 @@ async function pollCoinbaseTrades(
 
   const lastTradeTimestamp = currentConfig?.last_trade_timestamp;
   const isBackfill = !lastTradeTimestamp;
-  console.log(`[Coinbase Poll] Mode: ${isBackfill ? 'full backfill' : 'incremental'}, cursor: ${lastTradeTimestamp || 'none'}`);
+  console.log(`[Coinbase Poll] Mode: ${isBackfill ? "full backfill" : "incremental"}, cursor: ${lastTradeTimestamp || "none"}, auth: ${auth.type}`);
 
   // Get user API keys for LIAM
   const { data: apiKeys } = await supabaseClient
@@ -194,89 +254,108 @@ async function pollCoinbaseTrades(
 
   let totalNewTrades = 0;
   let latestTimestamp = lastTradeTimestamp;
-  let cursor: string | undefined;
-  let hasMore = true;
 
-  // Paginate through all fills using the Advanced Trade API
-  // GET /api/v3/brokerage/orders/historical/fills
-  while (hasMore) {
-    let path = `/api/v3/brokerage/orders/historical/fills?limit=100`;
-    if (cursor) path += `&cursor=${encodeURIComponent(cursor)}`;
-    if (lastTradeTimestamp) {
-      path += `&start_sequence_timestamp=${encodeURIComponent(lastTradeTimestamp)}`;
-    }
+  // Step 1: List all accounts (wallets)
+  // deno-lint-ignore no-explicit-any
+  let accounts: any[] = [];
+  let nextUri: string | null = "/v2/accounts?limit=100";
 
+  while (nextUri) {
     try {
-      const fillsData = await coinbaseGet(path, accessToken);
-      const fills = fillsData.fills || [];
-      cursor = fillsData.cursor || undefined;
-
-      console.log(`[Coinbase Poll] Got ${fills.length} fills, cursor: ${cursor ? 'yes' : 'none'}`);
-
-      if (fills.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      // Filter out already-processed fills by trade_id
-      const tradeIds = fills
-        // deno-lint-ignore no-explicit-any
-        .filter((f: any) => f.trade_id)
-        // deno-lint-ignore no-explicit-any
-        .map((f: any) => String(f.trade_id));
-
-      const { data: existing } = await supabaseClient
-        .from("coinbase_processed_trades")
-        .select("coinbase_trade_id")
-        .eq("user_id", userId)
-        .in("coinbase_trade_id", tradeIds);
-
-      // deno-lint-ignore no-explicit-any
-      const existingIds = new Set((existing || []).map((e: any) => e.coinbase_trade_id));
-      // deno-lint-ignore no-explicit-any
-      const newFills = fills.filter((f: any) => f.trade_id && !existingIds.has(String(f.trade_id)));
-
-      // Process new fills
-      for (let i = 0; i < newFills.length; i++) {
-        const fill = newFills[i];
-        const tradeId = String(fill.trade_id);
-
-        // Insert into processed trades (dedup)
-        const { error: insertError } = await supabaseClient
-          .from("coinbase_processed_trades")
-          .insert({ user_id: userId, coinbase_trade_id: tradeId });
-
-        if (insertError) {
-          if (insertError.code === '23505') continue; // duplicate
-          console.error(`[Coinbase Poll] Insert error:`, insertError);
-          continue;
-        }
-
-        // Create memory
-        if (apiKeys) {
-          const memoryContent = formatFillAsMemory(fill);
-          const success = await createMemory(apiKeys, memoryContent);
-          if (success) totalNewTrades++;
-        }
-
-        // Track latest timestamp
-        if (fill.trade_time && (!latestTimestamp || new Date(fill.trade_time) > new Date(latestTimestamp))) {
-          latestTimestamp = fill.trade_time;
-        }
-
-        // Rate limit: 500ms every 10 writes
-        if (i > 0 && i % 10 === 0) {
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      }
-
-      // If cursor is empty or all fills were already seen, stop
-      if (!cursor || cursor === "" || newFills.length === 0) {
-        hasMore = false;
-      }
+      const accountsData = await coinbaseApiGet(nextUri, auth);
+      const pageAccounts = accountsData.data || [];
+      accounts = accounts.concat(pageAccounts);
+      nextUri = accountsData.pagination?.next_uri || null;
+      console.log(`[Coinbase Poll] Listed ${pageAccounts.length} accounts, next: ${nextUri ? "yes" : "done"}`);
     } catch (err) {
-      console.error(`[Coinbase Poll] Error fetching fills:`, err);
-      hasMore = false;
+      console.error("[Coinbase Poll] Error listing accounts:", err);
+      nextUri = null;
+    }
+  }
+
+  console.log(`[Coinbase Poll] Found ${accounts.length} accounts total`);
+
+  // Step 2: For each account, fetch transactions (buys, sells, trades, sends, receives)
+  for (const account of accounts) {
+    const accountId = account.id;
+    const accountName = account.name || account.currency?.code || "";
+
+    let txNextUri: string | null = `/v2/accounts/${accountId}/transactions?limit=100&order=desc`;
+
+    while (txNextUri) {
+      try {
+        const txData = await coinbaseApiGet(txNextUri, auth);
+        const transactions = txData.data || [];
+        txNextUri = txData.pagination?.next_uri || null;
+
+        console.log(`[Coinbase Poll] Account ${accountName}: ${transactions.length} transactions, next: ${txNextUri ? "yes" : "done"}`);
+
+        if (transactions.length === 0) break;
+
+        // For incremental mode, skip transactions older than cursor
+        // deno-lint-ignore no-explicit-any
+        const filteredTxs = lastTradeTimestamp
+          // deno-lint-ignore no-explicit-any
+          ? transactions.filter((tx: any) => tx.created_at && new Date(tx.created_at) > new Date(lastTradeTimestamp))
+          : transactions;
+
+        if (filteredTxs.length === 0 && lastTradeTimestamp) {
+          // All transactions on this page are older than cursor, stop for this account
+          txNextUri = null;
+          break;
+        }
+
+        // Deduplicate
+        // deno-lint-ignore no-explicit-any
+        const txIds = filteredTxs.filter((tx: any) => tx.id).map((tx: any) => String(tx.id));
+
+        const { data: existing } = await supabaseClient
+          .from("coinbase_processed_trades")
+          .select("coinbase_trade_id")
+          .eq("user_id", userId)
+          .in("coinbase_trade_id", txIds);
+
+        // deno-lint-ignore no-explicit-any
+        const existingIds = new Set((existing || []).map((e: any) => e.coinbase_trade_id));
+        // deno-lint-ignore no-explicit-any
+        const newTxs = filteredTxs.filter((tx: any) => tx.id && !existingIds.has(String(tx.id)));
+
+        for (let i = 0; i < newTxs.length; i++) {
+          const tx = newTxs[i];
+          const txId = String(tx.id);
+
+          // Insert dedup record
+          const { error: insertError } = await supabaseClient
+            .from("coinbase_processed_trades")
+            .insert({ user_id: userId, coinbase_trade_id: txId });
+
+          if (insertError) {
+            if (insertError.code === "23505") continue;
+            console.error("[Coinbase Poll] Insert error:", insertError);
+            continue;
+          }
+
+          // Create memory
+          if (apiKeys) {
+            const memoryContent = formatTransactionAsMemory(tx, accountName);
+            const success = await createMemory(apiKeys, memoryContent);
+            if (success) totalNewTrades++;
+          }
+
+          // Track latest timestamp
+          if (tx.created_at && (!latestTimestamp || new Date(tx.created_at) > new Date(latestTimestamp))) {
+            latestTimestamp = tx.created_at;
+          }
+
+          // Rate limit: 500ms every 10 writes
+          if (i > 0 && i % 10 === 0) {
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+      } catch (err) {
+        console.error(`[Coinbase Poll] Error fetching transactions for account ${accountName}:`, err);
+        txNextUri = null;
+      }
     }
   }
 
@@ -351,7 +430,6 @@ Deno.serve(async (req) => {
 
     const connectionId = integration.composio_connection_id;
 
-    // === ACTIVATE ===
     if (action === "activate") {
       await supabaseClient
         .from("coinbase_trades_config")
@@ -359,40 +437,32 @@ Deno.serve(async (req) => {
         .eq("user_id", userId);
 
       const result = await pollCoinbaseTrades(supabaseClient, userId, connectionId);
-
-      return new Response(
-        JSON.stringify({ success: true, ...result }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // === DEACTIVATE ===
     if (action === "deactivate") {
       await supabaseClient
         .from("coinbase_trades_config")
         .update({ is_active: false })
         .eq("user_id", userId);
 
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // === MANUAL POLL ===
     if (action === "manual-poll") {
       const result = await pollCoinbaseTrades(supabaseClient, userId, connectionId);
-
-      return new Response(
-        JSON.stringify({ success: true, ...result }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return new Response(
-      JSON.stringify({ error: `Unknown action: ${action}` }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
     console.error("[Coinbase Trades] Error:", err);
     return new Response(
