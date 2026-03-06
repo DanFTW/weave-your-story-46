@@ -322,11 +322,16 @@ serve(async (req) => {
         const connectionPayload: Record<string, unknown> = {
           user_id: user.id,
           ...(forceReauth && { force_reauth: true }),
+        };
+
+        // Place credential fields inside auth_config (Composio expects them there for API key auth)
+        const authConfigPayload: Record<string, unknown> = {
+          id: authConfigIdToUse,
           ...(useNestedDataFields ? { data: connectionFields } : connectionFields),
         };
 
         const requestBody = {
-          auth_config: { id: authConfigIdToUse },
+          auth_config: authConfigPayload,
           connection: connectionPayload,
         };
 
