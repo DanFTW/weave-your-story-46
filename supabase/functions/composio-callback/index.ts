@@ -3403,7 +3403,8 @@ serve(async (req) => {
 
     // For Coinbase, fetch user profile via Coinbase API directly
     if (toolkit === "coinbase") {
-      console.log("composio-callback: Fetching Coinbase profile info via Coinbase API...");
+      console.log("composio-callback: Fetching Coinbase profile info...");
+      console.log(`composio-callback: Coinbase auth_scheme=${accountData.auth_scheme || "unknown"}, data keys=${Object.keys(data).join(",")}`);
       
       // Robust access token resolution — check multiple nested locations
       let accessToken =
@@ -3423,7 +3424,7 @@ serve(async (req) => {
             {
               method: "GET",
               headers: {
-                "x-api-key": composioApiKey,
+                "x-api-key": COMPOSIO_API_KEY!,
                 "Content-Type": "application/json",
               },
             }
@@ -3447,6 +3448,7 @@ serve(async (req) => {
       console.log(`composio-callback: Coinbase access_token resolved=${!!accessToken}, source=${tokenSource}`);
       
       if (accessToken) {
+        // OAuth flow — use Bearer token with Coinbase API
         try {
           const cbResponse = await fetch("https://api.coinbase.com/v2/user", {
             method: "GET",
@@ -3475,13 +3477,47 @@ serve(async (req) => {
             }
           }
         } catch (error) {
-          console.error("composio-callback: Error fetching Coinbase profile:", error);
+          console.error("composio-callback: Error fetching Coinbase profile via direct API:", error);
         }
-        
-        console.log(`composio-callback: Coinbase profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
       } else {
-        console.log("composio-callback: No access_token found for Coinbase connection after all resolution attempts");
+        // API_KEY auth — use Composio tool execution to get profile
+        console.log("composio-callback: No OAuth access_token, trying Composio tool execution for Coinbase profile...");
+        try {
+          const toolResp = await fetch(
+            "https://backend.composio.dev/api/v3/actions/COINBASE_GET_CURRENT_USER/execute",
+            {
+              method: "POST",
+              headers: {
+                "x-api-key": COMPOSIO_API_KEY!,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                connected_account_id: connectionId,
+                input: {},
+              }),
+            }
+          );
+          const toolText = await toolResp.text();
+          console.log(`composio-callback: Coinbase tool execution status=${toolResp.status}`);
+          console.log(`composio-callback: Coinbase tool response=${toolText.slice(0, 1000)}`);
+
+          if (toolResp.ok) {
+            const toolJson = JSON.parse(toolText);
+            // Composio tool response nests data in various structures
+            const responseData = toolJson.data?.response_data || toolJson.response_data || toolJson.data || toolJson;
+            const userData = responseData.data || responseData;
+
+            if (userData.email) accountEmail = userData.email;
+            if (userData.name) accountName = userData.name;
+            if (userData.avatar_url) accountAvatarUrl = userData.avatar_url;
+            if (!accountName && userData.username) accountName = userData.username;
+          }
+        } catch (err) {
+          console.error("composio-callback: Error fetching Coinbase profile via tool execution:", err);
+        }
       }
+      
+      console.log(`composio-callback: Coinbase profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
     }
 
     // For Google Maps, fetch profile via Composio connection data (Google OAuth)
