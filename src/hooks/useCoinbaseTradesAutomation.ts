@@ -114,7 +114,10 @@ export function useCoinbaseTradesAutomation() {
       });
 
       if (error) {
-        toast({ title: "Poll failed", description: error.message, variant: "destructive" });
+        const errMsg = typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : 'Unknown error';
+        toast({ title: "Poll failed", description: errMsg, variant: "destructive" });
         return false;
       }
 
@@ -126,6 +129,8 @@ export function useCoinbaseTradesAutomation() {
 
       if (data.newTrades > 0) {
         toast({ title: `${data.newTrades} new trade(s) tracked` });
+      } else {
+        toast({ title: "No new trades found", description: "All trades are up to date" });
       }
       return true;
     } catch (err) {

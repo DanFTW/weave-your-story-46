@@ -269,7 +269,57 @@ serve(async (req) => {
       authConfigId = defaultConfigId;
     }
     
-    // Build the callback URL that Composio will redirect to after OAuth
+    // === API Key auth toolkits bypass OAuth link flow ===
+    const API_KEY_TOOLKITS = ["coinbase"];
+    
+    if (API_KEY_TOOLKITS.includes(toolkitLower)) {
+      console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);
+      
+      // For API Key toolkits, we create a connected account directly
+      // The user's API credentials are already configured in the Composio auth config
+      const requestBody = {
+        auth_config_id: authConfigId,
+        user_id: user.id,
+        ...(forceReauth && { force_reauth: true }),
+      };
+      
+      console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
+      
+      const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
+        method: "POST",
+        headers: {
+          "x-api-key": COMPOSIO_API_KEY!,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      const responseText = await response.text();
+      console.log(`[${toolkitLower}] Connected accounts response status: ${response.status}`);
+      console.log(`[${toolkitLower}] Connected accounts response: ${responseText}`);
+      
+      if (!response.ok) {
+        console.error(`[${toolkitLower}] API Key connection failed:`, response.status, responseText);
+        throw new Error(`Composio API error: ${response.status}`);
+      }
+      
+      const composioData = JSON.parse(responseText);
+      const connectionId = composioData.connected_account_id || composioData.id;
+      
+      console.log(`[${toolkitLower}] API Key connection created: ${connectionId}`);
+      
+      // API Key connections don't need a redirect — return connectionId directly
+      return new Response(
+        JSON.stringify({
+          connectionId,
+          redirectUrl: null, // No redirect needed for API Key auth
+          apiKeyAuth: true,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // === OAuth flow for all other toolkits ===
     const callbackUrl = `${baseUrl}/oauth-complete?toolkit=${toolkitLower}`;
     
     console.log(`=== COMPOSIO OAUTH DEBUG ===`);
@@ -278,7 +328,6 @@ serve(async (req) => {
     console.log(`Callback URL (our app): ${callbackUrl}`);
     console.log(`============================`);
 
-    // Build reusable request body for Composio v3 /link endpoint
     const baseRequestBody: Record<string, unknown> = {
       user_id: user.id,
       callback_url: callbackUrl,
@@ -296,7 +345,7 @@ serve(async (req) => {
       const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts/link", {
         method: "POST",
         headers: {
-          "x-api-key": COMPOSIO_API_KEY,
+          "x-api-key": COMPOSIO_API_KEY!,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
@@ -334,22 +383,11 @@ serve(async (req) => {
 
     const composioData = JSON.parse(responseText);
     const connectionId = composioData.connected_account_id || composioData.id;
+    const redirectUrl = composioData.redirect_url || composioData.redirectUrl;
     
-    // Get the redirect URL from Composio
-    let redirectUrl = composioData.redirect_url || composioData.redirectUrl;
-    
-    // The Composio callback_url doesn't support dynamic params, so we need to 
-    // encode the connectionId in the state or handle it differently
-    // Actually, Composio returns the connectionId in the callback URL automatically
-    // But we need to ensure our callback URL includes the connectionId
-    
-    // Update the callback URL in the redirect to include connectionId
-    // Composio adds connectionId to the callback automatically, but let's ensure our format
-    console.log(`Original redirect URL: ${redirectUrl}`);
     console.log(`Connection ID: ${connectionId}`);
+    console.log(`Redirect URL: ${redirectUrl}`);
 
-    // Return the redirect URL to frontend
-    // The frontend will start polling for this connectionId
     return new Response(
       JSON.stringify({
         redirectUrl,

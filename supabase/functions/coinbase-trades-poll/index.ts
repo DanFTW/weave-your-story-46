@@ -87,6 +87,8 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
 
 // deno-lint-ignore no-explicit-any
 async function executeComposioAction(actionName: string, connectionId: string, input: Record<string, any> = {}): Promise<any> {
+  console.log(`[Composio] Executing ${actionName} with connectionId=${connectionId}, input=${JSON.stringify(input)}`);
+  
   const response = await fetch(
     `https://backend.composio.dev/api/v3/tools/execute/${actionName}`,
     {
@@ -103,10 +105,19 @@ async function executeComposioAction(actionName: string, connectionId: string, i
   );
 
   const text = await response.text();
-  console.log(`[Composio] ${actionName} status=${response.status}, response=${text.slice(0, 500)}`);
+  console.log(`[Composio] ${actionName} status=${response.status}, full response (first 1500 chars):\n${text.slice(0, 1500)}`);
 
   if (!response.ok) {
-    throw new Error(`Composio action ${actionName} failed: ${response.status} ${text.slice(0, 200)}`);
+    // Parse error details for diagnostic clarity
+    try {
+      const errBody = JSON.parse(text);
+      const slug = errBody?.error?.slug || errBody?.slug || "unknown";
+      const msg = errBody?.error?.message || errBody?.message || text.slice(0, 300);
+      console.error(`[Composio] DIAGNOSTIC: action=${actionName}, connectionId=${connectionId}, status=${response.status}, slug=${slug}, message=${msg}`);
+    } catch {
+      console.error(`[Composio] DIAGNOSTIC: action=${actionName}, connectionId=${connectionId}, status=${response.status}, rawBody=${text.slice(0, 500)}`);
+    }
+    throw new Error(`Composio action ${actionName} failed: ${response.status} ${text.slice(0, 300)}`);
   }
 
   try {
@@ -275,7 +286,12 @@ async function pollCoinbaseTrades(
         pageCount++;
       }
     } catch (productErr) {
-      console.error(`[Coinbase Poll] Error fetching trades for ${productId}:`, productErr);
+      const errMsg = productErr instanceof Error ? productErr.message : String(productErr);
+      console.error(`[Coinbase Poll] FAILED for ${productId}: ${errMsg}`);
+      // Re-throw on connection-level errors so caller knows polling is broken
+      if (errMsg.includes("ConnectedAccountExpired") || errMsg.includes("Auth_Config")) {
+        throw productErr;
+      }
     }
   }
 
@@ -348,6 +364,7 @@ Deno.serve(async (req) => {
     }
 
     const connectionId = integration.composio_connection_id;
+    console.log(`[Coinbase Trades] Using connectionId: ${connectionId} (prefix: ${connectionId.slice(0, 3)})`);
 
     if (action === "activate") {
       await supabaseClient
