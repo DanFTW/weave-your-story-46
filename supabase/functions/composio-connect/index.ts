@@ -279,8 +279,8 @@ serve(async (req) => {
       // For API Key toolkits, we create a connected account directly
       // The user's API credentials are already configured in the Composio auth config
       const requestBody = {
-        auth_config_id: authConfigId,
-        user_id: user.id,
+        auth_config: { id: authConfigId },
+        connection: { user_id: user.id },
         ...(forceReauth && { force_reauth: true }),
       };
       
