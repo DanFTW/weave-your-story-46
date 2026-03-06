@@ -3405,7 +3405,46 @@ serve(async (req) => {
     if (toolkit === "coinbase") {
       console.log("composio-callback: Fetching Coinbase profile info via Coinbase API...");
       
-      const accessToken = data.access_token;
+      // Robust access token resolution — check multiple nested locations
+      let accessToken =
+        data.access_token ||
+        data.connectionParams?.access_token ||
+        accountData.connectionParams?.access_token ||
+        accountData.data?.connectionParams?.access_token;
+
+      let tokenSource = accessToken ? "accountData" : null;
+
+      // Fallback: fetch dedicated connection details from Composio API
+      if (!accessToken) {
+        console.log("composio-callback: No token in accountData, fetching from Composio connected_accounts endpoint...");
+        try {
+          const connResp = await fetch(
+            `https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`,
+            {
+              method: "GET",
+              headers: {
+                "x-api-key": composioApiKey,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          if (connResp.ok) {
+            const connJson = await connResp.json();
+            accessToken =
+              connJson.data?.connectionParams?.access_token ||
+              connJson.connectionParams?.access_token ||
+              connJson.data?.access_token ||
+              connJson.access_token;
+            if (accessToken) tokenSource = "composio-connected-accounts";
+          } else {
+            console.error(`composio-callback: Composio connected_accounts fetch failed status=${connResp.status}`);
+          }
+        } catch (err) {
+          console.error("composio-callback: Error fetching Composio connected account for Coinbase:", err);
+        }
+      }
+
+      console.log(`composio-callback: Coinbase access_token resolved=${!!accessToken}, source=${tokenSource}`);
       
       if (accessToken) {
         try {
@@ -3441,7 +3480,7 @@ serve(async (req) => {
         
         console.log(`composio-callback: Coinbase profile - name=${accountName}, email=${accountEmail}, avatar=${accountAvatarUrl ? 'present' : 'missing'}`);
       } else {
-        console.log("composio-callback: No access_token found for Coinbase connection");
+        console.log("composio-callback: No access_token found for Coinbase connection after all resolution attempts");
       }
     }
 
