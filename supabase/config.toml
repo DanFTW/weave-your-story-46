@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.grocery-sheet-sync]
 verify_jwt = false
+
+[functions.coinbase-trades-poll]
+verify_jwt = false
