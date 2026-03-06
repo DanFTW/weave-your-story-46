@@ -123,9 +123,9 @@ async function resolveCoinbaseAuth(connectionId: string): Promise<CoinbaseAuth |
       return { type: "oauth", accessToken };
     }
 
-    // Try API key credentials
-    const apiKey = connParams.api_key || connParams.apiKey || connParams.API_KEY || connParams.key;
-    const apiSecret = connParams.api_secret || connParams.apiSecret || connParams.API_SECRET || connParams.secret;
+    // Try API key credentials — Composio stores them as generic_api_key / generic_secret for API_KEY auth scheme
+    const apiKey = data.generic_api_key || connParams.api_key || connParams.apiKey || connParams.API_KEY || connParams.key;
+    const apiSecret = data.generic_secret || connParams.api_secret || connParams.apiSecret || connParams.API_SECRET || connParams.secret;
 
     if (apiKey && apiSecret) {
       console.log("[Coinbase Auth] Resolved API key credentials");
