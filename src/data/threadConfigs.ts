@@ -1,7 +1,39 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3 } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
+  "instagram-analytics": {
+    id: "instagram-analytics",
+    title: "Instagram Analytics to Memory",
+    subtitle: "Track your account growth",
+    description: "Connects to Instagram and saves your analytics (profile views, reach, follower count, impressions) as structured memories.",
+    gradient: "pink",
+    icon: BarChart3,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Instagram",
+        description: "Authorize access to your analytics",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Monitoring",
+        description: "Toggle analytics tracking on/off",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Analytics saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "coinbase-trades": {
     id: "coinbase-trades",
     title: "Coinbase Trades to Memory",
