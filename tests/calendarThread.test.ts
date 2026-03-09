@@ -25,6 +25,9 @@ describe("detectEventReference", () => {
     it("detects 'Party on the 3rd'", () => {
       expect(detectEventReference("Party on the 3rd")).toBe(true);
     });
+    it("detects 'Something on the 22nd' (ordinal alone)", () => {
+      expect(detectEventReference("Something on the 22nd")).toBe(true);
+    });
   });
 
   describe("positive — relative dates", () => {

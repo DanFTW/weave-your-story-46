@@ -107,6 +107,9 @@ export function detectEventReference(content: string): boolean {
   // Month + day ("January 5th") is strong enough on its own
   if (MONTH_NAMES.test(trimmed)) return true;
 
+  // Ordinal date ("the 15th") is strong enough on its own
+  if (ORDINAL_DATE.test(trimmed)) return true;
+
   // ISO date on its own is a strong signal
   if (ISO_DATE.test(trimmed)) return true;
 
