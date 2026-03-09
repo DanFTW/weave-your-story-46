@@ -234,8 +234,9 @@ serve(async (req) => {
         });
       }
 
-      // Parse
-      const parsed = await parseMemoryForEvent(content);
+      // Sanitize and parse
+      const sanitized = sanitizeMemoryContent(content);
+      const parsed = await parseMemoryForEvent(sanitized);
       if (!parsed.isEvent) {
         return new Response(JSON.stringify({ skipped: true, reason: "not_event" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
