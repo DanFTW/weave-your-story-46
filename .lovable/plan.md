@@ -1,66 +1,115 @@
-## Plan: Extract pure functions into `src/utils/calendarThread.ts` + create `tests/calendarThread.test.ts`
 
-### New file 1: `src/utils/calendarThread.ts`
 
-Four pure, testable functions extracted from the edge function logic:
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-**1. `detectEventReference(content: string): boolean**`
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-- Regex-based heuristic that checks if a memory string likely contains an event/date reference
-- Patterns: named dates ("Monday", "January 5th"), ordinal dates ("the 3rd"), relative dates ("tomorrow", "next week", "in 2 days"), ISO-ish dates ("2025-03-10"), time patterns ("at 3pm", "at 14:00"), event keywords near date-like tokens ("meeting", "appointment", "deadline", "party", "dinner")
-- Returns `false` for generic statements with no temporal event signal
+### 1. Database Tables (2 new tables via migration)
 
-**2. `parseEventTitle(content: string): string | null**`
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-- Extracts a likely event title from memory text
-- Heuristic: takes the first sentence/clause, strips date/time references, trims to a reasonable length
-- Returns `null` if nothing meaningful remains
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-**3. `buildComposioPayload(params: { connectionId: string; title: string; date: string; time: string | null; description: string | null; timezone?: string }): ComposioCalendarPayload**`
+### 2. Edge Function: `restaurant-bookmark-sync`
 
-- Pure function that builds the Composio `GOOGLECALENDAR_CREATE_EVENT` payload object
-- Handles default 60-minute duration, default 09:00 start when time is null, default timezone "America/New_York"
-- Returns the shaped object (no fetch, no side effects)
-- Type: `{ connected_account_id: string; arguments: { summary; start_datetime; end_datetime; description; timezone } }`
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
 
-**4. `sanitizeMemoryContent(content: string): string**`
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
 
-- Strips HTML tags, collapses whitespace, trims, truncates to a max length (e.g., 2000 chars)
-- Pure string transform
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
 
-### New file 2: `tests/calendarThread.test.ts`
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
 
-Unit tests using Vitest (already configured via Vite). Test groups:
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
 
-`**detectEventReference**`
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
 
-- Named dates: "Meeting on Monday at 3pm" → `true`
-- Ordinal dates: "Dentist on the 15th" → `true`  
-- Relative dates: "Call mom tomorrow" → `true`
-- Negative: "I like pizza" → `false`
-- Negative: "The year 2025 was great" → `false`
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
 
-`**buildComposioPayload**`
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
 
-- Correct shape: has `connected_account_id` and `arguments` with all fields
-- Default 60min duration: time "14:00" → end "15:00"
-- Null time → default 09:00–10:00
-- Null description → empty string in payload
-- Null guards: throws or returns sensible defaults for missing required fields
+### 6. Registration (data + routing)
 
-`**sanitizeMemoryContent**`
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
+```
 
-- Strips HTML, collapses whitespace, trims
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
 
-`**parseEventTitle**`
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
 
-- Extracts title from event-like text
-- Returns null for empty/whitespace
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
 
-### What stays unchanged
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
 
-- No changes to the edge function, `MemoryCard.tsx`, `tagConfig.ts`, or any other existing file
-- The edge function can later import or inline these utils if desired; for now they're standalone testable modules  
-  
-Also add a null guard test for `buildComposioPayload` when `connectionId` is missing or empty.
-- &nbsp;
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+
+### 8. Wire trigger into memory save
+
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+
+### Summary of files to create/modify
+
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
+
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+
+**Database migration:** 2 tables + RLS policies
+
