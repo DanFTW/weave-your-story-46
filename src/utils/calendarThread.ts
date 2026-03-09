@@ -50,7 +50,7 @@ const TIME_PATTERN = /\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b/i;
 const TIME_24H = /\bat\s+\d{1,2}:\d{2}\b/i;
 
 const EVENT_KEYWORDS =
-  /\b(meeting|appointment|deadline|party|dinner|lunch|breakfast|brunch|call|interview|concert|conference|workshop|webinar|session|reservation|flight|check-?in|standup|stand-up|sync|review|demo|presentation|birthday|anniversary|wedding|exam|class|lecture)\b/i;
+  /\b(meeting|appointment|deadline|party|dinner|lunch|breakfast|brunch|call|interview|concert|conference|workshop|webinar|session|reservation|flight|check-?in|standup|stand-up|sync|review|demo|presentation|birthday|anniversary|wedding|exam|class|lecture|dentist|doctor|visit|checkup|check-?up)\b/i;
 
 // Combined pattern for any date-like token
 const ANY_DATE_SIGNAL = new RegExp(
