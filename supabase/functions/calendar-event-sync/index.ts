@@ -132,13 +132,15 @@ async function createGCalEvent(
   description: string | null
 ): Promise<boolean> {
   try {
-    const startDate = time ? `${date}T${time}:00` : `${date}T09:00:00`;
-    // Default 1-hour event
-    const endHour = time ? parseInt(time.split(":")[0]) + 1 : 10;
-    const endMinute = time ? time.split(":")[1] : "00";
-    const endDate = `${date}T${String(endHour).padStart(2, "0")}:${endMinute}:00`;
+    const payload = buildComposioPayload({
+      connectionId,
+      title,
+      date,
+      time,
+      description,
+    });
 
-    console.log(`[CalendarSync] Creating GCal event: "${title}" on ${startDate}`);
+    console.log(`[CalendarSync] Creating GCal event: "${title}" on ${payload.arguments.start_datetime}`);
 
     const res = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/GOOGLECALENDAR_CREATE_EVENT",
@@ -148,16 +150,7 @@ async function createGCalEvent(
           "Content-Type": "application/json",
           "x-api-key": COMPOSIO_API_KEY,
         },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: {
-            summary: title,
-            start_datetime: startDate,
-            end_datetime: endDate,
-            description: description || "",
-            timezone: "America/New_York",
-          },
-        }),
+        body: JSON.stringify(payload),
       }
     );
 
