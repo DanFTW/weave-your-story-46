@@ -550,8 +550,9 @@ serve(async (req) => {
         unprocessed.map(async (mem) => {
           const r = { created: 0, queued: 0, processed: 0 };
           try {
-            console.log(`[CalendarSync] Parsing memory ${mem.id}: "${mem.content.substring(0, 80)}..."`);
-            const parsed = await parseMemoryForEvent(mem.content);
+            const sanitized = sanitizeMemoryContent(mem.content);
+            console.log(`[CalendarSync] Parsing memory ${mem.id}: "${sanitized.substring(0, 80)}..."`);
+            const parsed = await parseMemoryForEvent(sanitized);
             console.log(`[CalendarSync] Parse result for ${mem.id}:`, JSON.stringify(parsed));
             r.processed++;
 
