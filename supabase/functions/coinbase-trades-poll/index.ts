@@ -65,7 +65,7 @@ async function signRequest(privateKey: CryptoKey, body: object): Promise<string>
 async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   try {
     const privateKey = await importPrivateKey(apiKeys.private_key);
-    const body = { userKey: apiKeys.user_key, content };
+    const body = { userKey: apiKeys.user_key, content, tag: "COINBASE" };
     const signature = await signRequest(privateKey, body);
     const response = await fetch(`${LIAM_API_BASE}/create`, {
       method: "POST",
@@ -83,69 +83,69 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   }
 }
 
-// === COMPOSIO TOOL EXECUTION ===
+// === COMPOSIO PROXY: LIST FILLS ===
 
 // deno-lint-ignore no-explicit-any
-async function executeComposioAction(actionName: string, connectionId: string, input: Record<string, any> = {}): Promise<any> {
-  console.log(`[Composio] Executing ${actionName} with connectionId=${connectionId}, input=${JSON.stringify(input)}`);
-  
-  const response = await fetch(
-    `https://backend.composio.dev/api/v3/tools/execute/${actionName}`,
-    {
-      method: "POST",
-      headers: {
-        "x-api-key": COMPOSIO_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        connected_account_id: connectionId,
-        arguments: input,
-      }),
-    }
-  );
+async function fetchFillsViaProxy(connectionId: string, cursor?: string): Promise<any> {
+  // deno-lint-ignore no-explicit-any
+  const parameters: any[] = [
+    { name: "limit", in: "query", value: "100" },
+  ];
+  if (cursor) {
+    parameters.push({ name: "cursor", in: "query", value: cursor });
+  }
+
+  console.log(`[Composio Proxy] Fetching fills, cursor=${cursor || "none"}`);
+
+  const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/proxy", {
+    method: "POST",
+    headers: {
+      "x-api-key": COMPOSIO_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      connectedAccountId: connectionId,
+      endpoint: "api/v3/brokerage/orders/historical/fills",
+      method: "GET",
+      parameters,
+    }),
+  });
 
   const text = await response.text();
-  console.log(`[Composio] ${actionName} status=${response.status}, full response (first 1500 chars):\n${text.slice(0, 1500)}`);
+  console.log(`[Composio Proxy] List Fills status=${response.status}, response (first 1500 chars):\n${text.slice(0, 1500)}`);
 
   if (!response.ok) {
-    // Parse error details for diagnostic clarity
-    try {
-      const errBody = JSON.parse(text);
-      const slug = errBody?.error?.slug || errBody?.slug || "unknown";
-      const msg = errBody?.error?.message || errBody?.message || text.slice(0, 300);
-      console.error(`[Composio] DIAGNOSTIC: action=${actionName}, connectionId=${connectionId}, status=${response.status}, slug=${slug}, message=${msg}`);
-    } catch {
-      console.error(`[Composio] DIAGNOSTIC: action=${actionName}, connectionId=${connectionId}, status=${response.status}, rawBody=${text.slice(0, 500)}`);
-    }
-    throw new Error(`Composio action ${actionName} failed: ${response.status} ${text.slice(0, 300)}`);
+    throw new Error(`Composio Proxy List Fills failed: ${response.status} ${text.slice(0, 300)}`);
   }
 
   try {
     const parsed = JSON.parse(text);
-    if (parsed.successful === false || parsed.data?.successful === false) {
-      const errMsg = parsed.error || parsed.data?.error || parsed.data?.message || "Unknown Composio error";
-      throw new Error(`Composio action ${actionName} unsuccessful: ${errMsg}`);
-    }
+    // The proxy may wrap the response — extract the actual Coinbase response
     return parsed.data?.response_data || parsed.response_data || parsed.data || parsed;
-  } catch (e) {
-    if (e instanceof SyntaxError) return text;
-    throw e;
+  } catch {
+    throw new Error(`Failed to parse Composio Proxy response: ${text.slice(0, 300)}`);
   }
 }
 
-// === FORMAT TRADE AS MEMORY ===
+// === FORMAT FILL AS MEMORY ===
 
 // deno-lint-ignore no-explicit-any
-function formatTradeAsMemory(trade: any, productId: string): string {
-  const side = trade.side || "unknown";
-  const size = trade.size || trade.quantity || "?";
-  const price = trade.price || "?";
-  const time = trade.time || trade.timestamp || new Date().toISOString();
-  const tradeId = trade.trade_id || trade.id || "?";
+function formatFillAsMemory(fill: any): string {
+  const productId = fill.product_id || "unknown";
+  const side = fill.side || "unknown";
+  const size = fill.size || fill.size_in_quote || "?";
+  const price = fill.price || "?";
+  const commission = fill.commission || "0";
+  const time = fill.trade_time || fill.created_at || new Date().toISOString();
+  const tradeId = fill.trade_id || fill.entry_id || "?";
 
   const formattedPrice = typeof price === "number" || !isNaN(Number(price))
     ? `$${Number(price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : price;
+
+  const formattedCommission = typeof commission === "number" || !isNaN(Number(commission))
+    ? `$${Number(commission).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+    : commission;
 
   return [
     "Coinbase Trade",
@@ -154,6 +154,7 @@ function formatTradeAsMemory(trade: any, productId: string): string {
     `Side: ${side}`,
     `Size: ${size}`,
     `Price: ${formattedPrice}`,
+    `Commission: ${formattedCommission}`,
     `Time: ${time}`,
     `Trade ID: ${tradeId}`,
     "",
@@ -161,21 +162,29 @@ function formatTradeAsMemory(trade: any, productId: string): string {
   ].join("\n");
 }
 
-// === EXTRACT ARRAY FROM COMPOSIO RESPONSE ===
+// === EXTRACT FILLS ARRAY FROM RESPONSE ===
 
 // deno-lint-ignore no-explicit-any
-function extractArray(result: any, key?: string): any[] {
-  if (Array.isArray(result)) return result;
-  if (key && result?.[key]) return result[key];
+function extractFills(result: any): { fills: any[]; cursor: string | null } {
+  // Coinbase List Fills returns { fills: [...], cursor: "..." }
+  if (result?.fills && Array.isArray(result.fills)) {
+    return { fills: result.fills, cursor: result.cursor || null };
+  }
+  // Fallback: try to find an array in the response
+  if (Array.isArray(result)) {
+    return { fills: result, cursor: null };
+  }
   if (typeof result === "object" && result !== null) {
     for (const k of Object.keys(result)) {
-      if (Array.isArray(result[k])) return result[k];
+      if (Array.isArray(result[k])) {
+        return { fills: result[k], cursor: result.cursor || null };
+      }
     }
   }
-  return [];
+  return { fills: [], cursor: null };
 }
 
-// === POLL COINBASE TRADES VIA COMPOSIO EXCHANGE ACTIONS ===
+// === POLL COINBASE FILLS VIA COMPOSIO PROXY ===
 
 async function pollCoinbaseTrades(
   // deno-lint-ignore no-explicit-any
@@ -183,7 +192,7 @@ async function pollCoinbaseTrades(
   userId: string,
   connectionId: string
 ): Promise<{ newTrades: number; totalTracked: number }> {
-  console.log(`[Coinbase Poll] Fetching trades for user ${userId}`);
+  console.log(`[Coinbase Poll] Fetching fills for user ${userId}`);
 
   const { data: currentConfig } = await supabaseClient
     .from("coinbase_trades_config")
@@ -205,94 +214,70 @@ async function pollCoinbaseTrades(
   let latestTimestamp = currentConfig?.last_trade_timestamp;
   const cutoffTimestamp = currentConfig?.last_trade_timestamp || null;
 
-  // Use hardcoded major trading pairs since COINBASE_LIST_EXCHANGE_PRODUCTS is not available
-  const productsToScan = [
-    "BTC-USD", "ETH-USD", "SOL-USD", "DOGE-USD", "ADA-USD",
-    "XRP-USD", "DOT-USD", "AVAX-USD", "MATIC-USD", "LINK-USD",
-    "BTC-USDT", "ETH-USDT", "BTC-EUR", "ETH-EUR",
-  ];
-  console.log(`[Coinbase Poll] Scanning ${productsToScan.length} major trading pairs`);
+  let cursor: string | null = null;
+  let hasMore = true;
+  let pageCount = 0;
+  const maxPages = 5;
 
-  // For each product, fetch recent trades via COINBASE_LIST_PRODUCTS_TRADES
-  for (const productId of productsToScan) {
+  while (hasMore && pageCount < maxPages) {
+    const result = await fetchFillsViaProxy(connectionId, cursor || undefined);
+    const { fills, cursor: nextCursor } = extractFills(result);
 
-    try {
-      let cursor: number | null = null;
-      let hasMore = true;
-      let pageCount = 0;
-      const maxPages = 3;
+    if (fills.length === 0) {
+      hasMore = false;
+      break;
+    }
 
-      while (hasMore && pageCount < maxPages) {
-        // deno-lint-ignore no-explicit-any
-        const input: Record<string, any> = { product_id: productId, limit: 100 };
-        if (cursor !== null) input.after = cursor;
+    console.log(`[Coinbase Poll] Page ${pageCount + 1}: ${fills.length} fills`);
 
-        const tradesResult = await executeComposioAction("COINBASE_LIST_PRODUCTS_TRADES", connectionId, input);
-        const trades = extractArray(tradesResult, "trades");
+    let hitCutoff = false;
+    for (const fill of fills) {
+      const tradeTime = fill.trade_time || fill.created_at;
+      const tradeId = String(fill.trade_id || fill.entry_id || "");
 
-        if (trades.length === 0) { hasMore = false; break; }
-
-        console.log(`[Coinbase Poll] ${productId}: page ${pageCount + 1}, ${trades.length} trades`);
-
-        let hitCutoff = false;
-        for (const trade of trades) {
-          const tradeTime = trade.time || trade.timestamp;
-          const tradeId = String(trade.trade_id || trade.id || "");
-
-          if (cutoffTimestamp && tradeTime && tradeTime <= cutoffTimestamp) {
-            hitCutoff = true;
-            break;
-          }
-
-          const dedupeId = `trade_${productId}_${tradeId}`;
-
-          const { data: existing } = await supabaseClient
-            .from("coinbase_processed_trades")
-            .select("coinbase_trade_id")
-            .eq("user_id", userId)
-            .eq("coinbase_trade_id", dedupeId)
-            .maybeSingle();
-
-          if (existing) continue;
-
-          const { error: insertError } = await supabaseClient
-            .from("coinbase_processed_trades")
-            .insert({ user_id: userId, coinbase_trade_id: dedupeId });
-
-          if (insertError) {
-            if (insertError.code === "23505") continue;
-            console.error("[Coinbase Poll] Insert error:", insertError);
-            continue;
-          }
-
-          const memoryContent = formatTradeAsMemory(trade, productId);
-          const success = await createMemory(apiKeys, memoryContent);
-          if (success) totalNewTrades++;
-
-          if (tradeTime && (!latestTimestamp || tradeTime > latestTimestamp)) {
-            latestTimestamp = tradeTime;
-          }
-        }
-
-        if (hitCutoff) {
-          hasMore = false;
-        } else {
-          const lastTrade = trades[trades.length - 1];
-          const lastId = lastTrade?.trade_id || lastTrade?.id;
-          cursor = lastId ? Number(lastId) : null;
-          if (!cursor) hasMore = false;
-        }
-
-        pageCount++;
+      // Stop if we've reached previously processed fills
+      if (cutoffTimestamp && tradeTime && tradeTime <= cutoffTimestamp) {
+        hitCutoff = true;
+        break;
       }
-    } catch (productErr) {
-      const errMsg = productErr instanceof Error ? productErr.message : String(productErr);
-      console.error(`[Coinbase Poll] FAILED for ${productId}: ${errMsg}`);
-      // Re-throw on connection-level errors so caller knows polling is broken
-      if (errMsg.includes("ConnectedAccountExpired") || errMsg.includes("Auth_Config")) {
-        throw productErr;
+
+      const dedupeId = `fill_${tradeId}`;
+
+      const { data: existing } = await supabaseClient
+        .from("coinbase_processed_trades")
+        .select("coinbase_trade_id")
+        .eq("user_id", userId)
+        .eq("coinbase_trade_id", dedupeId)
+        .maybeSingle();
+
+      if (existing) continue;
+
+      const { error: insertError } = await supabaseClient
+        .from("coinbase_processed_trades")
+        .insert({ user_id: userId, coinbase_trade_id: dedupeId });
+
+      if (insertError) {
+        if (insertError.code === "23505") continue;
+        console.error("[Coinbase Poll] Insert error:", insertError);
+        continue;
+      }
+
+      const memoryContent = formatFillAsMemory(fill);
+      const success = await createMemory(apiKeys, memoryContent);
+      if (success) totalNewTrades++;
+
+      if (tradeTime && (!latestTimestamp || tradeTime > latestTimestamp)) {
+        latestTimestamp = tradeTime;
       }
     }
+
+    if (hitCutoff || !nextCursor) {
+      hasMore = false;
+    } else {
+      cursor = nextCursor;
+    }
+
+    pageCount++;
   }
 
   // Update config stats
@@ -364,7 +349,7 @@ Deno.serve(async (req) => {
     }
 
     const connectionId = integration.composio_connection_id;
-    console.log(`[Coinbase Trades] Using connectionId: ${connectionId} (prefix: ${connectionId.slice(0, 3)})`);
+    console.log(`[Coinbase Trades] Using connectionId: ${connectionId}`);
 
     if (action === "activate") {
       await supabaseClient
