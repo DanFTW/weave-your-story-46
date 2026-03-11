@@ -336,25 +336,12 @@ async function syncFacebookContent(
 }
 
 function formatPostAsMemory(post: FacebookPost): string {
-  const date = new Date(post.created_time).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  let memory = post.message!;
 
-  let memory = `Facebook Post\nPosted on ${date}`;
-  
-  if (post.message) {
-    memory += '\n\n' + post.message;
-  } else {
-    memory += '\n\n[No text content]';
-  }
-
-  const meta: string[] = [`Source: Facebook`, `Post ID: ${post.id}`];
+  const meta: string[] = ['Source: Facebook Page', `Post ID: ${post.id}`];
   if (post.permalink_url) meta.push(`URL: ${post.permalink_url}`);
-  if (post.type) meta.push(`Type: ${post.type}`);
-  
-  memory += '\n\n' + meta.join(' | ');
+
+  memory += '\n\n---\n' + meta.join(' | ');
 
   return memory;
 }
