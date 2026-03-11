@@ -95,6 +95,9 @@ import { CoinbaseTradesFlow } from "@/components/flows/coinbase-trades";
 // Instagram Analytics components
 import { InstagramAnalyticsFlow } from "@/components/flows/instagram-analytics";
 
+// Facebook Page Posts components
+import { FacebookPagePostsFlow } from "@/components/flows/facebook-page-posts";
+
 // Facebook Sync components
 import { FacebookSyncFlow } from "@/components/flows/facebook-sync";
 
