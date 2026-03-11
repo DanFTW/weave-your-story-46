@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook } from "lucide-react";
+import { Mail, Users, Utensils, Music, Plane, BookOpen, ShoppingBag, Sparkles, Wifi, Receipt, Camera, Heart, MessageSquare, Copy, ExternalLink, ClipboardPaste, Inbox, Search, Download, Settings, RefreshCw, Instagram, Image, MessageCircle, Twitter, PenLine, Repeat2, Youtube, PlayCircle, History, ThumbsUp, Zap, UserPlus, ClipboardList, Layout, CheckCircle2, Contact, Target, User, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe } from "lucide-react";
 import { ThreadConfig } from "@/types/threadConfig";
 
 export const threadConfigs: Record<string, ThreadConfig> = {
@@ -1069,6 +1069,37 @@ export const threadConfigs: Record<string, ThreadConfig> = {
         description: "Grocery items posted automatically",
         icon: Wifi,
         badge: "LIVE",
+      },
+    ],
+  },
+  "website-scrape": {
+    id: "website-scrape",
+    title: "Website Link to Memory",
+    subtitle: "Extract from any webpage",
+    description: "Paste any website URL and extract key facts, insights, and data as structured memories you can search and reuse.",
+    gradient: "teal",
+    icon: Globe,
+    steps: [
+      {
+        id: "paste",
+        type: "setup",
+        title: "Paste Link",
+        description: "Enter the website URL you want to extract from",
+        icon: ClipboardPaste,
+      },
+      {
+        id: "extract",
+        type: "setup",
+        title: "Extract Memories",
+        description: "AI reads the page and identifies key information",
+        icon: Search,
+      },
+      {
+        id: "review",
+        type: "save",
+        title: "Review & Save",
+        description: "Edit, remove, or confirm extracted memories",
+        icon: CheckCircle2,
       },
     ],
   },

@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -597,6 +597,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "GROCERY",
     fields: [],
     isGrocerySheetSyncFlow: true,
+  },
+  "website-scrape": {
+    id: "website-scrape",
+    title: "Website Link to Memory",
+    subtitle: "Extract from any webpage",
+    description: "Paste a URL and extract key facts, insights, and data as memories.",
+    gradient: "teal",
+    icon: Globe,
+    entryName: "website content",
+    entryNamePlural: "website contents",
+    memoryTag: "WEBSITE",
+    fields: [],
+    isWebsiteScrapeFlow: true,
   },
 };
 
