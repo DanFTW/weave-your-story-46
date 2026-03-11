@@ -119,7 +119,7 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
 const CATEGORY_TAGS = new Set([
   'twitter', 'instagram', 'email', 'receipt', 'receipts',
   'family', 'work', 'food', 'shopping', 'personal', 'lifestyle',
-  'quick_note', 'interests', 'tweet', 'fireflies'
+  'quick_note', 'interests', 'tweet', 'fireflies', 'facebook'
 ]);
 
 function parseTags(memory: Memory): string[] {
