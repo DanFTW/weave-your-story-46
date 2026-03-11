@@ -12,13 +12,14 @@ interface FacebookSyncActiveProps {
   onResetSync?: () => void;
 }
 
-export function FacebookSyncActive({
-  syncConfig,
-  isSyncing,
-  lastSyncResult,
-  onSyncNow,
-  onResetSync,
-}: FacebookSyncActiveProps) {
+export const FacebookSyncActive = React.forwardRef<HTMLDivElement, FacebookSyncActiveProps>(
+  function FacebookSyncActive({
+    syncConfig,
+    isSyncing,
+    lastSyncResult,
+    onSyncNow,
+    onResetSync,
+  }, ref) {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}

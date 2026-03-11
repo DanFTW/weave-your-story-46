@@ -143,4 +143,4 @@ export const FacebookSyncFlow = React.forwardRef<HTMLDivElement>(function Facebo
       </div>
     </div>
   );
-}
+});
