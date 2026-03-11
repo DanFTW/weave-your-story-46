@@ -140,30 +140,6 @@ async function getAccessToken(connectionId: string): Promise<string | null> {
   }
 }
 
-async function validateFacebookToken(accessToken: string): Promise<void> {
-  // Check token is user-context
-  const meResp = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${accessToken}`);
-  const meData = await meResp.json();
-  console.log('Facebook /me response:', JSON.stringify(meData));
-
-  if (!meResp.ok || !meData.id) {
-    throw new Error('Facebook permission user_posts missing or token is not user-context. Reconnect Facebook and approve timeline access.');
-  }
-
-  console.log('Facebook token belongs to user:', meData.name, '(id:', meData.id + ')');
-
-  // Check permissions
-  const permResp = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${accessToken}`);
-  const permData = await permResp.json();
-  const permissions = permData?.data || [];
-  const granted = permissions.filter((p: any) => p.status === 'granted').map((p: any) => p.permission);
-  console.log('Facebook granted permissions:', granted.join(', '));
-
-  if (!granted.includes('user_posts')) {
-    throw new Error('Facebook permission user_posts missing or token is not user-context. Reconnect Facebook and approve timeline access.');
-  }
-}
-
 async function fetchFacebookPosts(connectionId: string): Promise<{ posts: FacebookPost[]; error?: string }> {
   try {
     const accessToken = await getAccessToken(connectionId);
@@ -172,21 +148,37 @@ async function fetchFacebookPosts(connectionId: string): Promise<{ posts: Facebo
       return { posts: [], error: 'No access token available' };
     }
 
-    try {
-      await validateFacebookToken(accessToken);
-    } catch (validationError) {
-      const msg = validationError instanceof Error ? validationError.message : 'Token validation failed';
-      console.error('Facebook token validation failed:', msg);
-      return { posts: [], error: msg };
+    // Step 1: Get managed pages
+    console.log('Fetching managed Facebook Pages via /me/accounts...');
+    const accountsResp = await fetch(
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${accessToken}`
+    );
+    const accountsData = await accountsResp.json();
+    console.log('/me/accounts status:', accountsResp.status, 'pages:', (accountsData?.data || []).length);
+
+    if (!accountsResp.ok) {
+      console.error('/me/accounts error:', JSON.stringify(accountsData).slice(0, 500));
+      return { posts: [], error: 'Failed to fetch Facebook Pages' };
     }
 
+    const pages = accountsData?.data || [];
+    if (pages.length === 0) {
+      return { posts: [], error: 'No Facebook Pages found. Please make sure you have a Facebook Page connected.' };
+    }
+
+    const page = pages[0];
+    const pageId = page.id;
+    const pageToken = page.access_token;
+    console.log('Using Facebook Page:', page.name, '(id:', pageId + ')');
+
+    // Step 2: Fetch page posts
     const allPosts: FacebookPost[] = [];
-    let url: string | null = `https://graph.facebook.com/v19.0/me/posts?fields=id,message,created_time,permalink_url&limit=100&access_token=${accessToken}`;
-    let page = 0;
+    let url: string | null = `https://graph.facebook.com/v19.0/${pageId}/posts?fields=id,message,created_time,permalink_url&limit=100&access_token=${pageToken}`;
+    let pageNum = 0;
 
     while (url) {
-      page++;
-      console.log(`Fetching Facebook posts page ${page}...`);
+      pageNum++;
+      console.log(`Fetching page posts page ${pageNum}...`);
       const response = await fetch(url);
       const responseText = await response.text();
       console.log('Graph API response status:', response.status, 'length:', responseText.length);
@@ -198,7 +190,7 @@ async function fetchFacebookPosts(connectionId: string): Promise<{ posts: Facebo
 
       const data = JSON.parse(responseText);
       const posts = data?.data || [];
-      console.log(`Page ${page}: got ${posts.length} posts`);
+      console.log(`Page ${pageNum}: got ${posts.length} posts`);
 
       for (const post of posts) {
         allPosts.push({
@@ -212,7 +204,7 @@ async function fetchFacebookPosts(connectionId: string): Promise<{ posts: Facebo
       url = data?.paging?.next || null;
     }
 
-    console.log('Total Facebook posts fetched:', allPosts.length);
+    console.log('Total Facebook Page posts fetched:', allPosts.length);
     return { posts: allPosts };
   } catch (error) {
     console.error('Error fetching Facebook posts:', error);
