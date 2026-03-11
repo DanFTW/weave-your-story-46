@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.instagram-analytics-poll]
 verify_jwt = false
+
+[functions.facebook-sync]
+verify_jwt = false
