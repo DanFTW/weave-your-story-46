@@ -254,6 +254,7 @@ async function pollPagePosts(
 
     let created = 0;
     for (const post of newPosts) {
+      if (!post.message) continue;
       const memory = formatPostAsMemory(post);
       const ok = await createMemory(apiKeys, memory);
       if (ok) {
