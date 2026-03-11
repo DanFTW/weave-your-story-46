@@ -1,115 +1,35 @@
+# Fix Facebook Sync: Direct Graph API + forwardRef warnings
 
+## Problem 1: Zero posts imported
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+The edge function uses `FACEBOOK_GET_PAGE_POSTS` (a Composio tool for Facebook Pages), but the connected account is a personal Facebook account. This returns empty results. Need to bypass Composio's tool and call the Facebook Graph API directly using the access token from the Composio connection.
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+## Problem 2: forwardRef warnings
 
-### 1. Database Tables (2 new tables via migration)
+## React warns about refs on `FacebookSyncFlow` and `FacebookSyncActive` function components. Wrap both with `React.forwardRef`.
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+## Changes
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+### 1. `supabase/functions/facebook-sync/index.ts` — rewrite `fetchFacebookPosts`
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+Replace the Composio `FACEBOOK_GET_PAGE_POSTS` call with:
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+1. **Get access token**: Follow the exact same access token retrieval pattern used in the existing `birthday-reminder` or `calendar-event-sync` edge functions.
+2. **Call Graph API directly**: `GET https://graph.facebook.com/v19.0/me/posts?fields=id,message,created_time,permalink_url&limit=100&access_token={token}`
+3. **Paginate**: Follow `paging.next` URLs until no more pages, collecting all posts.
+4. Keep the same `FacebookPost` interface and return type.
+5. Add logging for token retrieval, Graph API responses, and pagination.
 
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+### 2. `src/components/flows/facebook-sync/FacebookSyncFlow.tsx` — wrap with forwardRef
 
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
+Wrap the `FacebookSyncFlow` export with `React.forwardRef` so it can accept a ref without warning.
 
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+### 3. `src/components/flows/facebook-sync/FacebookSyncActive.tsx` — wrap with forwardRef
 
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+Wrap the `FacebookSyncActive` export with `React.forwardRef`.
 
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+### Files changed
 
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
-```
-
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
-
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
-
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
-
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
-
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
-
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
-
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
-
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
-
+- `supabase/functions/facebook-sync/index.ts`
+- `src/components/flows/facebook-sync/FacebookSyncFlow.tsx`
+- `src/components/flows/facebook-sync/FacebookSyncActive.tsx` No other files touched.
