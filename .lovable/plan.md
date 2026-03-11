@@ -1,115 +1,76 @@
+# Plan: "Website Link to Memory" Thread
 
+## Overview
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+Create a new thread that lets users paste a website URL, retrieve its content via Composio Search using Composio's FIRECRAWL tool, extract memory-worthy content, and review/save as LIAM memories.
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+## Architecture
 
-### 1. Database Tables (2 new tables via migration)
+```text
+User pastes URL
+  -> Edge function: website-scrape
+     -> Composio FIRECRAWL_SCRAPE_URL tool (via tools/execute API)
+     -> Returns markdown content
+  -> Edge function: generate-memories (existing)
+     -> AI extracts discrete memory statements from markdown
+  -> Frontend: FlowPreview (existing component)
+     -> User reviews, edits, deletes memories
+  -> useLiamMemory.createMemory (existing)
+     -> Saves each confirmed memory with tag 'WEBSITE'
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
-
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
-
-### 2. Edge Function: `restaurant-bookmark-sync`
-
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
-
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
-
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
-
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
-
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
-
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
-
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+## Files to Create
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+### 1. Edge Function: `supabase/functions/website-scrape/index.ts`
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+- Accepts `{ url: string }` in request body
+- Validates URL format server-side
+- Calls `https://backend.composio.dev/api/v3/tools/execute/FIRECRAWL_SCRAPE_URL` with COMPOSIO_API_KEY
+- No `connected_account_id` needed (Firecrawl is an API-key tool via Composio, not user-OAuth)
+- Returns scraped markdown content
+- Add `[functions.website-scrape] verify_jwt = false` to config.toml
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+### 2. Types: `src/types/websiteScrape.ts`
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+- `WebsiteScrapePhase`: `'input' | 'scraping' | 'generating' | 'preview' | 'success'`
+- `WebsiteScrapeResult`: `{ url, title, content, memoryCount }`
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+### 3. Hook: `src/hooks/useWebsiteScrape.ts`
 
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+- Manages phase state machine
+- `scrapeUrl(url)`: invokes `website-scrape` edge function, returns markdown
+- `generateMemories(content)`: calls existing `generate-memories` edge function to extract memory statements from the scraped markdown
+- `confirmMemories()`: iterates through confirmed memories, calls `createMemory` from `useLiamMemory` with tag `'WEBSITE'`
+- Manages `generatedMemories: GeneratedMemory[]` state for preview
 
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+### 4. Flow Components: `src/components/flows/website-scrape/`
 
-### 8. Wire trigger into memory save
+- `WebsiteScrapeFlow.tsx`: Main component. Header with teal gradient, back button to `/threads`. Renders phase-appropriate child component. No auth gating needed (Firecrawl via Composio doesn't require user OAuth).
+- `WebsiteUrlInput.tsx`: URL input field with validation, paste button, and "Extract Memories" CTA button.
+- `ScrapingScreen.tsx`: Animated loading screen while scraping + generating (reuses pattern from SyncingScreen).
+- `WebsiteScrapeSuccess.tsx`: Success screen showing count of saved memories with "Done" and "Scrape Another" buttons.
+- `index.ts`: Barrel export.
 
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+The preview/review phase reuses the existing `FlowPreview` component pattern (with `MemoryPreviewCard` for swipe-to-delete and tap-to-edit).
 
-### Summary of files to create/modify
+## Files to Modify
 
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
+### 5. Registration (minimal touchpoints)
 
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+- `src/types/threads.ts`: No changes needed (existing types suffice)
+- `src/types/flows.ts`: Add `isWebsiteScrapeFlow?: boolean`
+- `src/data/threads.ts`: Add thread entry `{ id: "website-scrape", title: "Website Link to Memory", icon: Globe, gradient: "teal", flowMode: "flow", triggerType: "manual", ... }`
+- `src/data/threadConfigs.ts`: Add `"website-scrape"` config with 3 steps: Paste Link (setup), Extract Memories (setup), Review & Save (save)
+- `src/data/flowConfigs.ts`: Add `"website-scrape"` entry with `isWebsiteScrapeFlow: true`, `memoryTag: "WEBSITE"`
+- `src/pages/Threads.tsx`: Add `'website-scrape'` to `flowEnabledThreads` array
+- `src/pages/ThreadOverview.tsx`: Add `'website-scrape'` to `flowEnabledThreads` array
+- `src/pages/FlowPage.tsx`: Import `WebsiteScrapeFlow`, add render block: `if (config.isWebsiteScrapeFlow) return <WebsiteScrapeFlow />;`
+- `supabase/config.toml`: Add `[functions.website-scrape]` entry
 
-**Database migration:** 2 tables + RLS policies
+## Technical Notes
 
+- **No database tables needed** — this is a stateless scrape-and-save manual flow inside `/threads` (no sync config, no dedup tracking, no monitoring state). Memories go directly to LIAM.
+- **No user OAuth required** — Firecrawl via Composio uses the project's COMPOSIO_API_KEY, not per-user connections.
+- **Content policy** — Only the extracted memory text goes to LIAM. Source URL is not embedded in memory content (per LIAM content policy). The URL could optionally be shown in the review/success UI as reference metadata, but not stored in the main LIAM content body.
+- **Composio FIRECRAWL tool call pattern** — Same as other Composio tools/execute calls in the project, but without `connected_account_id` (Firecrawl is a managed API key tool used here as the retrieval layer for the Website Link to Memory flow).
