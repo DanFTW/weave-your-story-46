@@ -333,6 +333,24 @@ export default function MemoryDetail() {
                 <span className="text-foreground capitalize">{memory.sensitivity}</span>
               </div>
             )}
+
+            {/* Facebook reference URL */}
+            {facebookUrl && (
+              <div className="flex items-center gap-3 text-sm">
+                <Facebook className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Source:</span>
+                <a
+                  href={facebookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  View on Facebook
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>
