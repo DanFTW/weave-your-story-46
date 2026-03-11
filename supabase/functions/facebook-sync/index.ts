@@ -140,12 +140,44 @@ async function getAccessToken(connectionId: string): Promise<string | null> {
   }
 }
 
-async function fetchFacebookPosts(connectionId: string): Promise<FacebookPost[]> {
+async function validateFacebookToken(accessToken: string): Promise<void> {
+  // Check token is user-context
+  const meResp = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${accessToken}`);
+  const meData = await meResp.json();
+  console.log('Facebook /me response:', JSON.stringify(meData));
+
+  if (!meResp.ok || !meData.id) {
+    throw new Error('Facebook permission user_posts missing or token is not user-context. Reconnect Facebook and approve timeline access.');
+  }
+
+  console.log('Facebook token belongs to user:', meData.name, '(id:', meData.id + ')');
+
+  // Check permissions
+  const permResp = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${accessToken}`);
+  const permData = await permResp.json();
+  const permissions = permData?.data || [];
+  const granted = permissions.filter((p: any) => p.status === 'granted').map((p: any) => p.permission);
+  console.log('Facebook granted permissions:', granted.join(', '));
+
+  if (!granted.includes('user_posts')) {
+    throw new Error('Facebook permission user_posts missing or token is not user-context. Reconnect Facebook and approve timeline access.');
+  }
+}
+
+async function fetchFacebookPosts(connectionId: string): Promise<{ posts: FacebookPost[]; error?: string }> {
   try {
     const accessToken = await getAccessToken(connectionId);
     if (!accessToken) {
       console.error('No access token available for Facebook');
-      return [];
+      return { posts: [], error: 'No access token available' };
+    }
+
+    try {
+      await validateFacebookToken(accessToken);
+    } catch (validationError) {
+      const msg = validationError instanceof Error ? validationError.message : 'Token validation failed';
+      console.error('Facebook token validation failed:', msg);
+      return { posts: [], error: msg };
     }
 
     const allPosts: FacebookPost[] = [];
@@ -181,10 +213,10 @@ async function fetchFacebookPosts(connectionId: string): Promise<FacebookPost[]>
     }
 
     console.log('Total Facebook posts fetched:', allPosts.length);
-    return allPosts;
+    return { posts: allPosts };
   } catch (error) {
     console.error('Error fetching Facebook posts:', error);
-    return [];
+    return { posts: [], error: error instanceof Error ? error.message : 'Unknown fetch error' };
   }
 }
 
@@ -203,8 +235,14 @@ async function syncFacebookContent(
       .eq('user_id', userId)
       .maybeSingle();
 
-    // Fetch posts
-    const posts = await fetchFacebookPosts(connectionId);
+    // Fetch posts with preflight validation
+    const { posts, error: fetchError } = await fetchFacebookPosts(connectionId);
+    
+    if (fetchError) {
+      console.error('Facebook fetch failed:', fetchError);
+      return { success: false, postsSynced: 0, memoriesCreated: 0, error: fetchError };
+    }
+
     console.log('Fetched Facebook posts count:', posts.length);
     
     if (posts.length === 0) {
