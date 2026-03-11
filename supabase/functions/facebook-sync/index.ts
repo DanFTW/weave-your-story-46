@@ -124,8 +124,14 @@ async function getAccessToken(connectionId: string): Promise<string | null> {
       return null;
     }
 
-    const data = await response.json();
-    const token = data?.connection_params?.access_token || data?.connectionParams?.access_token;
+    const responseData = await response.json();
+    const data = responseData.data || responseData;
+    console.log('Response keys:', Object.keys(data).join(', '));
+    const token =
+      data.access_token ||
+      data.params?.access_token ||
+      data.connectionParams?.access_token ||
+      data.connection_params?.access_token;
     console.log('Access token retrieved:', token ? 'yes' : 'no');
     return token || null;
   } catch (error) {
