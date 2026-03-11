@@ -393,6 +393,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "facebook-page-posts": {
+    id: "facebook-page-posts",
+    title: "Facebook Page Posts",
+    subtitle: "Automatic page post tracking",
+    description: "Connect Facebook to automatically save new posts from your Facebook Page as memories. Posts are tracked in real-time and saved with full text, date, and permalink.",
+    gradient: "blue",
+    icon: Facebook,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Facebook",
+        description: "Authorize access to your Pages",
+        iconUrl: "/src/assets/integrations/facebook.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Monitoring",
+        description: "Toggle page post tracking on/off",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Posts saved automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "facebook-sync": {
     id: "facebook-sync",
     title: "Facebook Dump",

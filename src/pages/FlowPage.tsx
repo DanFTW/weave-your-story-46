@@ -95,6 +95,9 @@ import { CoinbaseTradesFlow } from "@/components/flows/coinbase-trades";
 // Instagram Analytics components
 import { InstagramAnalyticsFlow } from "@/components/flows/instagram-analytics";
 
+// Facebook Page Posts components
+import { FacebookPagePostsFlow } from "@/components/flows/facebook-page-posts";
+
 // Facebook Sync components
 import { FacebookSyncFlow } from "@/components/flows/facebook-sync";
 
@@ -342,6 +345,12 @@ export default function FlowPage() {
 
   if (config.isInstagramAnalyticsFlow) {
     return <InstagramAnalyticsFlow />;
+  }
+
+  // === FACEBOOK PAGE POSTS FLOW RENDER ===
+
+  if (config.isFacebookPagePostsFlow) {
+    return <FacebookPagePostsFlow />;
   }
 
   // === FACEBOOK SYNC FLOW RENDER ===

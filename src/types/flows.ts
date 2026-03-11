@@ -54,6 +54,7 @@ export interface FlowConfig {
   isCoinbaseTradesFlow?: boolean; // If true, uses Coinbase Trades UI
   isInstagramAnalyticsFlow?: boolean; // If true, uses Instagram Analytics UI
   isFacebookSyncFlow?: boolean; // If true, uses Facebook Sync UI
+  isFacebookPagePostsFlow?: boolean; // If true, uses Facebook Page Posts UI
 }
 
 // Single data entry (e.g., one family member)
