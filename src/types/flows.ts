@@ -55,6 +55,7 @@ export interface FlowConfig {
   isInstagramAnalyticsFlow?: boolean; // If true, uses Instagram Analytics UI
   isFacebookSyncFlow?: boolean; // If true, uses Facebook Sync UI
   isFacebookPagePostsFlow?: boolean; // If true, uses Facebook Page Posts UI
+  isWebsiteScrapeFlow?: boolean; // If true, uses Website Scrape UI
 }
 
 // Single data entry (e.g., one family member)

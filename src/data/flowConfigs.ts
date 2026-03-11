@@ -598,6 +598,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     fields: [],
     isGrocerySheetSyncFlow: true,
   },
+  "website-scrape": {
+    id: "website-scrape",
+    title: "Website Link to Memory",
+    subtitle: "Extract from any webpage",
+    description: "Paste a URL and extract key facts, insights, and data as memories.",
+    gradient: "teal",
+    icon: Globe,
+    entryName: "website content",
+    entryNamePlural: "website contents",
+    memoryTag: "WEBSITE",
+    fields: [],
+    isWebsiteScrapeFlow: true,
+  },
 };
 
 export function getFlowConfig(flowId: string): FlowConfig | undefined {
