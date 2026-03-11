@@ -304,7 +304,7 @@ export function useLiamMemory(): UseLiamMemoryReturn {
         // Image fields from LIAM API (for memories created with create-with-image)
         imageDataBase64: m.imageDataBase64 || m.image || null,
         imageMimeType: m.imageMimeType || m.imageType || null,
-      }));
+      };});
       
       console.log('Transformed memories count:', memories.length);
       return memories;
