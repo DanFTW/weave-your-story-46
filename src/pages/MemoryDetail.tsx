@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock, Pencil, Mail, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock, Pencil, Mail, ArrowUpRight, ArrowDownLeft, ExternalLink, Facebook } from "lucide-react";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { Memory } from "@/types/memory";
@@ -10,6 +10,7 @@ import { TagSelectionSheet } from "@/components/memories/TagSelectionSheet";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { consolidateInstagramMemories } from "@/utils/consolidateInstagramMemories";
+import { supabase } from "@/integrations/supabase/client";
 
 // Parse email content into structured parts
 function parseEmailContent(content: string): {
@@ -118,6 +119,7 @@ export default function MemoryDetail() {
   const [memory, setMemory] = useState<Memory | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
+  const [facebookUrl, setFacebookUrl] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchMemory() {
@@ -151,6 +153,32 @@ export default function MemoryDetail() {
     }
     fetchMemory();
   }, [memoryId, isDeleted]);
+
+  // Fetch Facebook reference URL for FACEBOOK-tagged memories
+  useEffect(() => {
+    if (!memory || memory.tag?.toUpperCase() !== 'FACEBOOK') return;
+    async function fetchFacebookMeta() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from('facebook_synced_posts')
+        .select('permalink_url, post_message')
+        .eq('user_id', session.user.id)
+        .not('permalink_url', 'is', null)
+        .order('synced_at', { ascending: false })
+        .limit(200);
+      if (data) {
+        // Try exact match on post_message first
+        const exactMatch = data.find((row: any) => 
+          row.post_message && memory.content && row.post_message.trim() === memory.content.trim()
+        );
+        if (exactMatch?.permalink_url) {
+          setFacebookUrl(exactMatch.permalink_url);
+        }
+      }
+    }
+    fetchFacebookMeta();
+  }, [memory]);
 
   const handleForget = async () => {
     if (!memoryId) return;
@@ -329,6 +357,24 @@ export default function MemoryDetail() {
                 <Shield className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Sensitivity:</span>
                 <span className="text-foreground capitalize">{memory.sensitivity}</span>
+              </div>
+            )}
+
+            {/* Facebook reference URL */}
+            {facebookUrl && (
+              <div className="flex items-center gap-3 text-sm">
+                <Facebook className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Source:</span>
+                <a
+                  href={facebookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  View on Facebook
+                  <ExternalLink className="h-3 w-3" />
+                </a>
               </div>
             )}
           </div>

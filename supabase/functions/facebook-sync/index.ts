@@ -297,6 +297,8 @@ async function syncFacebookContent(
           .insert({
             user_id: userId,
             facebook_post_id: post.id,
+            permalink_url: post.permalink_url || null,
+            post_message: post.message || null,
           });
         memoriesCreated++;
         console.log('Memory created successfully for post:', post.id);
@@ -336,14 +338,7 @@ async function syncFacebookContent(
 }
 
 function formatPostAsMemory(post: FacebookPost): string {
-  let memory = post.message!;
-
-  const meta: string[] = ['Source: Facebook Page', `Post ID: ${post.id}`];
-  if (post.permalink_url) meta.push(`URL: ${post.permalink_url}`);
-
-  memory += '\n\n---\n' + meta.join(' | ');
-
-  return memory;
+  return post.message!.trim();
 }
 
 // LIAM API integration with cryptographic signing
