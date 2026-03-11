@@ -371,6 +371,12 @@ export default function FlowPage() {
     return <WebsiteScrapeFlow />;
   }
 
+  // === LINKEDIN PROFILE SCRAPE FLOW RENDER ===
+
+  if (config.isLinkedInProfileScrapeFlow) {
+    return <LinkedInProfileScrapeFlow />;
+  }
+
   // === RECEIPT FLOW RENDER ===
   
   if (config.isReceiptFlow) {

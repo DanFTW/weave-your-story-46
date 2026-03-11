@@ -1072,6 +1072,37 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "linkedin-profile-scrape": {
+    id: "linkedin-profile-scrape",
+    title: "LinkedIn Profile to Memory",
+    subtitle: "Extract from a LinkedIn profile",
+    description: "Paste a LinkedIn profile URL and we'll extract their experience, education, skills, and more as structured memories you can search and reuse.",
+    gradient: "blue",
+    icon: UserPlus,
+    steps: [
+      {
+        id: "paste",
+        type: "setup",
+        title: "Enter Profile URL",
+        description: "Paste the LinkedIn profile URL you want to extract from",
+        icon: ClipboardPaste,
+      },
+      {
+        id: "extract",
+        type: "setup",
+        title: "Extract Profile",
+        description: "AI reads the profile and identifies key information",
+        icon: Search,
+      },
+      {
+        id: "review",
+        type: "save",
+        title: "Save to Memory",
+        description: "Review, edit, or confirm extracted memories",
+        icon: CheckCircle2,
+      },
+    ],
+  },
   "website-scrape": {
     id: "website-scrape",
     title: "Website Link to Memory",
