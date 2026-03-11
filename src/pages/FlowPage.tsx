@@ -104,6 +104,9 @@ import { FacebookSyncFlow } from "@/components/flows/facebook-sync";
 // Website Scrape components
 import { WebsiteScrapeFlow } from "@/components/flows/website-scrape";
 
+// LinkedIn Profile Scrape components
+import { LinkedInProfileScrapeFlow } from "@/components/flows/linkedin-profile-scrape";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -366,6 +369,12 @@ export default function FlowPage() {
 
   if (config.isWebsiteScrapeFlow) {
     return <WebsiteScrapeFlow />;
+  }
+
+  // === LINKEDIN PROFILE SCRAPE FLOW RENDER ===
+
+  if (config.isLinkedInProfileScrapeFlow) {
+    return <LinkedInProfileScrapeFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

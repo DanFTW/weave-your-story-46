@@ -56,6 +56,7 @@ export interface FlowConfig {
   isFacebookSyncFlow?: boolean; // If true, uses Facebook Sync UI
   isFacebookPagePostsFlow?: boolean; // If true, uses Facebook Page Posts UI
   isWebsiteScrapeFlow?: boolean; // If true, uses Website Scrape UI
+  isLinkedInProfileScrapeFlow?: boolean; // If true, uses LinkedIn Profile Scrape UI
 }
 
 // Single data entry (e.g., one family member)
