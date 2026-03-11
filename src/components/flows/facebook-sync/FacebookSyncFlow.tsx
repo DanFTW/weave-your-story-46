@@ -23,7 +23,7 @@ function FacebookLogo({ className }: { className?: string }) {
   );
 }
 
-export function FacebookSyncFlow() {
+export const FacebookSyncFlow = React.forwardRef<HTMLDivElement>(function FacebookSyncFlow(_props, ref) {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const facebook = useComposio('FACEBOOK');
