@@ -107,6 +107,7 @@ export function getCategoryConfig(category?: string, tag?: string, content?: str
   if (combined.includes('instagram')) return categoryConfig.instagram;
   if (combined.includes('twitter') || combined.includes('tweet')) return categoryConfig.twitter;
   if (combined.includes('fireflies')) return categoryConfig.fireflies;
+  if (combined.includes('facebook')) return categoryConfig.facebook;
   
   // Content-based fallback for fireflies
   if (content && content.toLowerCase().includes('fireflies')) return categoryConfig.fireflies;
