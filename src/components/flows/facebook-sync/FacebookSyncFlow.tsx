@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useFacebookSync } from "@/hooks/useFacebookSync";

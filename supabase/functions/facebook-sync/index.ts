@@ -112,73 +112,70 @@ serve(async (req) => {
   }
 });
 
-async function fetchFacebookPosts(connectionId: string): Promise<FacebookPost[]> {
+async function getAccessToken(connectionId: string): Promise<string | null> {
   try {
-    console.log('Fetching Facebook posts via Composio...');
-    
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/FACEBOOK_GET_PAGE_POSTS', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': COMPOSIO_API_KEY!,
-      },
-      body: JSON.stringify({
-        connected_account_id: connectionId,
-        arguments: {
-          fields: 'id,message,created_time,permalink_url,type,status_type',
-          limit: 100,
-        },
-      }),
+    console.log('Fetching access token from Composio for connection:', connectionId);
+    const response = await fetch(`https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`, {
+      headers: { 'x-api-key': COMPOSIO_API_KEY! },
     });
 
-    const responseText = await response.text();
-    console.log('Facebook API response status:', response.status);
-    console.log('Facebook API response (first 2000):', responseText.slice(0, 2000));
-
     if (!response.ok) {
-      console.error('Failed to fetch Facebook posts:', responseText);
+      console.error('Failed to fetch connected account:', response.status, await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    const token = data?.connection_params?.access_token || data?.connectionParams?.access_token;
+    console.log('Access token retrieved:', token ? 'yes' : 'no');
+    return token || null;
+  } catch (error) {
+    console.error('Error getting access token:', error);
+    return null;
+  }
+}
+
+async function fetchFacebookPosts(connectionId: string): Promise<FacebookPost[]> {
+  try {
+    const accessToken = await getAccessToken(connectionId);
+    if (!accessToken) {
+      console.error('No access token available for Facebook');
       return [];
     }
 
-    const data = JSON.parse(responseText);
-    const posts: FacebookPost[] = [];
+    const allPosts: FacebookPost[] = [];
+    let url: string | null = `https://graph.facebook.com/v19.0/me/posts?fields=id,message,created_time,permalink_url&limit=100&access_token=${accessToken}`;
+    let page = 0;
 
-    // Parse Composio v3 response - handle multiple possible structures
-    let postsData: any[] = [];
-    const responseData = data?.data || data;
+    while (url) {
+      page++;
+      console.log(`Fetching Facebook posts page ${page}...`);
+      const response = await fetch(url);
+      const responseText = await response.text();
+      console.log('Graph API response status:', response.status, 'length:', responseText.length);
 
-    const possiblePaths = [
-      responseData?.response_data?.data,
-      responseData?.response_data,
-      responseData?.data?.data,
-      responseData?.data,
-      responseData?.result?.data,
-      responseData?.result,
-      responseData,
-    ];
-
-    for (const path of possiblePaths) {
-      if (Array.isArray(path) && path.length > 0) {
-        postsData = path;
-        console.log('Found posts array, count:', postsData.length);
+      if (!response.ok) {
+        console.error('Graph API error:', responseText.slice(0, 1000));
         break;
       }
+
+      const data = JSON.parse(responseText);
+      const posts = data?.data || [];
+      console.log(`Page ${page}: got ${posts.length} posts`);
+
+      for (const post of posts) {
+        allPosts.push({
+          id: post.id,
+          message: post.message || '',
+          created_time: post.created_time || new Date().toISOString(),
+          permalink_url: post.permalink_url,
+        });
+      }
+
+      url = data?.paging?.next || null;
     }
 
-    console.log('Parsed Facebook posts count:', postsData.length);
-
-    for (const post of postsData) {
-      posts.push({
-        id: post.id || String(Date.now()),
-        message: post.message || '',
-        created_time: post.created_time || new Date().toISOString(),
-        permalink_url: post.permalink_url,
-        type: post.type,
-        status_type: post.status_type,
-      });
-    }
-
-    return posts;
+    console.log('Total Facebook posts fetched:', allPosts.length);
+    return allPosts;
   } catch (error) {
     console.error('Error fetching Facebook posts:', error);
     return [];
