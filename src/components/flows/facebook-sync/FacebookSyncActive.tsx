@@ -97,4 +97,5 @@ export const FacebookSyncActive = React.forwardRef<HTMLDivElement, FacebookSyncA
       </div>
     </div>
   );
-}
+  }
+);
