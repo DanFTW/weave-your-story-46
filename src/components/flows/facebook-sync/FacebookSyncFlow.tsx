@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useFacebookSync } from "@/hooks/useFacebookSync";
@@ -23,7 +23,7 @@ function FacebookLogo({ className }: { className?: string }) {
   );
 }
 
-export function FacebookSyncFlow() {
+export const FacebookSyncFlow = React.forwardRef<HTMLDivElement>(function FacebookSyncFlow(_props, ref) {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const facebook = useComposio('FACEBOOK');
@@ -143,4 +143,4 @@ export function FacebookSyncFlow() {
       </div>
     </div>
   );
-}
+});

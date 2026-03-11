@@ -1,3 +1,4 @@
+import React from "react";
 import { format } from "date-fns";
 import { RefreshCw, FileText, MessageSquare, Calendar, Loader2, RotateCcw, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,13 +12,14 @@ interface FacebookSyncActiveProps {
   onResetSync?: () => void;
 }
 
-export function FacebookSyncActive({
-  syncConfig,
-  isSyncing,
-  lastSyncResult,
-  onSyncNow,
-  onResetSync,
-}: FacebookSyncActiveProps) {
+export const FacebookSyncActive = React.forwardRef<HTMLDivElement, FacebookSyncActiveProps>(
+  function FacebookSyncActive({
+    syncConfig,
+    isSyncing,
+    lastSyncResult,
+    onSyncNow,
+    onResetSync,
+  }, ref) {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
@@ -95,4 +97,5 @@ export function FacebookSyncActive({
       </div>
     </div>
   );
-}
+  }
+);
