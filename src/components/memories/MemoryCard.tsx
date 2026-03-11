@@ -71,6 +71,7 @@ export const categoryConfig: Record<string, { icon: React.ComponentType<{ classN
   instagram: { icon: Instagram, gradient: "bg-gradient-to-r from-pink-500 via-purple-500 to-orange-400", label: "Instagram" },
   twitter: { icon: Twitter, gradient: "bg-gradient-to-r from-gray-900 to-black", label: "Twitter" },
   fireflies: { icon: Mic, gradient: "bg-gradient-to-r from-purple-500 to-pink-500", label: "Fireflies Transcript Tracker" },
+  facebook: { icon: Facebook, gradient: "bg-gradient-to-r from-blue-600 to-blue-500", label: "Facebook" },
 };
 
 export function getCategoryConfig(category?: string, tag?: string, content?: string) {
