@@ -367,6 +367,8 @@ export type Database = {
           facebook_post_id: string
           id: string
           memory_id: string | null
+          permalink_url: string | null
+          post_message: string | null
           synced_at: string | null
           user_id: string
         }
@@ -374,6 +376,8 @@ export type Database = {
           facebook_post_id: string
           id?: string
           memory_id?: string | null
+          permalink_url?: string | null
+          post_message?: string | null
           synced_at?: string | null
           user_id: string
         }
@@ -381,6 +385,8 @@ export type Database = {
           facebook_post_id?: string
           id?: string
           memory_id?: string | null
+          permalink_url?: string | null
+          post_message?: string | null
           synced_at?: string | null
           user_id?: string
         }
