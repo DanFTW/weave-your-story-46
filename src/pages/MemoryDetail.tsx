@@ -154,6 +154,32 @@ export default function MemoryDetail() {
     fetchMemory();
   }, [memoryId, isDeleted]);
 
+  // Fetch Facebook reference URL for FACEBOOK-tagged memories
+  useEffect(() => {
+    if (!memory || memory.tag?.toUpperCase() !== 'FACEBOOK') return;
+    async function fetchFacebookMeta() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from('facebook_synced_posts')
+        .select('permalink_url, post_message')
+        .eq('user_id', session.user.id)
+        .not('permalink_url', 'is', null)
+        .order('synced_at', { ascending: false })
+        .limit(200);
+      if (data) {
+        // Try exact match on post_message first
+        const exactMatch = data.find((row: any) => 
+          row.post_message && memory.content && row.post_message.trim() === memory.content.trim()
+        );
+        if (exactMatch?.permalink_url) {
+          setFacebookUrl(exactMatch.permalink_url);
+        }
+      }
+    }
+    fetchFacebookMeta();
+  }, [memory]);
+
   const handleForget = async () => {
     if (!memoryId) return;
     
