@@ -213,10 +213,10 @@ async function fetchFacebookPosts(connectionId: string): Promise<{ posts: Facebo
     }
 
     console.log('Total Facebook posts fetched:', allPosts.length);
-    return allPosts;
+    return { posts: allPosts };
   } catch (error) {
     console.error('Error fetching Facebook posts:', error);
-    return [];
+    return { posts: [], error: error instanceof Error ? error.message : 'Unknown fetch error' };
   }
 }
 
