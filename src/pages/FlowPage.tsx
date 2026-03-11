@@ -95,6 +95,9 @@ import { CoinbaseTradesFlow } from "@/components/flows/coinbase-trades";
 // Instagram Analytics components
 import { InstagramAnalyticsFlow } from "@/components/flows/instagram-analytics";
 
+// Facebook Sync components
+import { FacebookSyncFlow } from "@/components/flows/facebook-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -339,6 +342,12 @@ export default function FlowPage() {
 
   if (config.isInstagramAnalyticsFlow) {
     return <InstagramAnalyticsFlow />;
+  }
+
+  // === FACEBOOK SYNC FLOW RENDER ===
+
+  if (config.isFacebookSyncFlow) {
+    return <FacebookSyncFlow />;
   }
 
   // === RECEIPT FLOW RENDER ===

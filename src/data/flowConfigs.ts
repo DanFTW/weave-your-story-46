@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3 } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -157,6 +157,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "TWITTER",
     fields: [],
     isTwitterSyncFlow: true,
+  },
+  "facebook-sync": {
+    id: "facebook-sync",
+    title: "Facebook Dump",
+    subtitle: "Import posts as memories",
+    description: "Save your Facebook posts as searchable memories.",
+    gradient: "blue",
+    icon: Facebook,
+    entryName: "post",
+    entryNamePlural: "posts",
+    memoryTag: "FACEBOOK",
+    fields: [],
+    isFacebookSyncFlow: true,
   },
   "instagram-sync": {
     id: "instagram-sync",

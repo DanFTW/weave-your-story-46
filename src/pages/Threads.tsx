@@ -17,7 +17,7 @@ const flowEnabledThreads = [
   'linkedin-live', 'trello-tracker', 'hubspot-tracker', 'twitter-alpha-tracker',
   'todoist-task-tracker', 'fireflies-tracker', 'googledrive-tracker', 'discord-tracker',
   'birthday-reminder', 'calendar-event-sync', 'restaurant-bookmark-sync', 'grocery-sheet-sync',
-  'coinbase-trades', 'instagram-analytics'
+  'coinbase-trades', 'instagram-analytics', 'facebook-sync'
 ];
 
 type FlowModeFilter = "all" | "thread" | "flow" | "dump";

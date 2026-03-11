@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3 } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
@@ -53,6 +53,19 @@ export const sampleThreads: Thread[] = [
     integrations: ["googlemaps"],
     triggerType: "automatic",
     flowMode: "thread",
+  },
+  {
+    id: "facebook-sync",
+    title: "Facebook Dump",
+    description: "Save your Facebook posts as memories",
+    icon: Facebook,
+    gradient: "blue",
+    status: "active",
+    type: "automation",
+    category: "social",
+    integrations: ["facebook"],
+    triggerType: "manual",
+    flowMode: "dump",
   },
   {
     id: "calendar-event-sync",

@@ -293,6 +293,69 @@ export type Database = {
         }
         Relationships: []
       }
+      facebook_sync_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_sync_at: string | null
+          last_synced_post_id: string | null
+          memories_created_count: number
+          posts_synced_count: number
+          sync_posts: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_sync_at?: string | null
+          last_synced_post_id?: string | null
+          memories_created_count?: number
+          posts_synced_count?: number
+          sync_posts?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_sync_at?: string | null
+          last_synced_post_id?: string | null
+          memories_created_count?: number
+          posts_synced_count?: number
+          sync_posts?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      facebook_synced_posts: {
+        Row: {
+          facebook_post_id: string
+          id: string
+          memory_id: string | null
+          synced_at: string | null
+          user_id: string
+        }
+        Insert: {
+          facebook_post_id: string
+          id?: string
+          memory_id?: string | null
+          synced_at?: string | null
+          user_id: string
+        }
+        Update: {
+          facebook_post_id?: string
+          id?: string
+          memory_id?: string | null
+          synced_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       fireflies_automation_config: {
         Row: {
           created_at: string
