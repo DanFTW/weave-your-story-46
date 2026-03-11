@@ -55,6 +55,12 @@ serve(async (req) => {
     }
 
     const profile = profiles[0];
+
+    // Check for Apify-level errors returned as data (e.g. free plan restrictions)
+    if (profile.error) {
+      console.error('Apify actor error:', profile.error);
+      throw new Error(typeof profile.error === 'string' ? profile.error : 'Apify actor returned an error');
+    }
     
     // Try multiple possible field names for the name
     const name = profile.fullName 
