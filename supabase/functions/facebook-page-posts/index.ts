@@ -279,15 +279,7 @@ async function pollPagePosts(
 }
 
 function formatPostAsMemory(post: FacebookPost): string {
-  const date = new Date(post.created_time).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
-  let memory = `Facebook Page Post\nPosted on ${date}`;
-  memory += post.message ? '\n\n' + post.message : '\n\n[No text content]';
-  const meta: string[] = ['Source: Facebook Page', `Post ID: ${post.id}`];
-  if (post.permalink_url) meta.push(`URL: ${post.permalink_url}`);
-  memory += '\n\n' + meta.join(' | ');
-  return memory;
+  return post.message!.trim();
 }
 
 // LIAM API integration with cryptographic signing
