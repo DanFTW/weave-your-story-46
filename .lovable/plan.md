@@ -1,115 +1,75 @@
+# Plan: "LinkedIn Profile to Memory" Thread
 
+## Overview
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+Create a new manual flow thread that lets users paste a LinkedIn profile URL, scrape it via the Apify actor `dev_fusion/linkedin-profile-scraper`, extract memory-worthy profile data, and review/save as LIAM memories. This follows the identical architecture as the existing "Website Link to Memory" thread.
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+## Architecture
 
-### 1. Database Tables (2 new tables via migration)
+User pastes LinkedIn profile URL  
+-> Edge function: linkedin-profile-scrape  
+-> Apify actor: dev_fusion/linkedin-profile-scraper  
+-> Returns structured profile JSON  
+-> Edge function: generate-memories (existing)  
+-> AI extracts discrete memory statements from profile data  
+-> Frontend: Preview phase (existing MemoryPreviewCard pattern)  
+-> User reviews, edits, deletes memories  
+-> useLiamMemory.createMemory (existing)  
+-> Saves each confirmed memory with tag 'LINKEDIN'
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+## Secret Required
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+An **Apify API token** is needed to call the actor. No `APIFY_TOKEN` secret currently exists — we will need to add one before the edge function can work.
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+## Files to Create
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+### 1. Edge Function: `supabase/functions/linkedin-profile-scrape/index.ts`
 
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+- Accepts `{ url: string }` in request body
+- Validates that the URL is a LinkedIn profile URL (`linkedin.com/in/...`)
+- Calls the Apify actor `dev_fusion/linkedin-profile-scraper` via the Apify API (`POST https://api.apify.com/v2/acts/dev_fusion~linkedin-profile-scraper/run-sync-get-dataset-items`)
+- Uses `APIFY_TOKEN` from env
+- Formats the structured profile JSON (name, headline, summary, experience, education, skills, etc.) into a clean text block suitable for memory generation
+- Returns the formatted content and the person's name as title
 
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
+### 2. Types: `src/types/linkedinProfileScrape.ts`
 
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+- `LinkedInProfileScrapePhase`: `'input' | 'scraping' | 'generating' | 'preview' | 'success'` (mirrors `WebsiteScrapePhase`)
+- `LinkedInProfileScrapeResult`: `{ url, name, memoryCount }`
 
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+### 3. Hook: `src/hooks/useLinkedInProfileScrape.ts`
 
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+- Same state machine pattern as `useWebsiteScrape`
+- `scrapeAndGenerate(url)`: invokes `linkedin-profile-scrape` edge function, then `generate-memories` with flowType `'linkedin-profile'` and memoryTag `'LINKEDIN'`
+- `confirmMemories()`: saves via `createMemory` with tag `'LINKEDIN'`
+- Manages `generatedMemories`, `isSaving`, `phase`, `lastResult`, `reset`
 
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+### 4. Flow Components: `src/components/flows/linkedin-profile-scrape/`
 
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+All components mirror the website-scrape counterparts with LinkedIn-specific copy and the `blue` gradient (matching the existing LinkedIn thread styling):
 
-### 6. Registration (data + routing)
+- `LinkedInProfileScrapeFlow.tsx`: Main component with `thread-gradient-blue` header, circular back button, preview phase with `MemoryPreviewCard` list and fixed confirm button. Identical structure to `WebsiteScrapeFlow`.
+- `LinkedInUrlInput.tsx`: URL input with LinkedIn icon, validation for `linkedin.com/in/` URLs, paste button, "Extract Profile" CTA. Same layout as `WebsiteUrlInput`.
+- `LinkedInScrapingScreen.tsx`: Full-screen `thread-gradient-blue` loading screen with LinkedIn icon. Same pattern as `ScrapingScreen`.
+- `LinkedInProfileSuccess.tsx`: Success screen with person's name, memory count, "Scrape Another" and "Done" buttons. Same pattern as `WebsiteScrapeSuccess`.
+- `index.ts`: Barrel export.
 
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
-```
+## Files to Modify
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+### 5. Registration
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+- `src/types/flows.ts`: Add `isLinkedInProfileScrapeFlow?: boolean`
+- `src/data/threads.ts`: Add thread entry `{ id: "linkedin-profile-scrape", title: "LinkedIn Profile to Memory", description: "Extract memory-like information from a LinkedIn profile", icon: UserPlus, gradient: "blue", flowMode: "flow", triggerType: "manual", type: "flow", category: "professional", integrations: ["linkedin"], status: "active" }`
+- `src/data/threadConfigs.ts`: Add `"linkedin-profile-scrape"` config with 3 steps: Enter Profile URL (setup), Extract Profile (setup), Save to Memory (save)
+- `src/data/flowConfigs.ts`: Add `"linkedin-profile-scrape"` entry with `isLinkedInProfileScrapeFlow: true`, `memoryTag: "LINKEDIN"`
+- `src/pages/Threads.tsx`: Add `'linkedin-profile-scrape'` to `flowEnabledThreads`
+- `src/pages/ThreadOverview.tsx`: Add `'linkedin-profile-scrape'` to `flowEnabledThreads`
+- `src/pages/FlowPage.tsx`: Import `LinkedInProfileScrapeFlow`, add render block for `config.isLinkedInProfileScrapeFlow`
+- `supabase/config.toml`: Add `[functions.linkedin-profile-scrape] verify_jwt = false`
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+## Technical Notes
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
-
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
-
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
-
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
-
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
-
+- **Apify API pattern**: `POST https://api.apify.com/v2/acts/dev_fusion~linkedin-profile-scraper/run-sync-get-dataset-items?token={APIFY_TOKEN}` with body `{ "profileUrls": ["https://linkedin.com/in/..."] }`. Returns an array of profile objects.
+- **Content formatting for LIAM**: The edge function will compose a clean text summary from the structured profile data (name, headline, summary, experience entries, education, skills) — following the content policy of sending only primary text, no metadata footers.
+- **No database tables needed** — stateless manual flow, same as website-scrape.
+- **No user OAuth required** — uses the project's Apify API token.
