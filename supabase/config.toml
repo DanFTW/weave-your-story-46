@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.facebook-sync]
 verify_jwt = false
+
+[functions.facebook-page-posts]
+verify_jwt = false

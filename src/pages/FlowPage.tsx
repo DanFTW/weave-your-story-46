@@ -347,6 +347,12 @@ export default function FlowPage() {
     return <InstagramAnalyticsFlow />;
   }
 
+  // === FACEBOOK PAGE POSTS FLOW RENDER ===
+
+  if (config.isFacebookPagePostsFlow) {
+    return <FacebookPagePostsFlow />;
+  }
+
   // === FACEBOOK SYNC FLOW RENDER ===
 
   if (config.isFacebookSyncFlow) {
