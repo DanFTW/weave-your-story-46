@@ -32,7 +32,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
   const [isConnected, setIsConnected] = useState(false);
   
   // Refs for polling
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollingStartTimeRef = useRef<number>(0);
   const pendingConnectionIdRef = useRef<string | null>(null);
 
