@@ -359,6 +359,12 @@ export default function FlowPage() {
     return <FacebookSyncFlow />;
   }
 
+  // === WEBSITE SCRAPE FLOW RENDER ===
+
+  if (config.isWebsiteScrapeFlow) {
+    return <WebsiteScrapeFlow />;
+  }
+
   // === RECEIPT FLOW RENDER ===
   
   if (config.isReceiptFlow) {
