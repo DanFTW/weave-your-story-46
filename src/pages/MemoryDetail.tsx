@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock, Pencil, Mail, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { ChevronLeft, Sparkles, Calendar, Tag, Shield, Clock, Pencil, Mail, ArrowUpRight, ArrowDownLeft, ExternalLink, Facebook } from "lucide-react";
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 import { useDeletedMemories } from "@/hooks/useDeletedMemories";
 import { Memory } from "@/types/memory";
@@ -10,6 +10,7 @@ import { TagSelectionSheet } from "@/components/memories/TagSelectionSheet";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { consolidateInstagramMemories } from "@/utils/consolidateInstagramMemories";
+import { supabase } from "@/integrations/supabase/client";
 
 // Parse email content into structured parts
 function parseEmailContent(content: string): {
