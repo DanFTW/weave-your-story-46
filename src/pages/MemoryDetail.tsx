@@ -119,6 +119,7 @@ export default function MemoryDetail() {
   const [memory, setMemory] = useState<Memory | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
+  const [facebookUrl, setFacebookUrl] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchMemory() {
