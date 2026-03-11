@@ -286,9 +286,16 @@ export function useLiamMemory(): UseLiamMemoryReturn {
       const rawMemories = data?.data?.memories || data?.memories || [];
       console.log('Raw memories count:', rawMemories.length);
       
-      // Transform API response to our Memory interface
-      const memories: Memory[] = rawMemories.map((m: any, index: number) => ({
-        id: m.transactionNumber || m.queryHash || `memory-${index}`,
+      const seenIds = new Set<string>();
+      const memories: Memory[] = rawMemories.map((m: any, index: number) => {
+        let id = m.transactionNumber || m.queryHash || `memory-${index}`;
+        // Ensure unique keys — LIAM can return multiple fragments per transactionNumber
+        if (seenIds.has(id)) {
+          id = `${id}-${index}`;
+        }
+        seenIds.add(id);
+        return {
+        id,
         content: m.memory || m.content || '',
         tag: m.notesKey || m.tag || undefined,
         createdAt: parseApiDate(m.date),
