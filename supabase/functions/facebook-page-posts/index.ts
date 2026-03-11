@@ -261,6 +261,8 @@ async function pollPagePosts(
         await supabase.from('facebook_synced_posts').insert({
           user_id: userId,
           facebook_post_id: post.id,
+          permalink_url: post.permalink_url || null,
+          post_message: post.message || null,
         });
         created++;
       }
