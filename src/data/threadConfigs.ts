@@ -393,6 +393,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "facebook-sync": {
+    id: "facebook-sync",
+    title: "Facebook Dump",
+    subtitle: "Import your posts as memories",
+    description: "Connect Facebook to save your posts as searchable memories. Each post becomes a memory with full text, date, and metadata.",
+    gradient: "blue",
+    icon: Facebook,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Facebook",
+        description: "Authorize access to your account",
+        iconUrl: "/src/assets/integrations/facebook.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Choose Content",
+        description: "Review import settings",
+        icon: Settings,
+      },
+      {
+        id: "sync",
+        type: "save",
+        title: "Active Sync",
+        description: "Content saved automatically",
+        icon: Wifi,
+        badge: "WEAVE FABRIC",
+      },
+    ],
+  },
   "instagram-sync": {
     id: "instagram-sync",
     title: "Instagram Dump",
