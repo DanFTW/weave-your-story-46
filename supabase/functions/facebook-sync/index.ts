@@ -235,8 +235,14 @@ async function syncFacebookContent(
       .eq('user_id', userId)
       .maybeSingle();
 
-    // Fetch posts
-    const posts = await fetchFacebookPosts(connectionId);
+    // Fetch posts with preflight validation
+    const { posts, error: fetchError } = await fetchFacebookPosts(connectionId);
+    
+    if (fetchError) {
+      console.error('Facebook fetch failed:', fetchError);
+      return { success: false, postsSynced: 0, memoriesCreated: 0, error: fetchError };
+    }
+
     console.log('Fetched Facebook posts count:', posts.length);
     
     if (posts.length === 0) {
