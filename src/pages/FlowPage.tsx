@@ -101,6 +101,9 @@ import { FacebookPagePostsFlow } from "@/components/flows/facebook-page-posts";
 // Facebook Sync components
 import { FacebookSyncFlow } from "@/components/flows/facebook-sync";
 
+// Website Scrape components
+import { WebsiteScrapeFlow } from "@/components/flows/website-scrape";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
