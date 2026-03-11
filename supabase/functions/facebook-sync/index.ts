@@ -282,6 +282,10 @@ async function syncFacebookContent(
     let memoriesCreated = 0;
 
     for (const post of postsToSync) {
+      if (!post.message) {
+        console.log('Skipping post with no message:', post.id);
+        continue;
+      }
       const memory = formatPostAsMemory(post);
       console.log('Creating memory for post:', post.id, 'content preview:', memory.slice(0, 100));
       
