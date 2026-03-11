@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Globe, ClipboardPaste, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 interface WebsiteUrlInputProps {
   onSubmit: (url: string) => void;
@@ -52,12 +53,12 @@ export function WebsiteUrlInput({ onSubmit }: WebsiteUrlInputProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex-1 flex flex-col px-6 pt-8"
+      className="flex-1 flex flex-col px-5 pt-8"
     >
       {/* Illustration */}
       <div className="flex flex-col items-center mb-8">
-        <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mb-4">
-          <Globe className="w-8 h-8 text-accent" />
+        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+          <Globe className="w-8 h-8 text-primary" />
         </div>
         <h2 className="text-xl font-bold text-foreground text-center mb-2">
           Paste a website link
@@ -97,30 +98,14 @@ export function WebsiteUrlInput({ onSubmit }: WebsiteUrlInputProps) {
 
       {/* Submit Button */}
       <div className="mt-auto pb-8">
-        <button
+        <Button
           onClick={handleSubmit}
           disabled={!url.trim()}
-          className="w-full h-[52px] rounded-[18px] font-bold text-base text-white disabled:opacity-40 transition-all"
-          style={{
-            padding: '2px',
-            background: url.trim()
-              ? 'radial-gradient(ellipse 108.65% 103.45% at 50.00% 109.62%, #FF543E 0%, #1050C5 60%)'
-              : undefined,
-            backgroundColor: url.trim() ? undefined : 'hsl(var(--muted))',
-          }}
+          className="w-full h-14 text-base font-semibold rounded-2xl gap-2"
         >
-          <div 
-            className="w-full h-full rounded-[16px] flex items-center justify-center gap-2"
-            style={{
-              background: url.trim()
-                ? 'radial-gradient(ellipse 100.00% 52.73% at 50.00% 0.00%, #1074C5 0%, rgba(16, 79, 197, 0.50) 100%)'
-                : undefined,
-            }}
-          >
-            <span>Extract Memories</span>
-            <ArrowRight className="w-4 h-4" />
-          </div>
-        </button>
+          Extract Memories
+          <ArrowRight className="w-5 h-5" />
+        </Button>
       </div>
     </motion.div>
   );

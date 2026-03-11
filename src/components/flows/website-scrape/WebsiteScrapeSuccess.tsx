@@ -1,5 +1,6 @@
-import { motion } from "framer-motion";
 import { CheckCircle2, Globe, ArrowRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 interface WebsiteScrapeSuccessProps {
   memoryCount: number;
@@ -9,75 +10,49 @@ interface WebsiteScrapeSuccessProps {
 }
 
 export function WebsiteScrapeSuccess({ memoryCount, url, onScrapeAnother, onDone }: WebsiteScrapeSuccessProps) {
-  // Show a truncated domain for display
   let displayUrl = url;
   try {
     displayUrl = new URL(url.startsWith('http') ? url : `https://${url}`).hostname;
   } catch { /* keep original */ }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6">
-      <motion.div
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", duration: 0.6 }}
-        className="mb-6"
-      >
-        <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center">
-          <CheckCircle2 className="w-10 h-10 text-green-500" />
-        </div>
-      </motion.div>
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
+      <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+        <CheckCircle2 className="w-10 h-10 text-primary" />
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="flex flex-col items-center gap-2 mb-2"
+        className="flex flex-col items-center gap-2 mb-8"
       >
-        <h3 className="text-xl font-bold text-foreground">
-          {memoryCount} {memoryCount === 1 ? 'memory' : 'memories'} saved
-        </h3>
+        <h1 className="text-2xl font-bold text-foreground text-center">
+          {memoryCount} {memoryCount === 1 ? 'Memory' : 'Memories'} Saved!
+        </h1>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Globe className="w-3.5 h-3.5" />
           <span>{displayUrl}</span>
         </div>
       </motion.div>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="w-full mt-auto pb-8 flex flex-col gap-3"
-      >
-        <button
+      <div className="w-full max-w-sm flex flex-col gap-3">
+        <Button
           onClick={onScrapeAnother}
-          className="w-full h-[52px] rounded-[18px] font-bold text-base text-white"
-          style={{
-            padding: '2px',
-            background: 'radial-gradient(ellipse 108.65% 103.45% at 50.00% 109.62%, #FF543E 0%, #1050C5 60%)',
-          }}
+          className="w-full h-14 text-base font-semibold rounded-2xl gap-2"
         >
-          <div
-            className="w-full h-full rounded-[16px] flex items-center justify-center gap-2"
-            style={{
-              background: 'radial-gradient(ellipse 100.00% 52.73% at 50.00% 0.00%, #1074C5 0%, rgba(16, 79, 197, 0.50) 100%)',
-            }}
-          >
-            <span>Scrape Another</span>
-            <ArrowRight className="w-4 h-4" />
-          </div>
-        </button>
+          Scrape Another
+          <ArrowRight className="w-5 h-5" />
+        </Button>
 
-        <button
+        <Button
+          variant="outline"
           onClick={onDone}
-          className="w-full h-[52px] rounded-[18px] bg-[#909AAB] font-bold text-base text-white flex items-center justify-center"
-          style={{ padding: '2px' }}
+          className="w-full h-14 text-base font-semibold rounded-2xl"
         >
-          <div className="w-full h-full rounded-[16px] bg-[#909AAB] flex items-center justify-center">
-            Done
-          </div>
-        </button>
-      </motion.div>
+          Done
+        </Button>
+      </div>
     </div>
   );
 }

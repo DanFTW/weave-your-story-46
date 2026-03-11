@@ -1,5 +1,5 @@
+import { Loader2, Globe } from "lucide-react";
 import { motion } from "framer-motion";
-import { Globe, Loader2 } from "lucide-react";
 import { WebsiteScrapePhase } from "@/types/websiteScrape";
 
 interface ScrapingScreenProps {
@@ -10,39 +10,31 @@ export function ScrapingScreen({ phase }: ScrapingScreenProps) {
   const isScraping = phase === 'scraping';
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6">
+    <div className="min-h-screen flex flex-col items-center justify-center px-8 thread-gradient-teal">
       <motion.div
-        className="relative mb-8"
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col items-center text-center"
       >
-        {/* Pulsing ring */}
-        <motion.div
-          className="absolute inset-0 rounded-full border-2 border-accent/30"
-          animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          style={{ width: 80, height: 80, top: -8, left: -8 }}
-        />
-        <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
-          <Globe className="w-8 h-8 text-accent" />
+        {/* Icon */}
+        <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-6">
+          <Globe className="w-10 h-10 text-white" strokeWidth={1.5} />
         </div>
-      </motion.div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="flex flex-col items-center gap-3"
-      >
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-        <h3 className="text-lg font-bold text-foreground">
-          {isScraping ? 'Reading the page...' : 'Extracting memories...'}
-        </h3>
-        <p className="text-sm text-muted-foreground text-center max-w-xs">
+        {/* Loading spinner */}
+        <div className="mb-6">
+          <Loader2 className="w-8 h-8 text-white animate-spin" />
+        </div>
+
+        {/* Text */}
+        <h1 className="text-2xl font-bold text-white mb-2">
+          {isScraping ? 'Reading the page' : 'Extracting Memories'}
+        </h1>
+        <p className="text-white/80 text-base">
           {isScraping
-            ? 'Fetching and parsing the website content'
-            : 'Our AI is identifying key facts and insights'}
+            ? 'Fetching and parsing the website content...'
+            : 'Our AI is identifying key facts and insights...'}
         </p>
       </motion.div>
     </div>
