@@ -795,6 +795,7 @@ export type Database = {
           posts_synced_count: number
           sync_comments: boolean
           sync_posts: boolean
+          sync_stories: boolean
           updated_at: string
           user_id: string
         }
@@ -807,6 +808,7 @@ export type Database = {
           posts_synced_count?: number
           sync_comments?: boolean
           sync_posts?: boolean
+          sync_stories?: boolean
           updated_at?: string
           user_id: string
         }
@@ -819,6 +821,7 @@ export type Database = {
           posts_synced_count?: number
           sync_comments?: boolean
           sync_posts?: boolean
+          sync_stories?: boolean
           updated_at?: string
           user_id?: string
         }

@@ -1,0 +1,1 @@
+ALTER TABLE instagram_sync_config ADD COLUMN IF NOT EXISTS sync_stories boolean NOT NULL DEFAULT true;

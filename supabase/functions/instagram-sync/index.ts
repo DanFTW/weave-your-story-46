@@ -9,18 +9,22 @@ const corsHeaders = {
 const COMPOSIO_API_KEY = Deno.env.get('COMPOSIO_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const LIAM_API_BASE = 'https://web.askbuddy.ai/devspacexdb/api';
 
-interface InstagramPost {
-  id: string;
-  caption?: string;
-  mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
-  mediaUrl?: string;
-  thumbnailUrl?: string;
-  permalinkUrl?: string;
-  timestamp: string;
-  username?: string;
-  likesCount?: number;
-  commentsCount?: number;
+// ─── Normalized item shape (decoupled from Composio response) ───
+
+interface NormalizedItem {
+  externalId: string;
+  caption: string | null;
+  mediaType: string;
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  permalinkUrl: string | null;
+  timestamp: string | null;
+  username: string | null;
+  likesCount: number | null;
+  commentsCount: number | null;
+  itemType: 'post' | 'story' | 'comment';
   children?: { id: string; media_type: string; media_url: string }[];
 }
 
@@ -32,6 +36,534 @@ interface InstagramComment {
   from?: { id: string; username: string };
 }
 
+interface SyncCounts {
+  fetched: number;
+  saved: number;
+  skipped: number;
+  failed: number;
+}
+
+// ─── Fetch helpers ───
+
+async function getInstagramUserId(connectionId: string): Promise<string | null> {
+  try {
+    console.log('[fetch] Getting Instagram user ID...');
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_INFO', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': COMPOSIO_API_KEY! },
+      body: JSON.stringify({ connected_account_id: connectionId, arguments: {} }),
+    });
+
+    if (!response.ok) {
+      console.error('[fetch] User info error:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const responseData = data.data || data;
+    return responseData?.id || responseData?.response_data?.id || responseData?.user?.id || responseData?.ig_user_id || null;
+  } catch (error) {
+    console.error('[fetch] Error getting user ID:', error);
+    return null;
+  }
+}
+
+function extractMediaArray(data: any): any[] {
+  const responseData = data.data || data;
+  let mediaData = responseData?.response_data?.data ||
+    responseData?.response_data ||
+    responseData?.data ||
+    responseData?.media?.data ||
+    responseData;
+
+  if (mediaData && typeof mediaData === 'object' && !Array.isArray(mediaData)) {
+    mediaData = mediaData.data || mediaData.media || [];
+  }
+
+  if (!Array.isArray(mediaData)) {
+    if (typeof mediaData === 'object' && mediaData !== null) {
+      const keys = Object.keys(mediaData);
+      if (keys.some(k => !isNaN(Number(k)))) return Object.values(mediaData);
+    }
+    return [];
+  }
+  return mediaData;
+}
+
+async function fetchInstagramPosts(connectionId: string, igUserId: string | null, limit: number): Promise<{ items: any[]; error?: string }> {
+  try {
+    console.log(`[fetch] Fetching posts, igUserId: ${igUserId}, limit: ${limit}`);
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_MEDIA', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': COMPOSIO_API_KEY! },
+      body: JSON.stringify({
+        connected_account_id: connectionId,
+        arguments: { ...(igUserId && { ig_user_id: igUserId }), limit },
+      }),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error('[fetch] Posts error:', response.status, responseText.slice(0, 300));
+      return { items: [], error: `Failed to fetch posts: ${response.status}` };
+    }
+
+    const data = JSON.parse(responseText);
+    const items = extractMediaArray(data);
+    console.log(`[fetch] Got ${items.length} posts`);
+    return { items };
+  } catch (error) {
+    console.error('[fetch] Posts error:', error);
+    return { items: [], error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+async function fetchInstagramStories(connectionId: string): Promise<{ items: any[]; error?: string }> {
+  try {
+    console.log('[fetch] Fetching stories...');
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_IG_USER_STORIES', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': COMPOSIO_API_KEY! },
+      body: JSON.stringify({ connected_account_id: connectionId, arguments: {} }),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error('[fetch] Stories error:', response.status, responseText.slice(0, 300));
+      return { items: [], error: `Failed to fetch stories: ${response.status}` };
+    }
+
+    const data = JSON.parse(responseText);
+    const items = extractMediaArray(data);
+    console.log(`[fetch] Got ${items.length} stories`);
+    return { items };
+  } catch (error) {
+    console.error('[fetch] Stories error:', error);
+    return { items: [], error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+async function fetchPostComments(connectionId: string, mediaId: string): Promise<{ comments: InstagramComment[]; error?: string }> {
+  try {
+    console.log(`[fetch] Comments for ${mediaId}...`);
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_IG_MEDIA_COMMENTS', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': COMPOSIO_API_KEY! },
+      body: JSON.stringify({ connected_account_id: connectionId, arguments: { ig_media_id: mediaId, limit: 50 } }),
+    });
+
+    if (!response.ok) {
+      return { comments: [], error: `Failed: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const responseData = data?.data || data;
+    let commentsData = responseData?.response_data?.data || responseData?.response_data?.comments?.data ||
+      responseData?.data || responseData?.comments?.data || responseData?.comments || responseData;
+
+    if (commentsData && typeof commentsData === 'object' && !Array.isArray(commentsData)) {
+      commentsData = commentsData.data || [];
+    }
+    if (!Array.isArray(commentsData)) return { comments: [] };
+
+    return {
+      comments: commentsData.map((c: any) => ({
+        id: c.id, text: c.text, timestamp: c.timestamp, username: c.username,
+        from: c.from ? { id: c.from.id, username: c.from.username } : undefined,
+      })),
+    };
+  } catch (error) {
+    console.error('[fetch] Comments error:', error);
+    return { comments: [], error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// ─── Normalize helpers (decouple Composio shapes from internal types) ───
+
+function normalizePost(raw: any): NormalizedItem | null {
+  if (!raw?.id) return null;
+  const mediaType = raw.media_type || raw.mediaType || 'IMAGE';
+  return {
+    externalId: raw.id,
+    caption: raw.caption || null,
+    mediaType,
+    mediaUrl: raw.media_url || raw.mediaUrl || null,
+    thumbnailUrl: raw.thumbnail_url || raw.thumbnailUrl || null,
+    permalinkUrl: raw.permalink || raw.permalinkUrl || null,
+    timestamp: raw.timestamp || null,
+    username: raw.username || null,
+    likesCount: raw.like_count ?? raw.likesCount ?? null,
+    commentsCount: raw.comments_count ?? raw.commentsCount ?? null,
+    itemType: 'post',
+    children: raw.children?.data || raw.children,
+  };
+}
+
+function normalizeStory(raw: any): NormalizedItem | null {
+  if (!raw?.id) return null;
+  return {
+    externalId: `story_${raw.id}`,
+    caption: raw.caption || null,
+    mediaType: raw.media_type || raw.mediaType || 'IMAGE',
+    mediaUrl: raw.media_url || raw.mediaUrl || null,
+    thumbnailUrl: raw.thumbnail_url || raw.thumbnailUrl || null,
+    permalinkUrl: raw.permalink || raw.permalinkUrl || null,
+    timestamp: raw.timestamp || null,
+    username: raw.username || null,
+    likesCount: null,
+    commentsCount: null,
+    itemType: 'story',
+  };
+}
+
+// ─── Transform helpers (format into canonical memory strings) ───
+
+function getDisplayMediaUrl(item: NormalizedItem): string | null {
+  if (item.mediaType === 'CAROUSEL_ALBUM' && item.children?.length) {
+    return item.children[0].media_url || null;
+  }
+  if (item.mediaType === 'VIDEO') {
+    return item.thumbnailUrl || item.mediaUrl;
+  }
+  return item.mediaUrl;
+}
+
+function formatDate(ts: string | null): string {
+  if (!ts) return 'Unknown date';
+  return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function mediaTypeLabel(mt: string): string {
+  switch (mt) {
+    case 'IMAGE': return 'Image';
+    case 'VIDEO': return 'Reel/Video';
+    case 'CAROUSEL_ALBUM': return 'Carousel';
+    case 'STORY': return 'Story';
+    default: return mt;
+  }
+}
+
+function formatPostMemory(item: NormalizedItem): { content: string; imageUrl: string | null } {
+  const date = formatDate(item.timestamp);
+  const imageUrl = getDisplayMediaUrl(item) || null;
+
+  let memory = `Instagram Post`;
+  if (item.username) memory += ` by @${item.username}`;
+  memory += ` | ${date}`;
+
+  if (item.caption) {
+    memory += `\nCaption: "${item.caption}"`;
+  }
+
+  const metaParts: string[] = [`Type: ${mediaTypeLabel(item.mediaType)}`];
+  if (item.likesCount !== null) metaParts.push(`${item.likesCount} likes`);
+  if (item.commentsCount !== null) metaParts.push(`${item.commentsCount} comments`);
+  memory += `\n${metaParts.join(' | ')}`;
+
+  if (imageUrl) memory += `\n[media:${imageUrl}]`;
+  if (item.permalinkUrl) memory += ` [link:${item.permalinkUrl}]`;
+
+  return { content: memory, imageUrl };
+}
+
+function formatStoryMemory(item: NormalizedItem): { content: string; imageUrl: string | null } {
+  const date = formatDate(item.timestamp);
+  const imageUrl = getDisplayMediaUrl(item) || null;
+
+  let memory = `Instagram Story`;
+  if (item.username) memory += ` by @${item.username}`;
+  memory += ` | ${date}`;
+  memory += `\nType: ${mediaTypeLabel(item.mediaType)}`;
+
+  if (item.caption) {
+    memory += `\nCaption: "${item.caption}"`;
+  }
+
+  if (imageUrl) memory += `\n[media:${imageUrl}]`;
+  if (item.permalinkUrl) memory += ` [link:${item.permalinkUrl}]`;
+
+  return { content: memory, imageUrl };
+}
+
+function formatCommentMemory(comment: InstagramComment, postCaption: string | undefined, postMediaUrl?: string): string {
+  const date = formatDate(comment.timestamp);
+  const commenterName = comment.from?.username || comment.username || 'someone';
+
+  let memory = `Instagram Comment | ${date}\n@${commenterName} commented: "${comment.text}"`;
+  if (postCaption) memory += `\nOn post: "${postCaption}"`;
+  if (postMediaUrl) memory += `\n[media:${postMediaUrl}]`;
+  return memory;
+}
+
+// ─── Persist helpers ───
+
+function isDuplicate(syncedIds: Set<string>, externalId: string): boolean {
+  return syncedIds.has(externalId);
+}
+
+async function persistSyncRecord(supabase: any, userId: string, externalId: string): Promise<boolean> {
+  const { error } = await supabase.from('instagram_synced_posts').insert({
+    user_id: userId,
+    instagram_post_id: externalId,
+    synced_at: new Date().toISOString(),
+  });
+  if (error) {
+    console.error(`[persist] Sync record error for ${externalId}:`, error.message);
+    return false;
+  }
+  return true;
+}
+
+async function persistLocalContent(supabase: any, userId: string, item: NormalizedItem, imageUrl: string | null): Promise<void> {
+  const { error } = await supabase.from('instagram_synced_post_content').upsert({
+    user_id: userId,
+    instagram_post_id: item.externalId,
+    caption: item.caption,
+    media_type: item.itemType === 'story' ? 'STORY' : (item.mediaType || null),
+    media_url: imageUrl,
+    permalink_url: item.permalinkUrl,
+    username: item.username,
+    likes_count: item.likesCount,
+    comments_count: item.commentsCount,
+    posted_at: item.timestamp,
+    synced_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,instagram_post_id' });
+
+  if (error) console.log(`[persist] Content store error for ${item.externalId}:`, error.message);
+}
+
+// ─── Image + Memory creation helpers ───
+
+async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(imageUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MemoryBot/1.0)' } });
+    if (!response.ok) return null;
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    return `data:${contentType};base64,${btoa(binary)}`;
+  } catch (error) {
+    console.error('[image] Base64 conversion error:', error);
+    return null;
+  }
+}
+
+async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<boolean> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/liam-memory`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'x-supabase-user-id': apiKeys.user_id,
+      },
+      body: JSON.stringify({
+        action: imageBase64 ? 'create-with-image' : 'create',
+        content,
+        tag: 'INSTAGRAM',
+        image: imageBase64 || undefined,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[memory] Create error:', response.status, errorText.slice(0, 200));
+      return false;
+    }
+
+    const result = await response.json();
+    return result.success !== false;
+  } catch (error) {
+    console.error('[memory] Create error:', error);
+    return false;
+  }
+}
+
+// ─── Orchestrator ───
+
+async function syncInstagramContent(
+  supabase: any, userId: string, connectionId: string
+): Promise<{
+  success: boolean; postsSynced: number; commentsSynced: number;
+  storiesSynced: number; memoriesCreated: number; skippedDuplicates: number; error?: string;
+}> {
+  try {
+    const igUserId = await getInstagramUserId(connectionId);
+
+    // Load config toggles
+    const { data: config } = await supabase
+      .from('instagram_sync_config').select('*').eq('user_id', userId).single();
+
+    const syncPosts = config?.sync_posts ?? true;
+    const syncComments = config?.sync_comments ?? true;
+    const syncStories = config?.sync_stories ?? true;
+
+    console.log(`[orchestrate] Config — posts: ${syncPosts}, comments: ${syncComments}, stories: ${syncStories}`);
+
+    // Load API keys
+    const { data: apiKeys } = await supabase
+      .from('user_api_keys').select('*').eq('user_id', userId).single();
+
+    if (!apiKeys) {
+      return { success: false, postsSynced: 0, commentsSynced: 0, storiesSynced: 0, memoriesCreated: 0, skippedDuplicates: 0, error: 'LIAM API keys not configured.' };
+    }
+
+    // Load existing synced IDs for dedupe
+    const { data: syncedPosts } = await supabase
+      .from('instagram_synced_posts').select('instagram_post_id').eq('user_id', userId);
+    const syncedIds = new Set<string>((syncedPosts || []).map((p: any) => p.instagram_post_id));
+    console.log(`[orchestrate] ${syncedIds.size} previously synced items`);
+
+    const postCounts: SyncCounts = { fetched: 0, saved: 0, skipped: 0, failed: 0 };
+    const storyCounts: SyncCounts = { fetched: 0, saved: 0, skipped: 0, failed: 0 };
+    let commentsSynced = 0;
+    let totalMemories = 0;
+
+    // ── Process posts ──
+    if (syncPosts) {
+      const { items: rawPosts, error: fetchError } = await fetchInstagramPosts(connectionId, igUserId, 50);
+      if (fetchError) console.error('[orchestrate] Post fetch error:', fetchError);
+
+      const posts = rawPosts.map(normalizePost).filter((p): p is NormalizedItem => p !== null);
+      postCounts.fetched = posts.length;
+      console.log(`[orchestrate] Normalized ${posts.length} posts`);
+
+      for (const item of posts) {
+        if (isDuplicate(syncedIds, item.externalId)) {
+          postCounts.skipped++;
+          continue;
+        }
+
+        try {
+          const { content, imageUrl } = formatPostMemory(item);
+          const imageBase64 = imageUrl ? await fetchImageAsBase64(imageUrl) : null;
+          const ok = await createMemory(apiKeys, content, imageBase64);
+
+          if (ok) {
+            await persistLocalContent(supabase, userId, item, imageUrl);
+            const recorded = await persistSyncRecord(supabase, userId, item.externalId);
+            if (recorded) {
+              postCounts.saved++;
+              totalMemories++;
+              syncedIds.add(item.externalId);
+            }
+          } else {
+            postCounts.failed++;
+          }
+        } catch (err) {
+          console.error(`[orchestrate] Post ${item.externalId} error:`, err);
+          postCounts.failed++;
+        }
+      }
+
+      // ── Process comments (only for fetched posts) ──
+      if (syncComments) {
+        for (const item of posts) {
+          try {
+            const { comments } = await fetchPostComments(connectionId, item.externalId);
+            for (const comment of comments) {
+              const commentKey = `${item.externalId}_comment_${comment.id}`;
+              if (isDuplicate(syncedIds, commentKey)) continue;
+
+              const postMediaUrl = getDisplayMediaUrl(item) || undefined;
+              const content = formatCommentMemory(comment, item.caption || undefined, postMediaUrl);
+              const ok = await createMemory(apiKeys, content, null);
+
+              if (ok) {
+                const recorded = await persistSyncRecord(supabase, userId, commentKey);
+                if (recorded) {
+                  commentsSynced++;
+                  totalMemories++;
+                  syncedIds.add(commentKey);
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`[orchestrate] Comments for ${item.externalId} error:`, err);
+          }
+        }
+      }
+    }
+
+    // ── Process stories ──
+    if (syncStories) {
+      const { items: rawStories, error: storyFetchError } = await fetchInstagramStories(connectionId);
+      if (storyFetchError) console.error('[orchestrate] Story fetch error:', storyFetchError);
+
+      const stories = rawStories.map(normalizeStory).filter((s): s is NormalizedItem => s !== null);
+      storyCounts.fetched = stories.length;
+      console.log(`[orchestrate] Normalized ${stories.length} stories`);
+
+      for (const item of stories) {
+        if (isDuplicate(syncedIds, item.externalId)) {
+          storyCounts.skipped++;
+          continue;
+        }
+
+        try {
+          const { content, imageUrl } = formatStoryMemory(item);
+          const imageBase64 = imageUrl ? await fetchImageAsBase64(imageUrl) : null;
+          const ok = await createMemory(apiKeys, content, imageBase64);
+
+          if (ok) {
+            await persistLocalContent(supabase, userId, item, imageUrl);
+            const recorded = await persistSyncRecord(supabase, userId, item.externalId);
+            if (recorded) {
+              storyCounts.saved++;
+              totalMemories++;
+              syncedIds.add(item.externalId);
+            }
+          } else {
+            storyCounts.failed++;
+          }
+        } catch (err) {
+          console.error(`[orchestrate] Story ${item.externalId} error:`, err);
+          storyCounts.failed++;
+        }
+      }
+    }
+
+    console.log(`[orchestrate] Done — posts: ${JSON.stringify(postCounts)}, stories: ${JSON.stringify(storyCounts)}, comments: ${commentsSynced}`);
+
+    // Update config totals
+    const updateData = {
+      user_id: userId,
+      last_sync_at: new Date().toISOString(),
+      posts_synced_count: (config?.posts_synced_count || 0) + postCounts.saved,
+      memories_created_count: (config?.memories_created_count || 0) + totalMemories,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (config?.id) {
+      await supabase.from('instagram_sync_config').update(updateData).eq('id', config.id);
+    } else {
+      await supabase.from('instagram_sync_config').insert(updateData);
+    }
+
+    return {
+      success: true,
+      postsSynced: postCounts.saved,
+      commentsSynced,
+      storiesSynced: storyCounts.saved,
+      memoriesCreated: totalMemories,
+      skippedDuplicates: postCounts.skipped + storyCounts.skipped,
+    };
+  } catch (error) {
+    console.error('[orchestrate] Sync error:', error);
+    return {
+      success: false, postsSynced: 0, commentsSynced: 0, storiesSynced: 0,
+      memoriesCreated: 0, skippedDuplicates: 0,
+      error: error instanceof Error ? error.message : 'Sync failed',
+    };
+  }
+}
+
+// ─── Request handler ───
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -40,813 +572,89 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Create Supabase client with service role key
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    
-    // Verify user by passing the token directly to getUser()
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+
     if (authError || !user) {
-      console.error('Auth error:', authError);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Unauthorized', 
-          details: authError?.message || 'Invalid or expired token',
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'Unauthorized', details: authError?.message }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log('Authenticated user:', user.id);
+    const { data: integration } = await supabase
+      .from('user_integrations').select('composio_connection_id')
+      .eq('user_id', user.id).eq('integration_id', 'instagram').eq('status', 'connected').single();
 
-    // Get the user's Instagram connection
-    const { data: integration, error: intError } = await supabase
-      .from('user_integrations')
-      .select('composio_connection_id')
-      .eq('user_id', user.id)
-      .eq('integration_id', 'instagram')
-      .eq('status', 'connected')
-      .single();
-
-    if (intError || !integration?.composio_connection_id) {
-      console.error('Integration error:', intError);
-      return new Response(
-        JSON.stringify({ error: 'Instagram not connected' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!integration?.composio_connection_id) {
+      return new Response(JSON.stringify({ error: 'Instagram not connected' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const connectionId = integration.composio_connection_id;
     const { action, limit = 25 } = await req.json();
 
-    console.log(`Instagram sync action: ${action}, user: ${user.id}, connection: ${connectionId}`);
+    console.log(`Action: ${action}, user: ${user.id}`);
 
     switch (action) {
       case 'list-posts': {
-        // Try to get the Instagram User ID (optional for INSTAGRAM_GET_USER_MEDIA)
         const igUserId = await getInstagramUserId(connectionId);
-        console.log(`Instagram User ID for list-posts: ${igUserId}`);
-        
-        const { posts, error } = await fetchInstagramPosts(connectionId, igUserId, limit);
-        
-        if (error) {
-          console.error('Error listing posts:', error);
-          return new Response(
-            JSON.stringify({ error, posts: [] }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        return new Response(JSON.stringify({ posts }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        const { items, error } = await fetchInstagramPosts(connectionId, igUserId, limit);
+        const posts = items.map(normalizePost).filter(Boolean).map((p: any) => ({
+          id: p.externalId, caption: p.caption, mediaType: p.mediaType,
+          mediaUrl: p.mediaUrl, permalinkUrl: p.permalinkUrl,
+          timestamp: p.timestamp, username: p.username,
+          likesCount: p.likesCount, commentsCount: p.commentsCount,
+        }));
+        return new Response(JSON.stringify({ posts, ...(error && { error }) }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       case 'sync': {
         const result = await syncInstagramContent(supabase, user.id, connectionId);
-        return new Response(JSON.stringify(result), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify(result),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       case 'reset-sync': {
-        // Soft reset: Only reset metadata, preserve deduplication table
-        const { error: resetError } = await supabase
-          .from('instagram_sync_config')
-          .update({
-            last_synced_post_id: null,
-            last_sync_at: null,
-            posts_synced_count: 0,
-            memories_created_count: 0,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
+        await supabase.from('instagram_sync_config').update({
+          last_synced_post_id: null, last_sync_at: null,
+          posts_synced_count: 0, memories_created_count: 0, updated_at: new Date().toISOString(),
+        }).eq('user_id', user.id);
 
-        if (resetError) {
-          console.error('Reset sync error:', resetError);
-          return new Response(
-            JSON.stringify({ error: 'Failed to reset sync state' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        console.log('Sync config reset (deduplication preserved) for user:', user.id);
-        return new Response(
-          JSON.stringify({ success: true, message: 'Sync state reset. Previously synced posts will not be re-synced.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ success: true, message: 'Sync state reset.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       case 'force-reset-sync': {
-        // Force reset: Clear ALL tables to allow full re-sync
-        console.log('Force reset sync for user:', user.id);
-        
-        // Clear the content storage table (new hybrid storage)
-        const { error: contentDeleteError } = await supabase
-          .from('instagram_synced_post_content')
-          .delete()
-          .eq('user_id', user.id);
-        
-        if (contentDeleteError) {
-          console.error('Error clearing post content:', contentDeleteError);
-          // Continue anyway - table might not exist yet
-        }
-        
-        // Clear the deduplication table
-        const { error: deleteError } = await supabase
-          .from('instagram_synced_posts')
-          .delete()
-          .eq('user_id', user.id);
-        
-        if (deleteError) {
-          console.error('Error clearing synced posts:', deleteError);
-          return new Response(
-            JSON.stringify({ error: 'Failed to clear sync history' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
+        await supabase.from('instagram_synced_post_content').delete().eq('user_id', user.id);
+        await supabase.from('instagram_synced_posts').delete().eq('user_id', user.id);
+        await supabase.from('instagram_sync_config').update({
+          last_synced_post_id: null, last_sync_at: null,
+          posts_synced_count: 0, memories_created_count: 0, updated_at: new Date().toISOString(),
+        }).eq('user_id', user.id);
 
-        // Then reset the config
-        const { error: resetError } = await supabase
-          .from('instagram_sync_config')
-          .update({
-            last_synced_post_id: null,
-            last_sync_at: null,
-            posts_synced_count: 0,
-            memories_created_count: 0,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-
-        if (resetError) {
-          console.error('Reset sync config error:', resetError);
-          return new Response(
-            JSON.stringify({ error: 'Failed to reset sync state' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        console.log('Force reset complete - all posts can be re-synced for user:', user.id);
-        return new Response(
-          JSON.stringify({ success: true, message: 'Full reset complete. All posts will be re-synced as new memories.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ success: true, message: 'Full reset complete.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       case 'list-synced-posts': {
-        // Return locally stored Instagram posts for reliable 1:1 display
-        const { data: posts, error: listError } = await supabase
-          .from('instagram_synced_post_content')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('posted_at', { ascending: false })
-          .limit(100);
-
-        if (listError) {
-          console.error('Error listing synced posts:', listError);
-          return new Response(
-            JSON.stringify({ error: 'Failed to fetch synced posts', posts: [] }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        console.log(`Returning ${posts?.length || 0} locally stored Instagram posts`);
-        return new Response(
-          JSON.stringify({ posts: posts || [] }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        const { data: posts } = await supabase.from('instagram_synced_post_content')
+          .select('*').eq('user_id', user.id).order('posted_at', { ascending: false }).limit(100);
+        return new Response(JSON.stringify({ posts: posts || [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       default:
-        return new Response(
-          JSON.stringify({ error: `Unknown action: ${action}` }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: `Unknown action: ${action}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   } catch (error) {
     console.error('Instagram sync error:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
-
-// Get Instagram User ID (required for media API calls)
-async function getInstagramUserId(connectionId: string): Promise<string | null> {
-  try {
-    console.log('Fetching Instagram user ID...');
-    
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_INFO', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': COMPOSIO_API_KEY!,
-      },
-      body: JSON.stringify({
-        connected_account_id: connectionId,
-        arguments: {},
-      }),
-    });
-
-    const responseText = await response.text();
-    console.log('Instagram user info response status:', response.status);
-    console.log('Instagram user info response:', responseText.slice(0, 500));
-
-    if (!response.ok) {
-      console.error('Composio API error getting user info:', response.status, responseText);
-      return null;
-    }
-
-    const data = JSON.parse(responseText);
-    
-    // Parse the response to get the user ID
-    // Response structure may vary, try multiple paths
-    const responseData = data.data || data;
-    const userId = responseData?.id || 
-                   responseData?.response_data?.id || 
-                   responseData?.user?.id ||
-                   responseData?.ig_user_id;
-    
-    console.log('Found Instagram user ID:', userId);
-    return userId || null;
-  } catch (error) {
-    console.error('Error getting Instagram user ID:', error);
-    return null;
-  }
-}
-
-async function fetchInstagramPosts(connectionId: string, igUserId: string | null, limit: number): Promise<{ posts: InstagramPost[]; error?: string }> {
-  try {
-    console.log(`Fetching Instagram posts, igUserId: ${igUserId}, limit: ${limit}`);
-    
-    // Use INSTAGRAM_GET_USER_MEDIA which has ig_user_id as optional
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_USER_MEDIA', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': COMPOSIO_API_KEY!,
-      },
-      body: JSON.stringify({
-        connected_account_id: connectionId,
-        arguments: { 
-          ...(igUserId && { ig_user_id: igUserId }),  // Optional parameter
-          limit,
-        },
-      }),
-    });
-
-    const responseText = await response.text();
-    console.log('Instagram posts response status:', response.status);
-    console.log('Instagram posts response:', responseText.slice(0, 1000));
-
-    if (!response.ok) {
-      console.error('Composio API error:', responseText);
-      return { posts: [], error: `Failed to fetch Instagram posts: ${response.status}` };
-    }
-
-    const data = JSON.parse(responseText);
-    
-    // Parse the response - handle multiple possible structures
-    const responseData = data.data || data;
-    
-    // Try multiple paths for the media data
-    let mediaData = responseData?.response_data?.data ||
-                    responseData?.response_data ||
-                    responseData?.data ||
-                    responseData?.media?.data ||
-                    responseData;
-    
-    // If mediaData is still nested, try to extract
-    if (mediaData && typeof mediaData === 'object' && !Array.isArray(mediaData)) {
-      mediaData = mediaData.data || mediaData.media || [];
-    }
-    
-    console.log(`Raw media data type: ${typeof mediaData}, isArray: ${Array.isArray(mediaData)}`);
-    console.log('Media data sample:', JSON.stringify(mediaData).slice(0, 500));
-    
-    if (!Array.isArray(mediaData)) {
-      console.log('Media data is not an array, attempting to extract from object');
-      // Last resort: if it's an object with numeric keys, convert to array
-      if (typeof mediaData === 'object' && mediaData !== null) {
-        const keys = Object.keys(mediaData);
-        if (keys.some(k => !isNaN(Number(k)))) {
-          mediaData = Object.values(mediaData);
-        } else {
-          return { posts: [], error: 'Unexpected response format from Instagram API' };
-        }
-      } else {
-        return { posts: [] };
-      }
-    }
-    
-    console.log(`Found ${mediaData.length} Instagram posts`);
-    
-    const posts = mediaData.map((item: any) => ({
-      id: item.id,
-      caption: item.caption,
-      mediaType: item.media_type || item.mediaType,
-      mediaUrl: item.media_url || item.mediaUrl,
-      thumbnailUrl: item.thumbnail_url || item.thumbnailUrl,
-      permalinkUrl: item.permalink || item.permalinkUrl,
-      timestamp: item.timestamp,
-      username: item.username,
-      likesCount: item.like_count || item.likesCount,
-      commentsCount: item.comments_count || item.commentsCount,
-      children: item.children?.data || item.children,
-    }));
-    
-    return { posts };
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    return { posts: [], error: error instanceof Error ? error.message : 'Unknown error fetching posts' };
-  }
-}
-
-// Fetch comments for a specific Instagram post
-async function fetchPostComments(
-  connectionId: string,
-  mediaId: string
-): Promise<{ comments: InstagramComment[]; error?: string }> {
-  try {
-    console.log(`Fetching comments for post ${mediaId}...`);
-
-    const response = await fetch(
-      'https://backend.composio.dev/api/v3/tools/execute/INSTAGRAM_GET_IG_MEDIA_COMMENTS',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': COMPOSIO_API_KEY!,
-        },
-        body: JSON.stringify({
-          connected_account_id: connectionId,
-          arguments: { 
-            ig_media_id: mediaId,
-            limit: 50,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error fetching comments:', response.status, errorText);
-      return { comments: [], error: `Failed to fetch comments: ${response.status}` };
-    }
-
-    const data = await response.json();
-    console.log('Comments response:', JSON.stringify(data).slice(0, 500));
-
-    // Try multiple paths for the comments data
-    const responseData = data?.data || data;
-    let commentsData =
-      responseData?.response_data?.data ||
-      responseData?.response_data?.comments?.data ||
-      responseData?.data ||
-      responseData?.comments?.data ||
-      responseData?.comments ||
-      responseData;
-
-    if (commentsData && typeof commentsData === 'object' && !Array.isArray(commentsData)) {
-      commentsData = commentsData.data || [];
-    }
-
-    if (!Array.isArray(commentsData)) {
-      console.log('Comments data is not an array');
-      return { comments: [] };
-    }
-
-    console.log(`Found ${commentsData.length} comments for post ${mediaId}`);
-    
-    // Map to standardized format
-    const comments: InstagramComment[] = commentsData.map((c: any) => ({
-      id: c.id,
-      text: c.text,
-      timestamp: c.timestamp,
-      username: c.username,
-      from: c.from ? { id: c.from.id, username: c.from.username } : undefined,
-    }));
-    
-    return { comments };
-  } catch (error) {
-    console.error('Error fetching comments:', error);
-    return { comments: [], error: error instanceof Error ? error.message : 'Unknown error' };
-  }
-}
-
-// Get the first displayable media URL from a post
-function getFirstMediaUrl(post: InstagramPost): string | undefined {
-  // For carousel posts, get the first child's media
-  if (post.mediaType === 'CAROUSEL_ALBUM' && post.children?.length) {
-    return post.children[0].media_url;
-  }
-  
-  // For videos, prefer thumbnail for static display
-  if (post.mediaType === 'VIDEO') {
-    return post.thumbnailUrl || post.mediaUrl;
-  }
-  
-  // For images, use directly
-  return post.mediaUrl;
-}
-
-// Format an Instagram comment as a memory string
-function formatCommentAsMemory(
-  comment: InstagramComment,
-  postCaption: string | undefined,
-  postMediaUrl?: string
-): string {
-  const date = comment.timestamp
-    ? new Date(comment.timestamp).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
-    : 'Unknown date';
-
-  const commenterName = comment.from?.username || comment.username || 'someone';
-
-  let memory = `Instagram Comment\n`;
-  memory += `On ${date}, @${commenterName} commented:\n\n`;
-  memory += `"${comment.text}"`;
-
-  // Include post context with full caption
-  if (postCaption) {
-    memory += `\n\nOn your post: "${postCaption}"`;
-  }
-  
-  // Embed media URL for frontend to display
-  if (postMediaUrl) {
-    memory += `\n\n[media:${postMediaUrl}]`;
-  }
-
-  return memory;
-}
-
-async function syncInstagramContent(
-  supabase: any,
-  userId: string,
-  connectionId: string
-): Promise<{ success: boolean; postsSynced: number; commentsSynced: number; memoriesCreated: number; skippedDuplicates: number; error?: string }> {
-  try {
-    // Try to get the Instagram User ID (optional for INSTAGRAM_GET_USER_MEDIA)
-    const igUserId = await getInstagramUserId(connectionId);
-    console.log(`Instagram User ID for sync: ${igUserId}`);
-
-    // Get user's sync config
-    const { data: config } = await supabase
-      .from('instagram_sync_config')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    const syncPosts = config?.sync_posts ?? true;
-    const syncComments = config?.sync_comments ?? true;
-
-    console.log(`Sync config - posts: ${syncPosts}, comments: ${syncComments}`);
-
-    // Fetch posts from Instagram
-    const { posts, error: fetchError } = await fetchInstagramPosts(connectionId, igUserId, 50);
-
-    if (fetchError) {
-      console.error('Error fetching posts for sync:', fetchError);
-      return {
-        success: false,
-        postsSynced: 0,
-        commentsSynced: 0,
-        memoriesCreated: 0,
-        skippedDuplicates: 0,
-        error: fetchError,
-      };
-    }
-
-    if (posts.length === 0) {
-      console.log('No posts found to sync');
-      return { success: true, postsSynced: 0, commentsSynced: 0, memoriesCreated: 0, skippedDuplicates: 0 };
-    }
-
-    // Get user's API keys for LIAM
-    const { data: apiKeys } = await supabase
-      .from('user_api_keys')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (!apiKeys) {
-      console.error('No API keys found for user');
-      return {
-        success: false,
-        postsSynced: 0,
-        commentsSynced: 0,
-        memoriesCreated: 0,
-        skippedDuplicates: 0,
-        error: 'LIAM API keys not configured. Please configure your API keys first.',
-      };
-    }
-
-    // Get list of already synced post/comment IDs to prevent duplicates
-    const { data: syncedPosts } = await supabase
-      .from('instagram_synced_posts')
-      .select('instagram_post_id')
-      .eq('user_id', userId);
-
-    const syncedPostIds = new Set((syncedPosts || []).map((p: any) => p.instagram_post_id));
-    console.log(`User has ${syncedPostIds.size} previously synced items (posts + comments)`);
-
-    let postsSynced = 0;
-    let commentsSynced = 0;
-    let memoriesCreated = 0;
-    let skippedDuplicates = 0;
-
-    console.log(`Processing ${posts.length} posts from Instagram`);
-
-    // Process each post
-    for (const post of posts) {
-      // SYNC POSTS: Skip if already synced (prevents duplicates)
-      if (syncedPostIds.has(post.id)) {
-        console.log(`Post ${post.id} already synced, skipping`);
-        skippedDuplicates++;
-      } else if (syncPosts && post.caption) {
-        // Format post and get image URL separately
-        const { content: memoryContent, imageUrl } = formatPostAsMemory(post);
-        
-        // Fetch image as base64 for permanent LIAM storage (if available)
-        let imageBase64: string | null = null;
-        if (imageUrl) {
-          imageBase64 = await fetchImageAsBase64(imageUrl);
-        }
-        
-        // Create memory with image (uses create-with-image endpoint if image available)
-        const success = await createMemory(apiKeys, memoryContent, imageBase64);
-
-        if (success) {
-          // Store complete post content locally for reliable 1:1 display
-          // (LIAM API tokenizes into semantic fragments, so we need local storage)
-          const { error: contentError } = await supabase
-            .from('instagram_synced_post_content')
-            .upsert({
-              user_id: userId,
-              instagram_post_id: post.id,
-              caption: post.caption || null,
-              media_type: post.mediaType || null,
-              media_url: imageUrl || null,
-              permalink_url: post.permalinkUrl || null,
-              username: post.username || null,
-              likes_count: post.likesCount ?? null,
-              comments_count: post.commentsCount ?? null,
-              posted_at: post.timestamp || null,
-              synced_at: new Date().toISOString(),
-            }, {
-              onConflict: 'user_id,instagram_post_id',
-            });
-
-          if (contentError) {
-            console.log(`Post ${post.id} content storage error:`, contentError.message);
-          }
-
-          // Record this post as synced to prevent future duplicates
-          const { error: insertError } = await supabase
-            .from('instagram_synced_posts')
-            .insert({
-              user_id: userId,
-              instagram_post_id: post.id,
-              synced_at: new Date().toISOString(),
-            });
-
-          if (insertError) {
-            console.log(`Post ${post.id} sync record insert error:`, insertError.message);
-          } else {
-            memoriesCreated++;
-            postsSynced++;
-            // Add to set so we don't re-check in same run
-            syncedPostIds.add(post.id);
-          }
-        }
-      }
-
-      // SYNC COMMENTS: Fetch and sync comments for this post if enabled
-      if (syncComments) {
-        const { comments } = await fetchPostComments(connectionId, post.id);
-
-        for (const comment of comments) {
-          // Create composite key for comment deduplication: {post_id}_comment_{comment_id}
-          const commentKey = `${post.id}_comment_${comment.id}`;
-
-          // Skip if already synced
-          if (syncedPostIds.has(commentKey)) {
-            console.log(`Comment ${comment.id} already synced, skipping`);
-            skippedDuplicates++;
-            continue;
-          }
-
-          const postMediaUrl = getFirstMediaUrl(post);
-          const memoryContent = formatCommentAsMemory(comment, post.caption, postMediaUrl);
-          
-          // Comments don't get images stored - just text content
-          const success = await createMemory(apiKeys, memoryContent, null);
-
-          if (success) {
-            // Record this comment as synced using composite key
-            const { error: insertError } = await supabase
-              .from('instagram_synced_posts')
-              .insert({
-                user_id: userId,
-                instagram_post_id: commentKey,
-                synced_at: new Date().toISOString(),
-              });
-
-            if (insertError) {
-              console.log(`Comment ${comment.id} sync record insert error:`, insertError.message);
-            } else {
-              memoriesCreated++;
-              commentsSynced++;
-              syncedPostIds.add(commentKey);
-            }
-          }
-        }
-      }
-    }
-
-    console.log(`Sync complete: ${postsSynced} posts, ${commentsSynced} comments, ${skippedDuplicates} duplicates skipped`);
-
-    // Update sync config with totals
-    const updateData = {
-      user_id: userId,
-      last_sync_at: new Date().toISOString(),
-      last_synced_post_id: posts[0]?.id,
-      posts_synced_count: (config?.posts_synced_count || 0) + postsSynced,
-      memories_created_count: (config?.memories_created_count || 0) + memoriesCreated,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (config?.id) {
-      await supabase
-        .from('instagram_sync_config')
-        .update(updateData)
-        .eq('id', config.id);
-    } else {
-      await supabase
-        .from('instagram_sync_config')
-        .insert(updateData);
-    }
-
-    return {
-      success: true,
-      postsSynced,
-      commentsSynced,
-      memoriesCreated,
-      skippedDuplicates,
-    };
-  } catch (error) {
-    console.error('Sync error:', error);
-    return {
-      success: false,
-      postsSynced: 0,
-      commentsSynced: 0,
-      memoriesCreated: 0,
-      skippedDuplicates: 0,
-      error: error instanceof Error ? error.message : 'Sync failed',
-    };
-  }
-}
-
-// Format a post as memory content and return image URL separately
-function formatPostAsMemory(post: InstagramPost): { content: string; imageUrl: string | null } {
-  const date = post.timestamp ? new Date(post.timestamp).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }) : 'Unknown date';
-
-  let memory = `Instagram Post`;
-  if (post.username) {
-    memory += ` by @${post.username}`;
-  }
-  memory += `\nPosted on ${date}\n\n`;
-
-  // Include the caption as the main content
-  if (post.caption) {
-    memory += `"${post.caption}"\n\n`;
-  }
-
-  // Add engagement WITH context referencing the post above
-  if (post.likesCount !== undefined || post.commentsCount !== undefined) {
-    const parts = [];
-    if (post.likesCount !== undefined) {
-      parts.push(`${post.likesCount} like${post.likesCount !== 1 ? 's' : ''}`);
-    }
-    if (post.commentsCount !== undefined) {
-      parts.push(`${post.commentsCount} comment${post.commentsCount !== 1 ? 's' : ''}`);
-    }
-    if (post.caption) {
-      memory += `This post received ${parts.join(' and ')}.`;
-    } else {
-      memory += `Engagement: ${parts.join(', ')}`;
-    }
-  }
-
-  // Get media URL for embedding in content AND for LIAM image upload
-  const imageUrl = getFirstMediaUrl(post) || null;
-  
-  // IMPORTANT: Embed media URL in content as fallback for when LIAM API doesn't return images
-  // This allows the frontend MemoryCard to display images via parseMediaUrl()
-  if (imageUrl) {
-    memory += `\n\n[media:${imageUrl}]`;
-  }
-
-  // Embed permalink for reference
-  if (post.permalinkUrl) {
-    memory += `\n[link:${post.permalinkUrl}]`;
-  }
-
-  return { content: memory, imageUrl };
-}
-
-// LIAM API Base URL (using working proxy due to DNS issues with official URL)
-const LIAM_API_BASE = 'https://web.askbuddy.ai/devspacexdb/api';
-
-// Fetch an image from URL and convert to base64 for LIAM storage
-async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
-  try {
-    console.log('Fetching image for base64 conversion:', imageUrl.slice(0, 80));
-    
-    const response = await fetch(imageUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; MemoryBot/1.0)',
-      },
-    });
-    
-    if (!response.ok) {
-      console.error('Failed to fetch image:', response.status);
-      return null;
-    }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    
-    // Convert to base64
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    const base64 = btoa(binary);
-    
-    console.log(`Image converted to base64: ${base64.length} chars, type: ${contentType}`);
-    return `data:${contentType};base64,${base64}`;
-  } catch (error) {
-    console.error('Error converting image to base64:', error);
-    return null;
-  }
-}
-
-// Create memory by calling the liam-memory edge function (which has tested auth/signing)
-async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<boolean> {
-  try {
-    console.log('Creating memory via liam-memory function...');
-    console.log('Content preview:', content.slice(0, 150));
-    console.log('Has image:', !!imageBase64);
-    
-    // Call the liam-memory edge function which handles authentication properly
-    // Use service role key for inter-function calls
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/liam-memory`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          'x-supabase-user-id': apiKeys.user_id,
-        },
-        body: JSON.stringify({
-          action: imageBase64 ? 'create-with-image' : 'create',
-          content,
-          tag: 'INSTAGRAM',
-          image: imageBase64 || undefined,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('liam-memory function error:', response.status, errorText);
-      return false;
-    }
-
-    const result = await response.json();
-    console.log('Memory created successfully:', result?.processId || 'success');
-    return result.success !== false;
-  } catch (error) {
-    console.error('Create memory error:', error);
-    return false;
-  }
-}

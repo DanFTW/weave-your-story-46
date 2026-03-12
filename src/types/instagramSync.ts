@@ -30,6 +30,7 @@ export interface InstagramSyncConfig {
   userId: string;
   syncPosts: boolean;
   syncComments: boolean;
+  syncStories: boolean;
   lastSyncAt: string | null;
   lastSyncedPostId: string | null;
   postsSyncedCount: number;
@@ -42,13 +43,12 @@ export interface InstagramSyncResult {
   success: boolean;
   postsSynced: number;
   commentsSynced: number;
+  storiesSynced: number;
   memoriesCreated: number;
   skippedDuplicates?: number;
   error?: string;
 }
 
-// Locally stored Instagram post for reliable 1:1 display
-// (LIAM API tokenizes content, so we store full posts locally)
 export interface InstagramStoredPost {
   id: string;
   user_id: string;

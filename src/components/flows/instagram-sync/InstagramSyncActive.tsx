@@ -75,6 +75,12 @@ export function InstagramSyncActive({
               {syncConfig.syncComments ? "Enabled" : "Disabled"}
             </span>
           </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Sync Stories</span>
+            <span className={syncConfig.syncStories ? "text-green-500" : "text-muted-foreground"}>
+              {syncConfig.syncStories ? "Enabled" : "Disabled"}
+            </span>
+          </div>
         </div>
       </div>
 
