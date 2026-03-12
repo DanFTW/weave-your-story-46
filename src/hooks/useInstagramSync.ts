@@ -9,7 +9,6 @@ import {
 } from "@/types/instagramSync";
 
 interface UseInstagramSyncReturn {
-  // State
   phase: InstagramSyncPhase;
   setPhase: (phase: InstagramSyncPhase) => void;
   syncConfig: InstagramSyncConfig | null;
@@ -18,8 +17,6 @@ interface UseInstagramSyncReturn {
   isLoading: boolean;
   isSavingConfig: boolean;
   lastSyncResult: InstagramSyncResult | null;
-
-  // Actions
   loadConfig: () => Promise<void>;
   saveConfig: (config: Partial<InstagramSyncConfig>) => Promise<boolean>;
   syncNow: () => Promise<InstagramSyncResult | null>;
@@ -38,7 +35,20 @@ export function useInstagramSync(): UseInstagramSyncReturn {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<InstagramSyncResult | null>(null);
 
-  // Load sync configuration from database
+  const mapConfig = (data: any): InstagramSyncConfig => ({
+    id: data.id,
+    userId: data.user_id,
+    syncPosts: data.sync_posts,
+    syncComments: data.sync_comments,
+    syncStories: data.sync_stories ?? true,
+    lastSyncAt: data.last_sync_at,
+    lastSyncedPostId: data.last_synced_post_id,
+    postsSyncedCount: data.posts_synced_count,
+    memoriesCreatedCount: data.memories_created_count,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  });
+
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -51,46 +61,23 @@ export function useInstagramSync(): UseInstagramSyncReturn {
         .eq('user_id', session.user.id)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
+      if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        const config: InstagramSyncConfig = {
-          id: data.id,
-          userId: data.user_id,
-          syncPosts: data.sync_posts,
-          syncComments: data.sync_comments,
-          lastSyncAt: data.last_sync_at,
-          lastSyncedPostId: data.last_synced_post_id,
-          postsSyncedCount: data.posts_synced_count,
-          memoriesCreatedCount: data.memories_created_count,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
+        const config = mapConfig(data);
         setSyncConfig(config);
-        
-        if (config.lastSyncAt) {
-          setPhase('active');
-        } else {
-          setPhase('configure');
-        }
+        setPhase(config.lastSyncAt ? 'active' : 'configure');
       } else {
         setPhase('configure');
       }
     } catch (error) {
       console.error('Failed to load sync config:', error);
-      toast({
-        title: "Load failed",
-        description: "Could not load sync configuration.",
-        variant: "destructive",
-      });
+      toast({ title: "Load failed", description: "Could not load sync configuration.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   }, [toast]);
 
-  // Save sync configuration
   const saveConfig = useCallback(async (configUpdate: Partial<InstagramSyncConfig>): Promise<boolean> => {
     setIsSavingConfig(true);
     try {
@@ -101,77 +88,44 @@ export function useInstagramSync(): UseInstagramSyncReturn {
         user_id: session.user.id,
         sync_posts: configUpdate.syncPosts ?? true,
         sync_comments: configUpdate.syncComments ?? true,
+        sync_stories: configUpdate.syncStories ?? true,
         updated_at: new Date().toISOString(),
       };
 
       if (syncConfig?.id) {
         const { error } = await supabase
-          .from('instagram_sync_config')
-          .update(updateData)
-          .eq('id', syncConfig.id);
-          
+          .from('instagram_sync_config').update(updateData).eq('id', syncConfig.id);
         if (error) throw error;
       } else {
         const { data, error } = await supabase
-          .from('instagram_sync_config')
-          .insert(updateData)
-          .select()
-          .single();
-          
+          .from('instagram_sync_config').insert(updateData).select().single();
         if (error) throw error;
-        
-        if (data) {
-          setSyncConfig({
-            id: data.id,
-            userId: data.user_id,
-            syncPosts: data.sync_posts,
-            syncComments: data.sync_comments,
-            lastSyncAt: data.last_sync_at,
-            lastSyncedPostId: data.last_synced_post_id,
-            postsSyncedCount: data.posts_synced_count,
-            memoriesCreatedCount: data.memories_created_count,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-          });
-        }
+        if (data) setSyncConfig(mapConfig(data));
       }
 
-      toast({
-        title: "Settings saved",
-        description: "Your sync preferences have been updated.",
-      });
+      toast({ title: "Settings saved", description: "Your sync preferences have been updated." });
       return true;
     } catch (error) {
       console.error('Failed to save config:', error);
-      toast({
-        title: "Save failed",
-        description: "Could not save sync configuration.",
-        variant: "destructive",
-      });
+      toast({ title: "Save failed", description: "Could not save sync configuration.", variant: "destructive" });
       return false;
     } finally {
       setIsSavingConfig(false);
     }
   }, [syncConfig, toast]);
 
-  // Fetch recent posts from Instagram
   const fetchRecentPosts = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke('instagram-sync', {
         body: { action: 'list-posts', limit: 12 },
       });
-
       if (error) throw error;
-
-      if (data?.posts) {
-        setRecentPosts(data.posts);
-      }
+      if (data?.posts) setRecentPosts(data.posts);
     } catch (error) {
       console.error('Failed to fetch recent posts:', error);
     }
   }, []);
 
-  // Sync posts now
   const syncNow = useCallback(async (): Promise<InstagramSyncResult | null> => {
     setIsSyncing(true);
     setPhase('syncing');
@@ -180,13 +134,13 @@ export function useInstagramSync(): UseInstagramSyncReturn {
       const { data, error } = await supabase.functions.invoke('instagram-sync', {
         body: { action: 'sync' },
       });
-
       if (error) throw error;
 
       const result: InstagramSyncResult = {
         success: data?.success ?? false,
         postsSynced: data?.postsSynced ?? 0,
         commentsSynced: data?.commentsSynced ?? 0,
+        storiesSynced: data?.storiesSynced ?? 0,
         memoriesCreated: data?.memoriesCreated ?? 0,
         error: data?.error,
       };
@@ -194,9 +148,13 @@ export function useInstagramSync(): UseInstagramSyncReturn {
       setLastSyncResult(result);
 
       if (result.success) {
+        const parts: string[] = [];
+        if (result.postsSynced) parts.push(`${result.postsSynced} post${result.postsSynced !== 1 ? 's' : ''}`);
+        if (result.storiesSynced) parts.push(`${result.storiesSynced} stor${result.storiesSynced !== 1 ? 'ies' : 'y'}`);
+        
         toast({
           title: "Sync complete",
-          description: `Synced ${result.postsSynced} post${result.postsSynced !== 1 ? 's' : ''} and created ${result.memoriesCreated} memor${result.memoriesCreated !== 1 ? 'ies' : 'y'}.`,
+          description: `Synced ${parts.join(' and ') || '0 items'} and created ${result.memoriesCreated} memor${result.memoriesCreated !== 1 ? 'ies' : 'y'}.`,
         });
         
         await loadConfig();
@@ -208,11 +166,7 @@ export function useInstagramSync(): UseInstagramSyncReturn {
       return result;
     } catch (error) {
       console.error('Sync failed:', error);
-      toast({
-        title: "Sync failed",
-        description: error instanceof Error ? error.message : "Could not sync posts.",
-        variant: "destructive",
-      });
+      toast({ title: "Sync failed", description: error instanceof Error ? error.message : "Could not sync.", variant: "destructive" });
       setPhase('active');
       return null;
     } finally {
@@ -220,51 +174,29 @@ export function useInstagramSync(): UseInstagramSyncReturn {
     }
   }, [toast, loadConfig]);
 
-  // Force reset sync state to allow re-syncing ALL existing posts
   const resetSync = useCallback(async (): Promise<boolean> => {
     try {
-      // Use force-reset-sync to clear deduplication table and allow full re-sync
       const { data, error } = await supabase.functions.invoke('instagram-sync', {
         body: { action: 'force-reset-sync' },
       });
-
       if (error) throw error;
 
       if (data?.success) {
-        toast({
-          title: "Full reset complete",
-          description: "All posts will be re-synced as new memories.",
-        });
+        toast({ title: "Full reset complete", description: "All posts will be re-synced as new memories." });
         await loadConfig();
         setPhase('configure');
         return true;
       }
-      
       throw new Error(data?.error || 'Reset failed');
     } catch (error) {
       console.error('Force reset sync failed:', error);
-      toast({
-        title: "Reset failed",
-        description: error instanceof Error ? error.message : "Could not reset sync state.",
-        variant: "destructive",
-      });
+      toast({ title: "Reset failed", description: error instanceof Error ? error.message : "Could not reset sync state.", variant: "destructive" });
       return false;
     }
   }, [toast, loadConfig]);
 
   return {
-    phase,
-    setPhase,
-    syncConfig,
-    recentPosts,
-    isSyncing,
-    isLoading,
-    isSavingConfig,
-    lastSyncResult,
-    loadConfig,
-    saveConfig,
-    syncNow,
-    fetchRecentPosts,
-    resetSync,
+    phase, setPhase, syncConfig, recentPosts, isSyncing, isLoading,
+    isSavingConfig, lastSyncResult, loadConfig, saveConfig, syncNow, fetchRecentPosts, resetSync,
   };
 }

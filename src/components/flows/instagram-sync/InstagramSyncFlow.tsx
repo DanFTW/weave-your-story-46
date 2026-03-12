@@ -149,6 +149,7 @@ export function InstagramSyncFlow() {
           <InstagramSyncConfig
             syncPosts={syncConfig?.syncPosts ?? true}
             syncComments={syncConfig?.syncComments ?? true}
+            syncStories={syncConfig?.syncStories ?? true}
             isSaving={isSavingConfig}
             onSave={handleSaveConfig}
             onStartSync={handleStartSync}
