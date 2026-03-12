@@ -18,7 +18,9 @@ const REQUEST_TIMEOUT = 30000; // 30 seconds
  * The toolkit is determined server-side from the Composio API response.
  */
 export default function OAuthComplete() {
-  const [searchParams] = useSearchParams();
+  // Capture query params synchronously at render time, before Supabase Auth
+  // detects ?code= and strips the URL via history.replaceState()
+  const originalSearchRef = useRef(new URLSearchParams(window.location.search));
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Completing connection...");
