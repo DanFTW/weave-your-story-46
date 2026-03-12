@@ -49,7 +49,21 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!integration?.composio_connection_id) {
-      return new Response(JSON.stringify({ error: "Slack not connected" }), {
+      const missingTokenPayload = {
+        error: "Slack not connected",
+        code: "SLACK_TOKEN_MISSING",
+        needsReconnect: true,
+      };
+
+      // For initial channel loading, return 200 so the client can gracefully route to reconnect UI.
+      if (action === "list-channels") {
+        return new Response(JSON.stringify(missingTokenPayload), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify(missingTokenPayload), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
