@@ -70,6 +70,7 @@ serve(async (req) => {
     }
 
     const slackToken = integration.composio_connection_id;
+    console.log(`[slack-messages-sync] Token preview: ${slackToken.substring(0, 10)}... (length=${slackToken.length})`);
 
     async function slackApi(method: string, params: Record<string, any> = {}) {
       const url = new URL(`https://slack.com/api/${method}`);
