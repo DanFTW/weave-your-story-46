@@ -19,7 +19,7 @@ export function MonitorToggle({ isActive, stats, isActivating, onToggle }: Monit
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">Automatic Monitoring</h3>
-            <p className="text-xs text-muted-foreground">Save new Google Docs as memories</p>
+            <p className="text-xs text-muted-foreground">Save new documents as memories</p>
           </div>
         </div>
         <Switch

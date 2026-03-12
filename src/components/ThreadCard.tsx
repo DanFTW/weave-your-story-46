@@ -48,6 +48,10 @@ function getColorConfig(thread: Thread): CardColorConfig {
   const serviceIntegrations = thread.integrations?.filter(
     (i) => !fillerIntegrations.includes(i)
   );
+  // Multi-provider threads use neutral gradient fallback
+  if (serviceIntegrations && serviceIntegrations.length > 1) {
+    return gradientFallbackColors[thread.gradient];
+  }
   const primary = serviceIntegrations?.[0];
   if (primary && integrationColors[primary]) {
     return integrationColors[primary];
@@ -55,14 +59,23 @@ function getColorConfig(thread: Thread): CardColorConfig {
   return gradientFallbackColors[thread.gradient];
 }
 
-export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
-  const colors = getColorConfig(thread);
-
-  // Get the primary service integration for the icon
+function isMultiProvider(thread: Thread): boolean {
   const serviceIntegrations = thread.integrations?.filter(
     (i) => !fillerIntegrations.includes(i)
   );
-  const primaryIcon = serviceIntegrations?.[0];
+  return (serviceIntegrations?.length ?? 0) > 1;
+}
+
+export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
+  const colors = getColorConfig(thread);
+
+  const multiProvider = isMultiProvider(thread);
+
+  // Get the primary service integration for the icon (single-provider only)
+  const serviceIntegrations = thread.integrations?.filter(
+    (i) => !fillerIntegrations.includes(i)
+  );
+  const primaryIcon = multiProvider ? undefined : serviceIntegrations?.[0];
 
   return (
     <button
