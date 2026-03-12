@@ -157,18 +157,18 @@ export default function OAuthComplete() {
 
       // Composio v3 uses 'connected_account_id' in callback
       const connectionId = 
-        searchParams.get("connected_account_id") || 
-        searchParams.get("connectionId") ||
-        searchParams.get("id");
+        params.get("connected_account_id") || 
+        params.get("connectionId") ||
+        params.get("id");
       
-      const toolkitFromUrl = searchParams.get("toolkit");
+      const toolkitFromUrl = params.get("toolkit");
 
       console.log("OAuthComplete: connectionId =", connectionId, "toolkit =", toolkitFromUrl);
 
       if (!connectionId) {
         console.error("OAuthComplete: No connection ID found in URL params");
         setStatus("error");
-        const allParams = Object.fromEntries(searchParams.entries());
+        const allParams = Object.fromEntries(params.entries());
         const paramStr = Object.keys(allParams).length > 0 
           ? `Received: ${JSON.stringify(allParams)}`
           : "No query parameters received.";
