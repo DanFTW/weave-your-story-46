@@ -76,29 +76,78 @@ export default function OAuthComplete() {
 
   useEffect(() => {
     const completeOAuth = async () => {
-      // Log the full URL for debugging
       console.log("OAuthComplete: Full URL:", window.location.href);
-      console.log("OAuthComplete: Search string:", window.location.search);
-      console.log("OAuthComplete: Hash:", window.location.hash);
-      
+      console.log("OAuthComplete: Parsed params:", Object.fromEntries(searchParams.entries()));
+
+      // --- SLACK NATIVE OAUTH CALLBACK ---
+      const slackCode = searchParams.get("code");
+      const stateParam = searchParams.get("state");
+      const isSlackCallback = slackCode && stateParam?.startsWith("slack_");
+
+      if (isSlackCallback) {
+        console.log("OAuthComplete: Slack native OAuth callback detected");
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const { data, error } = await supabase.functions.invoke("slack-oauth", {
+            body: {
+              action: "callback",
+              code: slackCode,
+              userId: session?.user?.id,
+            },
+          });
+
+          console.log("OAuthComplete: Slack callback response:", data, error);
+
+          if (error || !data?.success) {
+            setStatus("error");
+            setMessage("Failed to complete Slack connection");
+            setErrorDetails(data?.error || error?.message || "Please try again.");
+            return;
+          }
+
+          // Success — continue to normal success handling below
+          setToolkit("slack");
+          setStatus("success");
+          setMessage("Slack connected successfully!");
+
+          // Handle redirect
+          const isPopup = window.opener && window.opener !== window;
+          if (isMedian()) {
+            setTimeout(() => { try { median.appbrowser.close(); } catch (e) { setMessage("Connection complete! You can close this window."); } }, 1500);
+          } else if (isPopup) {
+            setTimeout(() => { try { window.close(); } catch (e) { setMessage("Connection complete! You can close this window."); } }, 2000);
+          } else {
+            setTimeout(() => {
+              const storedReturnUrl = sessionStorage.getItem('oauth_return_url') || localStorage.getItem('oauth_return_url');
+              sessionStorage.removeItem('oauth_return_url');
+              localStorage.removeItem('oauth_return_url');
+              window.location.href = storedReturnUrl || `${window.location.origin}/integration/slack`;
+            }, 1500);
+          }
+          return;
+        } catch (err) {
+          console.error("OAuthComplete: Slack callback error:", err);
+          setStatus("error");
+          setMessage("Failed to complete Slack connection");
+          setErrorDetails(err instanceof Error ? err.message : "Please try again.");
+          return;
+        }
+      }
+      // --- END SLACK ---
+
       // Composio v3 uses 'connected_account_id' in callback
-      // Also check alternative param names for flexibility
       const connectionId = 
         searchParams.get("connected_account_id") || 
         searchParams.get("connectionId") ||
         searchParams.get("id");
       
-      // Toolkit might be in URL (if Composio preserved it) or will be fetched from API
       const toolkitFromUrl = searchParams.get("toolkit");
 
-      console.log("OAuthComplete: Parsed params:", Object.fromEntries(searchParams.entries()));
       console.log("OAuthComplete: connectionId =", connectionId, "toolkit =", toolkitFromUrl);
 
       if (!connectionId) {
         console.error("OAuthComplete: No connection ID found in URL params");
-        console.error("OAuthComplete: Expected format: /oauth-complete?connected_account_id=ca_xxx");
         setStatus("error");
-        // More descriptive error message
         const allParams = Object.fromEntries(searchParams.entries());
         const paramStr = Object.keys(allParams).length > 0 
           ? `Received: ${JSON.stringify(allParams)}`
