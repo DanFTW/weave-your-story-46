@@ -30,6 +30,7 @@ function isMobileBrowser(): boolean {
 export function useComposio(toolkit: string): UseComposioReturn {
   const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   
   // Refs for polling
