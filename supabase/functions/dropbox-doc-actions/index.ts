@@ -60,7 +60,8 @@ function parseZipEntries(data: Uint8Array): ZipEntry[] {
 async function decompressEntry(entry: ZipEntry): Promise<Uint8Array> {
   if (entry.compressionMethod === 0) return entry.compressedData;
   if (entry.compressionMethod === 8) {
-    const ds = new DecompressionStream("raw");
+    // Deno supports "deflate-raw" for raw deflate (no zlib header)
+    const ds = new DecompressionStream("deflate-raw" as CompressionFormat);
     const writer = ds.writable.getWriter();
     const reader = ds.readable.getReader();
     writer.write(entry.compressedData);
