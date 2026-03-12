@@ -122,7 +122,7 @@ export function SlackMessagesSyncFlow() {
       <div className={cn("relative px-5 pt-status-bar pb-6 thread-gradient-purple")}>
         <div className="flex items-center gap-3">
           <button
-            onClick={handleBack}
+            onClick={() => navigate("/threads")}
             className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
           >
             <ChevronLeft className="w-6 h-6 text-white" />
