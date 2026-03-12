@@ -284,7 +284,8 @@ export function useGoogleDriveAutomation() {
       if (selectedDoc) {
         const session = await getSession();
         if (session) {
-          await supabase.functions.invoke('googledrive-automation-triggers', {
+          const saveFnName = activeSource === 'dropbox' ? 'dropbox-doc-actions' : 'googledrive-automation-triggers';
+          await supabase.functions.invoke(saveFnName, {
             body: { action: 'save-doc', fileId: selectedDoc.fileId, fileName: selectedDoc.fileName },
             headers: { Authorization: `Bearer ${session.access_token}` },
           });
