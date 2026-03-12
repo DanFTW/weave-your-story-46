@@ -217,9 +217,11 @@ export function useGoogleDriveAutomation() {
         ? content.substring(0, 12000) + '\n\n[Content truncated...]'
         : content;
 
+      const memoryTag = activeSource === 'dropbox' ? 'DROPBOX' : 'GOOGLEDRIVE';
+
       const { data: genData, error: genError } = await supabase.functions.invoke('generate-memories', {
         body: {
-          flowType: 'googledrive-doc',
+          flowType: activeSource === 'dropbox' ? 'dropbox-doc' : 'googledrive-doc',
           entryName: 'document content',
           entryNamePlural: 'document contents',
           entries: [{
@@ -227,7 +229,7 @@ export function useGoogleDriveAutomation() {
             data: { content: truncated, title: fileName },
             createdAt: new Date().toISOString(),
           }],
-          memoryTag: 'GOOGLEDRIVE',
+          memoryTag,
         },
       });
 
