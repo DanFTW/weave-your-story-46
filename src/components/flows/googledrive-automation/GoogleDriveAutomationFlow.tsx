@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Loader2, FileText, Check } from "lucide-react";
+import { ChevronLeft, Loader2, Check } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useGoogleDriveAutomation } from "@/hooks/useGoogleDriveAutomation";
 import { MonitorToggle } from "./MonitorToggle";
@@ -12,6 +12,7 @@ import { MemoryPreviewCard } from "@/components/flows/MemoryPreviewCard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { DocSource } from "@/types/googleDriveAutomation";
 
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -25,11 +26,13 @@ export function GoogleDriveAutomationFlow() {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const { isConnected, checkStatus } = useComposio('GOOGLEDRIVE');
+  const { isConnected: isGDriveConnected, checkStatus: checkGDrive } = useComposio('GOOGLEDRIVE');
+  const { isConnected: isDropboxConnected, checkStatus: checkDropbox } = useComposio('DROPBOX');
 
   const {
     phase, setPhase, config, stats, isLoading, isActivating,
     isSearching, searchResults, isSaving,
+    activeSource, setActiveSource,
     generatedMemories, selectedDoc, isConfirming, savedCount,
     loadConfig, activateMonitoring, deactivateMonitoring,
     searchDocs, generateFromDoc,
@@ -40,20 +43,37 @@ export function GoogleDriveAutomationFlow() {
   useEffect(() => {
     const checkAuth = async () => {
       setIsCheckingAuth(true);
-      await checkStatus();
+      await Promise.all([checkGDrive(), checkDropbox()]);
       setIsCheckingAuth(false);
     };
     checkAuth();
-  }, [checkStatus]);
+  }, [checkGDrive, checkDropbox]);
+
+  // Determine available sources and redirect if none connected
+  const availableSources = useMemo<DocSource[]>(() => {
+    const sources: DocSource[] = [];
+    if (isGDriveConnected) sources.push('googledrive');
+    if (isDropboxConnected) sources.push('dropbox');
+    return sources;
+  }, [isGDriveConnected, isDropboxConnected]);
 
   useEffect(() => {
-    if (!isCheckingAuth && isConnected) {
-      loadConfig();
-    } else if (!isCheckingAuth && !isConnected) {
+    if (isCheckingAuth) return;
+
+    if (availableSources.length === 0) {
+      // Neither connected — redirect to Google Drive integration as default
       sessionStorage.setItem('returnAfterGoogledriveConnect', '/flow/googledrive-tracker');
       navigate('/integration/googledrive');
+      return;
     }
-  }, [isCheckingAuth, isConnected, loadConfig, navigate]);
+
+    // Default to first available source
+    if (!availableSources.includes(activeSource)) {
+      setActiveSource(availableSources[0]);
+    }
+
+    loadConfig();
+  }, [isCheckingAuth, availableSources, activeSource, setActiveSource, loadConfig, navigate]);
 
   const handleBack = () => {
     if (phase === 'preview') {
@@ -81,13 +101,8 @@ export function GoogleDriveAutomationFlow() {
     );
   }
 
-  if (phase === 'activating') {
-    return <ActivatingScreen />;
-  }
-
-  if (phase === 'generating') {
-    return <GoogleDriveGeneratingScreen />;
-  }
+  if (phase === 'activating') return <ActivatingScreen />;
+  if (phase === 'generating') return <GoogleDriveGeneratingScreen />;
 
   if (phase === 'success') {
     return (
@@ -114,12 +129,12 @@ export function GoogleDriveAutomationFlow() {
           </button>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-white truncate">
-              {phase === 'preview' ? 'Review Memories' : 'Google Drive Document Tracker'}
+              {phase === 'preview' ? 'Review Memories' : 'Document Tracker'}
             </h1>
             <p className="text-white/70 text-sm truncate">
               {phase === 'preview'
                 ? `${activeMemories.length} memories extracted`
-                : 'Document tracker'}
+                : 'Search & generate from documents'}
             </p>
           </div>
         </div>
@@ -128,16 +143,21 @@ export function GoogleDriveAutomationFlow() {
       {/* Ready phase: monitor toggle + search */}
       {phase === 'ready' && (
         <div className="px-5 pt-6 space-y-4">
-          <MonitorToggle
-            isActive={config?.isActive ?? false}
-            stats={stats}
-            isActivating={isActivating}
-            onToggle={handleToggle}
-          />
+          {isGDriveConnected && (
+            <MonitorToggle
+              isActive={config?.isActive ?? false}
+              stats={stats}
+              isActivating={isActivating}
+              onToggle={handleToggle}
+            />
+          )}
           <DocumentSearch
             isSearching={isSearching}
             searchResults={searchResults}
             isSaving={isSaving}
+            activeSource={activeSource}
+            availableSources={availableSources}
+            onSourceChange={setActiveSource}
             onSearch={searchDocs}
             onGenerate={generateFromDoc}
           />
