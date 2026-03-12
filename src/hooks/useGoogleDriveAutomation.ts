@@ -22,6 +22,7 @@ export function useGoogleDriveAutomation() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<GoogleDriveSearchResult[]>([]);
   const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
+  const [activeSource, setActiveSource] = useState<DocSource>('googledrive');
 
   // Generate → preview → confirm state
   const [generatedMemories, setGeneratedMemories] = useState<GeneratedMemory[]>([]);
