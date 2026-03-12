@@ -70,6 +70,7 @@ serve(async (req) => {
     }
 
     const slackToken = integration.composio_connection_id;
+    console.log(`[slack-messages-sync] Token preview: ${slackToken.substring(0, 10)}... (length=${slackToken.length})`);
 
     async function slackApi(method: string, params: Record<string, any> = {}) {
       const url = new URL(`https://slack.com/api/${method}`);
@@ -102,6 +103,18 @@ serve(async (req) => {
       });
 
       if (!result.ok) {
+        console.error(`[slack-messages-sync] conversations.list failed:`, JSON.stringify(result));
+        const authErrors = ["missing_scope", "invalid_auth", "token_revoked", "not_authed", "account_inactive"];
+        if (authErrors.includes(result.error)) {
+          return new Response(JSON.stringify({
+            error: result.error,
+            code: "SLACK_AUTH_ERROR",
+            needsReconnect: true,
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         return new Response(JSON.stringify({ error: result.error || "Failed to list channels" }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
