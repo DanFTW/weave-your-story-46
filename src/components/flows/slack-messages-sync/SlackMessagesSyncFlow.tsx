@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSlackMessagesSync } from "@/hooks/useSlackMessagesSync";
@@ -97,6 +97,49 @@ export function SlackMessagesSyncFlow() {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-[#4A154B]" />
           <p className="text-muted-foreground text-sm">Loading configuration...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "needs-reconnect") {
+    const handleReconnect = async () => {
+      // Delete the stale integration row so the user can re-auth cleanly
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await supabase
+          .from("user_integrations")
+          .delete()
+          .eq("user_id", session.user.id)
+          .eq("integration_id", "slack");
+      }
+      sessionStorage.setItem("returnAfterSlackConnect", "/flow/slack-messages-sync");
+      navigate("/integration/slack");
+    };
+
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-5 text-center max-w-sm">
+          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+            <AlertTriangle className="w-8 h-8 text-destructive" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Reconnect Slack</h2>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Your Slack connection needs to be refreshed. This usually happens when a previous connection expired or was incomplete.
+          </p>
+          <button
+            onClick={handleReconnect}
+            className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#4A154B] text-white font-semibold text-sm hover:bg-[#3a1040] transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reconnect Slack
+          </button>
+          <button
+            onClick={() => navigate("/threads")}
+            className="text-muted-foreground text-sm underline underline-offset-2"
+          >
+            Go back
+          </button>
         </div>
       </div>
     );
