@@ -1134,6 +1134,45 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "slack-messages-sync": {
+    id: "slack-messages-sync",
+    title: "Slack Messages to Memory",
+    subtitle: "Import messages as memories",
+    description: "Connects to your Slack workspace and imports messages from selected channels as memories. Choose between passive import or active search mode.",
+    gradient: "purple",
+    icon: MessagesSquare,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Slack",
+        description: "Authorize access to your workspace",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/d/d5/Slack_icon_2019.svg",
+      },
+      {
+        id: "channels",
+        type: "setup",
+        title: "Select Channels",
+        description: "Choose which channels to import from",
+        icon: Hash,
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Search & Import",
+        description: "Configure import mode",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Sync",
+        description: "Messages imported automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
 };
 
 export function getThreadConfig(threadId: string): ThreadConfig | undefined {

@@ -122,3 +122,6 @@ verify_jwt = false
 
 [functions.slack-oauth]
 verify_jwt = false
+
+[functions.slack-messages-sync]
+verify_jwt = false
