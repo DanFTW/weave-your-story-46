@@ -361,7 +361,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
   }
 }
 
-async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<boolean> {
+async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<{ success: boolean; memoryId?: string }> {
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/liam-memory`, {
       method: 'POST',
@@ -381,14 +381,15 @@ async function createMemory(apiKeys: any, content: string, imageBase64?: string 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[memory] Create error:', response.status, errorText.slice(0, 200));
-      return false;
+      return { success: false };
     }
 
     const result = await response.json();
-    return result.success !== false;
+    const memoryId = result.memory?.id || result.id || result.memoryId || null;
+    return { success: result.success !== false, memoryId: memoryId || undefined };
   } catch (error) {
     console.error('[memory] Create error:', error);
-    return false;
+    return { success: false };
   }
 }
 
