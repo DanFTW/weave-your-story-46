@@ -95,29 +95,65 @@ function safeJsonParse(text: string): any {
 
 // === EXTRACT TEXT CONTENT FROM COMPOSIO RESPONSE ===
 
-function extractTextContent(data: any): string {
+function tryDecodeBase64(str: string): string {
+  try {
+    const decoded = new TextDecoder().decode(Uint8Array.from(atob(str), c => c.charCodeAt(0)));
+    if (decoded && /[a-zA-Z0-9\s]/.test(decoded.slice(0, 100))) return decoded;
+  } catch { /* not base64 */ }
+  return "";
+}
+
+async function extractTextContent(data: any): Promise<string> {
   if (!data?.data) return "";
 
   const d = data.data;
-  // Check downloaded_file_content (Google Drive download response)
-  if (typeof d.downloaded_file_content === "string" && d.downloaded_file_content.trim()) return d.downloaded_file_content.trim();
+
+  // downloaded_file_content can be an object with s3url (presigned URL to fetch)
+  if (d.downloaded_file_content && typeof d.downloaded_file_content === "object") {
+    const s3url = d.downloaded_file_content.s3url;
+    if (s3url && typeof s3url === "string") {
+      console.log("[GoogleDrive] Fetching content from s3url...");
+      try {
+        const resp = await fetch(s3url);
+        if (resp.ok) {
+          const text = await resp.text();
+          if (text.trim()) {
+            console.log("[GoogleDrive] Fetched s3url content, length:", text.length);
+            return text.trim();
+          }
+        } else {
+          console.error("[GoogleDrive] s3url fetch failed:", resp.status);
+        }
+      } catch (e) {
+        console.error("[GoogleDrive] s3url fetch error:", e);
+      }
+    }
+  }
+
+  // Check downloaded_file_content as string (plain text or base64)
+  if (typeof d.downloaded_file_content === "string") {
+    const dfc = d.downloaded_file_content.trim();
+    if (dfc) {
+      if (/^[A-Za-z0-9+/=\r\n]+$/.test(dfc) && dfc.length > 100) {
+        const decoded = tryDecodeBase64(dfc.replace(/[\r\n]/g, ""));
+        if (decoded) return decoded;
+      }
+      return dfc;
+    }
+  }
 
   const rd = d.response_data;
-  // Direct string
   if (typeof rd === "string" && rd.trim()) return rd.trim();
-  // Nested .content
   if (rd && typeof rd === "object") {
     if (typeof rd.content === "string" && rd.content.trim()) return rd.content.trim();
     if (typeof rd.text === "string" && rd.text.trim()) return rd.text.trim();
     if (typeof rd.downloaded_file_content === "string" && rd.downloaded_file_content.trim()) return rd.downloaded_file_content.trim();
-    // Base64 bytes field
     if (typeof rd.data === "string" && rd.data.length > 0) {
-      try { return new TextDecoder().decode(Uint8Array.from(atob(rd.data), c => c.charCodeAt(0))); } catch { /* not base64 */ }
+      const decoded = tryDecodeBase64(rd.data);
+      if (decoded) return decoded;
     }
   }
-  // Fallback: data.content
   if (typeof d.content === "string" && d.content.trim()) return d.content.trim();
-  // Last resort: stringify if object
   if (rd && typeof rd === "object") return JSON.stringify(rd);
   if (typeof d === "string" && d.trim()) return d.trim();
   return "";
@@ -177,7 +213,7 @@ async function exportDocContent(connectionId: string, fileId: string): Promise<s
       keys: data?.data ? Object.keys(data.data).slice(0, 10) : [],
     }));
 
-    return extractTextContent(data);
+    return await extractTextContent(data);
   } catch (error) {
     console.error("[GoogleDrive] Export error:", error);
     return "";
