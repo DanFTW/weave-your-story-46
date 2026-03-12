@@ -12,6 +12,7 @@ export interface ConnectedAccount {
 interface UseComposioReturn {
   connectedAccount: ConnectedAccount | null;
   connecting: boolean;
+  checking: boolean;
   isConnected: boolean;
   connect: (customRedirectPath?: string, forceReauth?: boolean) => Promise<void>;
   disconnect: () => Promise<void>;
