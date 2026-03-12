@@ -1,67 +1,115 @@
 
 
-## Root Cause Analysis
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-There are **two interacting bugs** creating an infinite redirect loop:
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-### Bug 1: Redirect ping-pong between two pages
+### 1. Database Tables (2 new tables via migration)
 
-The `SlackMessagesSyncFlow` checks `composio_connection_id` (the actual token). Since it's null, it sets `sessionStorage("returnAfterSlackConnect", "/flow/slack-messages-sync")` and redirects to `/integration/slack`.
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-The `IntegrationDetail` page uses `useComposio` which only checks `status === "connected"` (ignoring the token). It sees Slack as connected, reads `returnAfterSlackConnect` from sessionStorage, and redirects back to `/flow/slack-messages-sync`. This creates an infinite loop.
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-### Bug 2: Token never persisted in database
+### 2. Edge Function: `restaurant-bookmark-sync`
 
-The DB confirms `composio_connection_id: null` for the user's Slack row. The `slack-oauth` edge function code has the fix (`composio_connection_id: userToken`) but either wasn't redeployed or the connection predates the fix. All 2 Slack connections in the DB have null tokens.
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
 
-### Evidence from network requests
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
 
-The requests fire every ~1 second in pairs (one from SlackMessagesSyncFlow, one from useComposio/IntegrationDetail), confirming the redirect loop between the two pages.
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
 
----
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
 
-## Plan
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
 
-### 1. Break the redirect loop in SlackMessagesSyncFlow.tsx
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
 
-When `composio_connection_id` is null but `status` is `"connected"`, instead of redirecting to `/integration/slack` (which bounces back), show a "Reconnect Required" inline screen with a button that navigates to the integration page **without** setting the return path in sessionStorage. This breaks the loop.
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
 
-```typescript
-// New state
-const [needsReconnect, setNeedsReconnect] = useState(false);
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
 
-// In checkSlackAuth: detect connected-but-no-token
-const hasUsableToken = Boolean(data?.composio_connection_id);
-const isConnectedWithoutToken = Boolean(data && !data.composio_connection_id);
-setIsSlackConnected(hasUsableToken);
-setNeedsReconnect(isConnectedWithoutToken);
+### 6. Registration (data + routing)
 
-// In second useEffect: only redirect if NOT connected at all
-if (!isSlackConnected && !needsReconnect) {
-  sessionStorage.setItem("returnAfterSlackConnect", "/flow/slack-messages-sync");
-  navigate("/integration/slack");
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
 }
-
-// New render branch for needsReconnect: show reconnect UI
 ```
 
-### 2. Add `/flow/slack-me` route alias in App.tsx
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
 
-Add a redirect route so `/flow/slack-me*` resolves to `/flow/slack-messages-sync`.
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
 
-### 3. Redeploy the slack-oauth edge function
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
 
-The function code already has the fix at line 161 (`composio_connection_id: userToken`). Trigger a redeploy to ensure the live version matches.
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
 
-### 4. Add console logging for debugging
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
 
-Add a `console.log` in `SlackMessagesSyncFlow` showing the auth check result (`hasUsableToken`, `needsReconnect`) so future debugging is easier.
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
 
----
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
 
-## Files to change
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
 
-- `src/components/flows/slack-messages-sync/SlackMessagesSyncFlow.tsx` — break redirect loop, add reconnect UI
-- `src/App.tsx` — add `/flow/slack-me` redirect alias
-- `supabase/functions/slack-oauth/index.ts` — redeploy (no code changes needed, already fixed)
+### 8. Wire trigger into memory save
+
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+
+### Summary of files to create/modify
+
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
+
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+
+**Database migration:** 2 tables + RLS policies
 
