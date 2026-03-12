@@ -161,7 +161,9 @@ export function useGoogleDriveAutomation() {
       const session = await getSession();
       if (!session) return [];
 
-      const { data, error } = await supabase.functions.invoke('googledrive-automation-triggers', {
+      const fnName = activeSource === 'dropbox' ? 'dropbox-doc-actions' : 'googledrive-automation-triggers';
+
+      const { data, error } = await supabase.functions.invoke(fnName, {
         body: { action: 'search-docs', query },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -181,7 +183,7 @@ export function useGoogleDriveAutomation() {
     } finally {
       setIsSearching(false);
     }
-  }, [toast, getSession]);
+  }, [toast, getSession, activeSource]);
 
   // === NEW: Generate memories from document content ===
 
