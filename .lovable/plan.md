@@ -1,115 +1,45 @@
 
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+## Investigation: Slack Connection "Blocked" Issue
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+### Evidence Gathered
 
-### 1. Database Tables (2 new tables via migration)
+**1. Edge function `composio-connect` — working correctly**
+- Logs confirm: auth config `ac_1wq5vJ92z9wT` is used (the fix is deployed)
+- Composio returns a valid link: `https://connect.composio.dev/link/lk_9QN8jfmCIwRU` with `connectionId: ca_bYJOtmTwiTtx`
+- Response status: 201 (success)
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+**2. Composio hosted link page — working correctly**
+- I fetched the redirect URL directly and confirmed it renders **Slack's workspace sign-in page** (not a ZodError). The auth config fix resolved the original Composio-side schema error.
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+**3. Edge function `composio-callback` — zero Slack logs**
+- No `composio-callback` invocation for Slack exists in the logs at all. The callback has **never been triggered** for Slack, meaning the OAuth flow is never completed end-to-end.
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+**4. Console logs — no popup failure messages**
+- After `Connect response: {redirectUrl, connectionId}`, there are no logs about "New tab blocked" or "All popups blocked", which would be printed by the fallback code in `useComposio`. This means `window.open` likely returned a non-null value (the tab appeared to open).
+- The 2-minute polling starts but never detects a connected row in `user_integrations` (because callback never fires), so it times out.
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+### Root Cause Assessment
 
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+The Composio-side ZodError from the old auth config is **resolved**. The current failure is a **flow completion issue**: the user is redirected to Slack's sign-in page (via Composio's link), but the OAuth round-trip never completes back to `/oauth-complete`. This means one of:
 
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
+1. **Preview iframe context**: The user is testing in Lovable's preview iframe. `window.open('_blank')` from inside an iframe may open a new tab, but cross-origin restrictions can interfere with the redirect chain. Specifically, after Slack auth completes, Composio redirects to `https://8d2eeb0c-d818-441e-b5a7-935341a59544.lovableproject.com/oauth-complete?connected_account_id=ca_xxx&toolkit=slack`. If this tab loads but the user's Supabase session isn't available in that new tab context (different origin/cookies), the `composio-callback` call might silently fail before logging.
 
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+2. **User hasn't completed the flow**: The Slack sign-in page requires entering a workspace URL, logging in, and authorizing. If the user sees the workspace sign-in and navigates away or closes the tab, the callback never fires.
 
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+3. **Composio redirect doesn't append `connected_account_id`**: If Composio's callback redirect to our `/oauth-complete` URL omits the `connected_account_id` query param, the OAuthComplete page would show "Connection incomplete" and never call `composio-callback`.
 
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+### What I'd Recommend Verifying
 
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+Since the Composio page now works correctly, the most productive next step is to have the user **test the full flow on the published URL** (`https://weave-your-story-46.lovable.app/integration/slack`) instead of the preview iframe, to rule out iframe/cross-origin issues. The preview iframe introduces restrictions that don't exist in the published app.
 
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+If the issue persists on the published URL, we should add diagnostic logging to `OAuthComplete.tsx` to capture exactly what URL/params arrive when Composio redirects back, to pinpoint whether the `connected_account_id` param is missing or the callback fails.
 
-### 6. Registration (data + routing)
+### Proposed Plan (minimal, targeted)
 
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
-```
+No code changes are required at this stage. The auth config fix is confirmed working. The next step is:
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
-
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
-
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
-
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
-
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
-
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
-
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
-
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
+1. **User action**: Test the Slack connect flow from the **published URL** (not Lovable preview), complete the Slack workspace sign-in, and report what happens.
+2. **If callback still doesn't fire**: Add a `console.log` at the very top of `OAuthComplete` to confirm the page loads after Composio redirect, and check what query params arrive.
+3. **If the page never loads**: The issue is in Composio's redirect configuration — we'd need to verify the `callback_url` format that Composio expects.
 
