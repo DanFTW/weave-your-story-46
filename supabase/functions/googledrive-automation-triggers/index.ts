@@ -95,12 +95,38 @@ function safeJsonParse(text: string): any {
 
 // === EXTRACT TEXT CONTENT FROM COMPOSIO RESPONSE ===
 
+function tryDecodeBase64(str: string): string {
+  try {
+    const decoded = new TextDecoder().decode(Uint8Array.from(atob(str), c => c.charCodeAt(0)));
+    // If decoded looks like text (has common chars), return it
+    if (decoded && /[a-zA-Z0-9\s]/.test(decoded.slice(0, 100))) return decoded;
+  } catch { /* not base64 */ }
+  return "";
+}
+
 function extractTextContent(data: any): string {
   if (!data?.data) return "";
 
   const d = data.data;
-  // Check downloaded_file_content (Google Drive download response)
-  if (typeof d.downloaded_file_content === "string" && d.downloaded_file_content.trim()) return d.downloaded_file_content.trim();
+
+  // Log the actual shape of downloaded_file_content for debugging
+  if (d.downloaded_file_content !== undefined) {
+    const dfc = d.downloaded_file_content;
+    console.log("[GoogleDrive] downloaded_file_content type:", typeof dfc, "length:", typeof dfc === "string" ? dfc.length : "N/A", "preview:", typeof dfc === "string" ? dfc.slice(0, 200) : JSON.stringify(dfc)?.slice(0, 200));
+  }
+
+  // Check downloaded_file_content - could be plain text or base64
+  if (typeof d.downloaded_file_content === "string") {
+    const dfc = d.downloaded_file_content.trim();
+    if (dfc) {
+      // Check if it looks like base64 (no spaces, long string of alphanumeric+/+=)
+      if (/^[A-Za-z0-9+/=\r\n]+$/.test(dfc) && dfc.length > 100) {
+        const decoded = tryDecodeBase64(dfc.replace(/[\r\n]/g, ""));
+        if (decoded) return decoded;
+      }
+      return dfc;
+    }
+  }
 
   const rd = d.response_data;
   // Direct string
@@ -110,9 +136,9 @@ function extractTextContent(data: any): string {
     if (typeof rd.content === "string" && rd.content.trim()) return rd.content.trim();
     if (typeof rd.text === "string" && rd.text.trim()) return rd.text.trim();
     if (typeof rd.downloaded_file_content === "string" && rd.downloaded_file_content.trim()) return rd.downloaded_file_content.trim();
-    // Base64 bytes field
     if (typeof rd.data === "string" && rd.data.length > 0) {
-      try { return new TextDecoder().decode(Uint8Array.from(atob(rd.data), c => c.charCodeAt(0))); } catch { /* not base64 */ }
+      const decoded = tryDecodeBase64(rd.data);
+      if (decoded) return decoded;
     }
   }
   // Fallback: data.content
