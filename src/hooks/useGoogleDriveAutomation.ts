@@ -195,9 +195,11 @@ export function useGoogleDriveAutomation() {
       const session = await getSession();
       if (!session) { setPhase('ready'); return; }
 
+      const fnName = activeSource === 'dropbox' ? 'dropbox-doc-actions' : 'googledrive-automation-triggers';
+
       // Step 1: Export document content
       const { data: exportData, error: exportError } = await supabase.functions.invoke(
-        'googledrive-automation-triggers',
+        fnName,
         {
           body: { action: 'export-doc', fileId, fileName },
           headers: { Authorization: `Bearer ${session.access_token}` },
