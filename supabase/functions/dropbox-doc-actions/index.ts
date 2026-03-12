@@ -125,10 +125,13 @@ Deno.serve(async (req) => {
       // Normalize results — Dropbox search returns { metadata: { metadata: { ... } } } or flat
       const files = matches.slice(0, 20).map((m: any) => {
         const meta = m?.metadata?.metadata || m?.metadata || m;
+        const normalizedPath = meta?.path_lower || meta?.path_display || "";
+
         return {
-          id: meta?.id || meta?.path_lower || meta?.name || "",
+          // DROPBOX_READ_FILE expects a path argument, so prefer path over id
+          id: normalizedPath || meta?.id || meta?.name || "",
           name: meta?.name || "Untitled",
-          path: meta?.path_display || meta?.path_lower || "",
+          path: normalizedPath,
           createdTime: meta?.server_modified || meta?.client_modified || "",
         };
       }).filter((f: any) => f.id);
