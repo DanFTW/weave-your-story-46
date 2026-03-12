@@ -1,3 +1,5 @@
+export type DocSource = 'googledrive' | 'dropbox';
+
 export type GoogleDriveAutomationPhase =
   | 'auth-check'
   | 'ready'
