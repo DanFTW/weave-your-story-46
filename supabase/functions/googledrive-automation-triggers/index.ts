@@ -98,28 +98,42 @@ function safeJsonParse(text: string): any {
 function tryDecodeBase64(str: string): string {
   try {
     const decoded = new TextDecoder().decode(Uint8Array.from(atob(str), c => c.charCodeAt(0)));
-    // If decoded looks like text (has common chars), return it
     if (decoded && /[a-zA-Z0-9\s]/.test(decoded.slice(0, 100))) return decoded;
   } catch { /* not base64 */ }
   return "";
 }
 
-function extractTextContent(data: any): string {
+async function extractTextContent(data: any): Promise<string> {
   if (!data?.data) return "";
 
   const d = data.data;
 
-  // Log the actual shape of downloaded_file_content for debugging
-  if (d.downloaded_file_content !== undefined) {
-    const dfc = d.downloaded_file_content;
-    console.log("[GoogleDrive] downloaded_file_content type:", typeof dfc, "length:", typeof dfc === "string" ? dfc.length : "N/A", "preview:", typeof dfc === "string" ? dfc.slice(0, 200) : JSON.stringify(dfc)?.slice(0, 200));
+  // downloaded_file_content can be an object with s3url (presigned URL to fetch)
+  if (d.downloaded_file_content && typeof d.downloaded_file_content === "object") {
+    const s3url = d.downloaded_file_content.s3url;
+    if (s3url && typeof s3url === "string") {
+      console.log("[GoogleDrive] Fetching content from s3url...");
+      try {
+        const resp = await fetch(s3url);
+        if (resp.ok) {
+          const text = await resp.text();
+          if (text.trim()) {
+            console.log("[GoogleDrive] Fetched s3url content, length:", text.length);
+            return text.trim();
+          }
+        } else {
+          console.error("[GoogleDrive] s3url fetch failed:", resp.status);
+        }
+      } catch (e) {
+        console.error("[GoogleDrive] s3url fetch error:", e);
+      }
+    }
   }
 
-  // Check downloaded_file_content - could be plain text or base64
+  // Check downloaded_file_content as string (plain text or base64)
   if (typeof d.downloaded_file_content === "string") {
     const dfc = d.downloaded_file_content.trim();
     if (dfc) {
-      // Check if it looks like base64 (no spaces, long string of alphanumeric+/+=)
       if (/^[A-Za-z0-9+/=\r\n]+$/.test(dfc) && dfc.length > 100) {
         const decoded = tryDecodeBase64(dfc.replace(/[\r\n]/g, ""));
         if (decoded) return decoded;
@@ -129,9 +143,7 @@ function extractTextContent(data: any): string {
   }
 
   const rd = d.response_data;
-  // Direct string
   if (typeof rd === "string" && rd.trim()) return rd.trim();
-  // Nested .content
   if (rd && typeof rd === "object") {
     if (typeof rd.content === "string" && rd.content.trim()) return rd.content.trim();
     if (typeof rd.text === "string" && rd.text.trim()) return rd.text.trim();
@@ -141,9 +153,7 @@ function extractTextContent(data: any): string {
       if (decoded) return decoded;
     }
   }
-  // Fallback: data.content
   if (typeof d.content === "string" && d.content.trim()) return d.content.trim();
-  // Last resort: stringify if object
   if (rd && typeof rd === "object") return JSON.stringify(rd);
   if (typeof d === "string" && d.trim()) return d.trim();
   return "";
