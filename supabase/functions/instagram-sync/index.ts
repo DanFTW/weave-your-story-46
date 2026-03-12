@@ -157,6 +157,11 @@ async function fetchPostComments(connectionId: string, mediaId: string): Promise
     });
 
     if (!response.ok) {
+      const errText = await response.text();
+      if (response.status === 404 && errText.includes('not found')) {
+        console.log(`[fetch] Comments API not available via Composio — skipping ${mediaId}`);
+        return { comments: [] };
+      }
       return { comments: [], error: `Failed: ${response.status}` };
     }
 
