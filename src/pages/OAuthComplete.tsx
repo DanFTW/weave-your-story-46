@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isMedian, median } from "@/utils/median";
 import { Loader2, CheckCircle2, XCircle, RefreshCw, WifiOff } from "lucide-react";
