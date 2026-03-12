@@ -457,11 +457,11 @@ async function syncInstagramContent(
         try {
           const { content, imageUrl } = formatPostMemory(item);
           const imageBase64 = imageUrl ? await fetchImageAsBase64(imageUrl) : null;
-          const ok = await createMemory(apiKeys, content, imageBase64);
+          const { success: ok, memoryId } = await createMemory(apiKeys, content, imageBase64);
 
           if (ok) {
             await persistLocalContent(supabase, userId, item, imageUrl);
-            const recorded = await persistSyncRecord(supabase, userId, item.externalId);
+            const recorded = await persistSyncRecord(supabase, userId, item.externalId, memoryId);
             if (recorded) {
               postCounts.saved++;
               totalMemories++;
