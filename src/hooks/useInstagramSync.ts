@@ -142,6 +142,7 @@ export function useInstagramSync(): UseInstagramSyncReturn {
         commentsSynced: data?.commentsSynced ?? 0,
         storiesSynced: data?.storiesSynced ?? 0,
         memoriesCreated: data?.memoriesCreated ?? 0,
+        skippedDuplicates: data?.skippedDuplicates ?? 0,
         error: data?.error,
       };
 
