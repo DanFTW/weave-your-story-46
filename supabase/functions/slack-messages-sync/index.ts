@@ -17,7 +17,6 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Get user from auth header
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header" }), {
@@ -38,9 +37,9 @@ serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-    const { action } = await req.json();
+    const { action, query } = await req.json();
 
-    // Get the user's Slack access token from user_integrations
+    // Get the user's Slack access token
     const { data: integration } = await adminClient
       .from("user_integrations")
       .select("composio_connection_id")
@@ -56,15 +55,12 @@ serve(async (req) => {
       });
     }
 
-    // The composio_connection_id for native Slack stores the access token
     const slackToken = integration.composio_connection_id;
 
-    // Helper to call Slack API
     async function slackApi(method: string, params: Record<string, any> = {}) {
       const url = new URL(`https://slack.com/api/${method}`);
-      // For GET-like methods, use query params; for POST, use JSON body
       const getParams = ["conversations.list", "conversations.history", "users.list"];
-      
+
       if (getParams.includes(method)) {
         Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
         const resp = await fetch(url.toString(), {
@@ -134,7 +130,6 @@ serve(async (req) => {
     }
 
     if (action === "poll") {
-      // Get config
       const { data: configData } = await adminClient
         .from("slack_messages_config")
         .select("*")
@@ -148,9 +143,13 @@ serve(async (req) => {
         });
       }
 
-      const selectedChannels = configData.selected_channel_ids || [];
-      const isSearchMode = configData.search_mode ?? false;
-      let totalImported = 0;
+      const channelId = (configData.selected_channel_ids || [])[0];
+      if (!channelId) {
+        return new Response(JSON.stringify({ error: "No channel selected" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       const liamApiKey = Deno.env.get("LIAM_API_KEY");
       const liamUserKey = Deno.env.get("LIAM_USER_KEY");
@@ -163,20 +162,20 @@ serve(async (req) => {
         });
       }
 
-      if (isSearchMode) {
-        // Search mode: use search.all
-        const searchResult = await slackApi("search.all", {
-          query: "*",
-          count: 50,
-          sort: "timestamp",
-          sort_dir: "desc",
+      let totalImported = 0;
+
+      try {
+        const historyResult = await slackApi("conversations.history", {
+          channel: channelId,
+          limit: 20,
         });
 
-        if (searchResult.ok && searchResult.messages?.matches) {
-          for (const msg of searchResult.messages.matches) {
-            const messageId = `${msg.channel?.id || "unknown"}_${msg.ts}`;
-            
-            // Check if already processed
+        if (historyResult.ok) {
+          for (const msg of historyResult.messages || []) {
+            if (msg.subtype) continue;
+
+            const messageId = `${channelId}_${msg.ts}`;
+
             const { data: existing } = await adminClient
               .from("slack_processed_messages")
               .select("id")
@@ -186,14 +185,8 @@ serve(async (req) => {
 
             if (existing) continue;
 
-            // Check if channel is in selected list
-            if (selectedChannels.length > 0 && msg.channel?.id && !selectedChannels.includes(msg.channel.id)) {
-              continue;
-            }
+            const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
 
-            const memoryContent = `Slack message from ${msg.username || "unknown"} in #${msg.channel?.name || "unknown"}: ${msg.text}`;
-
-            // Save to LIAM
             const liamResp = await fetch("https://api.tryliam.com/api/memories", {
               method: "POST",
               headers: {
@@ -218,63 +211,10 @@ serve(async (req) => {
             }
           }
         }
-      } else {
-        // Passive mode: fetch recent messages from each selected channel
-        for (const channelId of selectedChannels) {
-          try {
-            const historyResult = await slackApi("conversations.history", {
-              channel: channelId,
-              limit: 20,
-            });
-
-            if (!historyResult.ok) continue;
-
-            for (const msg of historyResult.messages || []) {
-              if (msg.subtype) continue; // Skip system messages
-              
-              const messageId = `${channelId}_${msg.ts}`;
-
-              const { data: existing } = await adminClient
-                .from("slack_processed_messages")
-                .select("id")
-                .eq("user_id", user.id)
-                .eq("slack_message_id", messageId)
-                .maybeSingle();
-
-              if (existing) continue;
-
-              const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
-
-              const liamResp = await fetch("https://api.tryliam.com/api/memories", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "x-api-key": liamApiKey,
-                  "x-user-key": liamUserKey,
-                  "x-private-key": liamPrivateKey,
-                  "x-user-id": user.id,
-                },
-                body: JSON.stringify({
-                  content: memoryContent,
-                  tags: ["SLACK"],
-                }),
-              });
-
-              if (liamResp.ok) {
-                await adminClient.from("slack_processed_messages").insert({
-                  user_id: user.id,
-                  slack_message_id: messageId,
-                });
-                totalImported++;
-              }
-            }
-          } catch (err) {
-            console.error(`Failed to fetch history for channel ${channelId}:`, err);
-          }
-        }
+      } catch (err) {
+        console.error(`Failed to fetch history for channel ${channelId}:`, err);
       }
 
-      // Update stats
       await adminClient
         .from("slack_messages_config")
         .update({
@@ -282,6 +222,96 @@ serve(async (req) => {
           last_polled_at: new Date().toISOString(),
         })
         .eq("user_id", user.id);
+
+      return new Response(JSON.stringify({ success: true, messagesImported: totalImported }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "search") {
+      if (!query) {
+        return new Response(JSON.stringify({ error: "Query required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: configData } = await adminClient
+        .from("slack_messages_config")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!configData) {
+        return new Response(JSON.stringify({ error: "No config found" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const channelId = (configData.selected_channel_ids || [])[0];
+      const channelName = (configData.selected_workspace_ids || [])[0];
+      const searchQuery = channelName ? `in:#${channelName} ${query}` : query;
+
+      const liamApiKey = Deno.env.get("LIAM_API_KEY");
+      const liamUserKey = Deno.env.get("LIAM_USER_KEY");
+      const liamPrivateKey = Deno.env.get("LIAM_PRIVATE_KEY");
+
+      if (!liamApiKey || !liamUserKey || !liamPrivateKey) {
+        return new Response(JSON.stringify({ error: "LIAM API keys not configured" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let totalImported = 0;
+
+      const searchResult = await slackApi("search.all", {
+        query: searchQuery,
+        count: 50,
+        sort: "timestamp",
+        sort_dir: "desc",
+      });
+
+      if (searchResult.ok && searchResult.messages?.matches) {
+        for (const msg of searchResult.messages.matches) {
+          const messageId = `${msg.channel?.id || "unknown"}_${msg.ts}`;
+
+          const { data: existing } = await adminClient
+            .from("slack_processed_messages")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("slack_message_id", messageId)
+            .maybeSingle();
+
+          if (existing) continue;
+
+          const memoryContent = `Slack message from ${msg.username || "unknown"} in #${msg.channel?.name || "unknown"}: ${msg.text}`;
+
+          const liamResp = await fetch("https://api.tryliam.com/api/memories", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": liamApiKey,
+              "x-user-key": liamUserKey,
+              "x-private-key": liamPrivateKey,
+              "x-user-id": user.id,
+            },
+            body: JSON.stringify({
+              content: memoryContent,
+              tags: ["SLACK"],
+            }),
+          });
+
+          if (liamResp.ok) {
+            await adminClient.from("slack_processed_messages").insert({
+              user_id: user.id,
+              slack_message_id: messageId,
+            });
+            totalImported++;
+          }
+        }
+      }
 
       return new Response(JSON.stringify({ success: true, messagesImported: totalImported }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

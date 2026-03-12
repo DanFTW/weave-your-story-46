@@ -4,8 +4,8 @@ import { Thread } from "@/types/threads";
 export const sampleThreads: Thread[] = [
   {
     id: "slack-messages-sync",
-    title: "Slack Messages to Memory",
-    description: "Import Slack messages from across workspaces and channels as memories",
+    title: "Slack Channel Monitor",
+    description: "Monitor a Slack channel and import all messages as memories",
     icon: MessagesSquare,
     gradient: "purple",
     status: "active",

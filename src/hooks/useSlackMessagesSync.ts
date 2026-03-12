@@ -17,15 +17,13 @@ interface UseSlackMessagesSyncReturn {
   isPolling: boolean;
   stats: SlackMessagesSyncStats;
   fetchChannels: () => Promise<void>;
-  toggleChannel: (channelId: string) => void;
-  selectAllChannels: () => void;
-  deselectAllChannels: () => void;
-  selectedChannelIds: string[];
-  searchMode: boolean;
-  setSearchMode: (on: boolean) => void;
+  selectChannel: (channelId: string, channelName: string) => void;
+  selectedChannelId: string | null;
+  selectedChannelName: string | null;
   activate: () => Promise<void>;
   deactivate: () => Promise<void>;
   manualSync: () => Promise<void>;
+  manualSearch: (query: string) => Promise<void>;
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
 }
@@ -36,8 +34,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
   const [phase, setPhase] = useState<SlackMessagesSyncPhase>("auth-check");
   const [config, setConfig] = useState<SlackMessagesSyncConfig | null>(null);
   const [channels, setChannels] = useState<SlackChannel[]>([]);
-  const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([]);
-  const [searchMode, setSearchMode] = useState(false);
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [selectedChannelName, setSelectedChannelName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPolling, setIsPolling] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -46,7 +44,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     messagesImported: config?.messagesImported ?? 0,
     lastPolled: config?.lastPolledAt ?? null,
     isActive: config?.isActive ?? false,
-    searchMode: config?.searchMode ?? false,
+    channelName: config?.selectedChannelName ?? selectedChannelName,
   };
 
   const loadConfig = useCallback(async () => {
@@ -61,22 +59,21 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
     if (existingConfig) {
       const c = existingConfig as any;
+      const channelIds = c.selected_channel_ids ?? [];
       setConfig({
         id: c.id,
         userId: c.user_id,
         isActive: c.is_active ?? false,
-        searchMode: c.search_mode ?? false,
-        selectedChannelIds: c.selected_channel_ids ?? [],
+        selectedChannelId: channelIds[0] ?? null,
+        selectedChannelName: c.selected_workspace_ids?.[0] ?? null, // reuse workspace_ids field for channel name
         messagesImported: c.messages_imported ?? 0,
         lastPolledAt: c.last_polled_at,
       });
-      setSelectedChannelIds(c.selected_channel_ids ?? []);
-      setSearchMode(c.search_mode ?? false);
+      setSelectedChannelId(channelIds[0] ?? null);
+      setSelectedChannelName(c.selected_workspace_ids?.[0] ?? null);
 
       if (c.is_active) {
         setPhase("active");
-      } else if (c.selected_channel_ids?.length > 0) {
-        setPhase("configure");
       } else {
         setPhase("select-channels");
       }
@@ -110,12 +107,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
         setChannels([]);
         return;
       }
-      const fetchedChannels = data.channels || [];
-      setChannels(fetchedChannels);
-      // Default: select all channels if none previously selected
-      if (selectedChannelIds.length === 0) {
-        setSelectedChannelIds(fetchedChannels.map((c: SlackChannel) => c.id));
-      }
+      setChannels(data.channels || []);
     } catch (error) {
       console.error("Failed to fetch channels:", error);
       toast({
@@ -127,60 +119,48 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, selectedChannelIds.length]);
+  }, [toast]);
 
-  const toggleChannel = useCallback((channelId: string) => {
-    setSelectedChannelIds(prev =>
-      prev.includes(channelId)
-        ? prev.filter(id => id !== channelId)
-        : [...prev, channelId]
-    );
-  }, []);
-
-  const selectAllChannels = useCallback(() => {
-    setSelectedChannelIds(channels.map(c => c.id));
-  }, [channels]);
-
-  const deselectAllChannels = useCallback(() => {
-    setSelectedChannelIds([]);
+  const selectChannel = useCallback((channelId: string, channelName: string) => {
+    setSelectedChannelId(channelId);
+    setSelectedChannelName(channelName);
   }, []);
 
   const activate = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user || !selectedChannelId) return;
 
     setPhase("activating");
     try {
-      // Upsert config
       const { error } = await supabase
         .from("slack_messages_config" as any)
         .upsert(
           {
             user_id: user.id,
             is_active: true,
-            search_mode: searchMode,
-            selected_channel_ids: selectedChannelIds,
+            search_mode: false,
+            selected_channel_ids: [selectedChannelId],
+            selected_workspace_ids: [selectedChannelName], // store channel name here
           },
           { onConflict: "user_id" }
         );
 
       if (error) throw error;
 
-      // Invoke edge function to activate
-      const { data, error: fnError } = await supabase.functions.invoke(
+      const { error: fnError } = await supabase.functions.invoke(
         "slack-messages-sync",
         { body: { action: "activate" } }
       );
       if (fnError) throw fnError;
 
       setConfig(prev => prev
-        ? { ...prev, isActive: true, searchMode, selectedChannelIds }
+        ? { ...prev, isActive: true, selectedChannelId, selectedChannelName }
         : {
             id: "",
             userId: user.id,
             isActive: true,
-            searchMode,
-            selectedChannelIds,
+            selectedChannelId,
+            selectedChannelName,
             messagesImported: 0,
             lastPolledAt: null,
           }
@@ -188,19 +168,19 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
       setPhase("active");
       toast({
-        title: "Slack sync activated",
-        description: "Your Slack messages will now be imported as memories.",
+        title: "Channel monitor activated",
+        description: `Now monitoring #${selectedChannelName || "channel"}.`,
       });
     } catch (error) {
       console.error("Failed to activate:", error);
-      setPhase("configure");
+      setPhase("select-channels");
       toast({
         title: "Activation failed",
-        description: "Could not start Slack sync. Please try again.",
+        description: "Could not start channel monitor. Please try again.",
         variant: "destructive",
       });
     }
-  }, [searchMode, selectedChannelIds, toast]);
+  }, [selectedChannelId, selectedChannelName, toast]);
 
   const deactivate = useCallback(async () => {
     setIsLoading(true);
@@ -216,16 +196,16 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       if (error) throw error;
 
       setConfig(prev => prev ? { ...prev, isActive: false } : null);
-      setPhase("configure");
+      setPhase("select-channels");
       toast({
-        title: "Sync paused",
-        description: "Slack message sync has been paused.",
+        title: "Monitor paused",
+        description: "Slack channel monitoring has been paused.",
       });
     } catch (error) {
       console.error("Failed to deactivate:", error);
       toast({
         title: "Deactivation failed",
-        description: "Could not pause sync. Please try again.",
+        description: "Could not pause monitor. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -267,6 +247,41 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     }
   }, [toast]);
 
+  const manualSearch = useCallback(async (query: string) => {
+    if (!query.trim()) return;
+    setIsPolling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "slack-messages-sync",
+        { body: { action: "search", query } }
+      );
+      if (error) throw error;
+
+      if (data.messagesImported !== undefined) {
+        setConfig(prev => prev
+          ? { ...prev, messagesImported: prev.messagesImported + (data.messagesImported || 0) }
+          : null
+        );
+      }
+
+      toast({
+        title: "Search complete",
+        description: data.messagesImported
+          ? `Imported ${data.messagesImported} matching messages.`
+          : "No new matching messages found.",
+      });
+    } catch (error) {
+      console.error("Search failed:", error);
+      toast({
+        title: "Search failed",
+        description: "Could not complete search. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPolling(false);
+    }
+  }, [toast]);
+
   const resetConfig = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -280,8 +295,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
       setConfig(null);
       setChannels([]);
-      setSelectedChannelIds([]);
-      setSearchMode(false);
+      setSelectedChannelId(null);
+      setSelectedChannelName(null);
       setPhase("select-channels");
     } catch (error) {
       console.error("Failed to reset:", error);
@@ -304,15 +319,13 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     isPolling,
     stats,
     fetchChannels,
-    toggleChannel,
-    selectAllChannels,
-    deselectAllChannels,
-    selectedChannelIds,
-    searchMode,
-    setSearchMode,
+    selectChannel,
+    selectedChannelId,
+    selectedChannelName,
     activate,
     deactivate,
     manualSync,
+    manualSearch,
     resetConfig,
     initializeAfterAuthCheck,
   };

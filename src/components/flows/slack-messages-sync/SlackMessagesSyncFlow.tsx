@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSlackMessagesSync } from "@/hooks/useSlackMessagesSync";
 import { ChannelPicker } from "./ChannelPicker";
-import { SyncConfig } from "./SyncConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
+import { SlackChannel } from "@/types/slackMessagesSync";
 
 export function SlackMessagesSyncFlow() {
   const navigate = useNavigate();
@@ -23,20 +23,15 @@ export function SlackMessagesSyncFlow() {
     isPolling,
     stats,
     fetchChannels,
-    toggleChannel,
-    selectAllChannels,
-    deselectAllChannels,
-    selectedChannelIds,
-    searchMode,
-    setSearchMode,
+    selectChannel,
     activate,
     deactivate,
     manualSync,
+    manualSearch,
     resetConfig,
     initializeAfterAuthCheck,
   } = useSlackMessagesSync();
 
-  // Check Slack connection via user_integrations
   useEffect(() => {
     const checkSlackAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -59,7 +54,6 @@ export function SlackMessagesSyncFlow() {
     checkSlackAuth();
   }, []);
 
-  // Handle connection status after check completes
   useEffect(() => {
     if (isCheckingAuth) return;
 
@@ -101,9 +95,9 @@ export function SlackMessagesSyncFlow() {
     return (
       <ActiveMonitoring
         stats={stats}
-        selectedChannelCount={config?.selectedChannelIds?.length ?? 0}
         onPause={deactivate}
         onSyncNow={manualSync}
+        onSearch={manualSearch}
         onReset={resetConfig}
         isLoading={isLoading}
         isPolling={isPolling}
@@ -112,20 +106,24 @@ export function SlackMessagesSyncFlow() {
   }
 
   const handleBack = () => {
-    if (phase === "configure") {
-      setPhase("select-channels");
-    } else {
-      navigate("/threads");
-    }
+    navigate("/threads");
   };
 
-  const handleChannelsDone = () => {
-    setPhase("configure");
+  const handleChannelSelected = async (channel: SlackChannel) => {
+    selectChannel(channel.id, channel.name);
+    // Small delay to let state settle, then activate
+    setTimeout(() => {
+      activate();
+    }, 0);
+  };
+
+  // Need to set selectedChannel before activate is called
+  const handleChannelSelectedDirect = (channel: SlackChannel) => {
+    selectChannel(channel.id, channel.name);
   };
 
   return (
     <div className="min-h-screen bg-background pb-nav">
-      {/* Header */}
       <div className={cn("relative px-5 pt-status-bar pb-6 thread-gradient-purple")}>
         <div className="flex items-center gap-3">
           <button
@@ -137,38 +135,22 @@ export function SlackMessagesSyncFlow() {
 
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-white truncate">
-              Slack Messages to Memory
+              Slack Channel Monitor
             </h1>
             <p className="text-white/70 text-sm truncate">
-              {phase === "select-channels" && "Select channels to import"}
-              {phase === "configure" && "Configure import mode"}
+              Select a channel to monitor
             </p>
           </div>
         </div>
       </div>
 
-      {/* Content */}
       <div className="px-5 pt-5">
         {phase === "select-channels" && (
           <ChannelPicker
             channels={channels}
-            selectedChannelIds={selectedChannelIds}
             isLoading={isLoading}
-            onToggleChannel={toggleChannel}
-            onSelectAll={selectAllChannels}
-            onDeselectAll={deselectAllChannels}
+            onSelectChannel={handleChannelSelected}
             onRefresh={fetchChannels}
-            onDone={handleChannelsDone}
-          />
-        )}
-
-        {phase === "configure" && (
-          <SyncConfig
-            selectedChannelCount={selectedChannelIds.length}
-            searchMode={searchMode}
-            onSearchModeChange={setSearchMode}
-            onActivate={activate}
-            isLoading={isLoading}
           />
         )}
       </div>

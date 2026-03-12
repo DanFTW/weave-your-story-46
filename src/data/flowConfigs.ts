@@ -626,9 +626,9 @@ export const flowConfigs: Record<string, FlowConfig> = {
   },
   "slack-messages-sync": {
     id: "slack-messages-sync",
-    title: "Slack Messages to Memory",
-    subtitle: "Import Slack messages",
-    description: "Import Slack messages from across workspaces and channels as memories.",
+    title: "Slack Channel Monitor",
+    subtitle: "Channel message monitoring",
+    description: "Monitor a Slack channel and import all messages as memories.",
     gradient: "purple",
     icon: MessagesSquare,
     entryName: "message",
