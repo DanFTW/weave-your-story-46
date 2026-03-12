@@ -1,7 +1,10 @@
 export type GoogleDriveAutomationPhase =
   | 'auth-check'
   | 'ready'
-  | 'activating';
+  | 'activating'
+  | 'generating'
+  | 'preview'
+  | 'success';
 
 export interface GoogleDriveAutomationConfig {
   id: string;
