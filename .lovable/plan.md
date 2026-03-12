@@ -1,115 +1,125 @@
+## Improve Instagram Sync: Better Post Memories + Story Sync
 
+### Summary
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+Refactor the `instagram-sync` edge function into composable helpers, improve post memory quality to one canonical memory per post, and add story sync via `INSTAGRAM_GET_IG_USER_STORIES`. Add a "Sync Stories" toggle to the config UI.
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+### 1. Database Migration
 
-### 1. Database Tables (2 new tables via migration)
+Add `sync_stories` column to `instagram_sync_config`:
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+```sql
+ALTER TABLE instagram_sync_config
+  ADD COLUMN IF NOT EXISTS sync_stories boolean NOT NULL DEFAULT true;
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
-
-### 2. Edge Function: `restaurant-bookmark-sync`
-
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
-
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
-
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
-
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
-
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
-
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
-
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
 ```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
+
+No new tables needed -- stories reuse `instagram_synced_posts` for dedupe (story IDs prefixed with `story_`) and `instagram_synced_post_content` for local storage (`media_type = 'STORY'`).
+
+### 2. Edge Function: `supabase/functions/instagram-sync/index.ts`
+
+Refactor into clearly separated helpers. The file stays as one `index.ts` but with distinct sections:
+
+**Fetch helpers** (unchanged for posts, new for stories):
+
+- `fetchInstagramPosts()` -- existing, no change
+- `fetchInstagramStories(connectionId)` -- new, calls `INSTAGRAM_GET_IG_USER_STORIES` via Composio
+
+**Normalize helpers** (decouple Composio response shapes from internal types):
+
+- `normalizePost(raw: any): NormalizedItem | null` -- maps API fields to internal shape, skips unusable items (no id)
+- `normalizeStory(raw: any): NormalizedItem | null` -- same pattern for stories
+
+**Transform helpers** (format into memory content):
+
+- `formatPostMemory(item: NormalizedItem): string` -- one canonical memory string per post. Concise, searchable. Handles IMAGE, VIDEO, CAROUSEL_ALBUM, captionless posts. Format:
+  ```
+  Instagram Post by @username | Jan 15, 2025
+  Caption: "actual caption text"
+  Type: Image | 12 likes, 3 comments
+  [media:url] [link:permalink]
+
+  ```
+- `formatStoryMemory(item: NormalizedItem): string` -- similar but for stories:
+  ```
+  Instagram Story by @username | Jan 15, 2025
+  Type: Image
+  [media:url]
+
+  ```
+- `formatCommentMemory()` -- existing, minor cleanup
+
+**Persist helpers**:
+
+- `isDuplicate(syncedIds: Set<string>, externalId: string): boolean`
+- `persistSyncRecord(supabase, userId, externalId)` -- insert into `instagram_synced_posts`
+- `persistLocalContent(supabase, userId, item: NormalizedItem)` -- upsert into `instagram_synced_post_content`
+
+**Orchestrator** -- replaces the monolithic `syncInstagramContent`:
+
+- `syncInstagramContent()` reads config toggles (`sync_posts`, `sync_comments`, `sync_stories`)
+- Calls fetch → normalize → filter dupes → transform → createMemory → persist for each content type independently
+- Tracks per-run counts: `{ fetched, saved, skipped, failed }` per content type
+- Item-level try/catch so one failure doesn't stop the batch
+- Logs at each stage: fetch count, transform count, dedupe count, persist count
+
+**New action** in the switch statement:
+
+- No new actions needed -- existing `sync` action will now also process stories based on config toggle
+
+### 3. Types: `src/types/instagramSync.ts`
+
+Add `syncStories` to `InstagramSyncConfig`:
+
+```typescript
+export interface InstagramSyncConfig {
+  // ... existing fields
+  syncStories: boolean;
 }
+
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+Add `storiesSynced` to `InstagramSyncResult`:
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+```typescript
+export interface InstagramSyncResult {
+  // ... existing fields
+  storiesSynced: number;
+}
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+```
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+### 4. Hook: `src/hooks/useInstagramSync.ts`
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+- Map `sync_stories` from the DB row to `syncStories` in the config object (lines ~59-70)
+- Include `sync_stories` in `saveConfig` update data (lines ~100-105)
+- Map `storiesSynced` from the sync response in `syncNow` (lines ~186-192)
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+### 5. Config UI: `src/components/flows/instagram-sync/InstagramSyncConfig.tsx`
 
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+Add a third toggle row for "Sync Stories" between Sync Comments and the Professional Account note. Use a `Clock` or `Film` icon. Same pattern as existing toggles.
 
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+The props interface adds `syncStories: boolean`. The `onSave` config shape adds `syncStories`.
 
-### 8. Wire trigger into memory save
+Update the disabled check: `(!syncPosts && !syncComments && !syncStories)`.
 
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+### 6. Active UI: `src/components/flows/instagram-sync/InstagramSyncActive.tsx`
 
-### Summary of files to create/modify
+Add a "Sync Stories" row to the Current Settings summary section, same pattern as Sync Posts / Sync Comments.
 
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
+### 7. Flow: `src/components/flows/instagram-sync/InstagramSyncFlow.tsx`
 
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+Pass `syncStories` through to `InstagramSyncConfig` and include it in `handleSaveConfig`.
 
-**Database migration:** 2 tables + RLS policies
+### Files Changed
 
+
+| File                                                          | Change                                                           |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `supabase/functions/instagram-sync/index.ts`                  | Refactor into helpers, improve post format, add story fetch/sync |
+| `src/types/instagramSync.ts`                                  | Add `syncStories`, `storiesSynced`                               |
+| `src/hooks/useInstagramSync.ts`                               | Map new fields                                                   |
+| `src/components/flows/instagram-sync/InstagramSyncConfig.tsx` | Add Stories toggle                                               |
+| `src/components/flows/instagram-sync/InstagramSyncActive.tsx` | Show Stories setting                                             |
+| `src/components/flows/instagram-sync/InstagramSyncFlow.tsx`   | Pass `syncStories` through                                       |
+| DB migration                                                  | Add `sync_stories` column                                        |
