@@ -110,6 +110,13 @@ export function SlackMessagesSyncFlow() {
     navigate("/threads");
   };
 
+  // Use useEffect to trigger activate after state updates
+  useEffect(() => {
+    if (selectedChannelId && phase === "select-channels") {
+      activate();
+    }
+  }, [selectedChannelId]);
+
   const handleChannelSelected = (channel: SlackChannel) => {
     selectChannel(channel.id, channel.name);
   };
