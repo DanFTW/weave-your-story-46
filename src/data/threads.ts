@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
