@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isMedian, median } from "@/utils/median";
 import { Loader2, CheckCircle2, XCircle, RefreshCw, WifiOff } from "lucide-react";
@@ -18,7 +18,9 @@ const REQUEST_TIMEOUT = 30000; // 30 seconds
  * The toolkit is determined server-side from the Composio API response.
  */
 export default function OAuthComplete() {
-  const [searchParams] = useSearchParams();
+  // Capture query params synchronously at render time, before Supabase Auth
+  // detects ?code= and strips the URL via history.replaceState()
+  const originalSearchRef = useRef(new URLSearchParams(window.location.search));
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Completing connection...");
@@ -76,12 +78,13 @@ export default function OAuthComplete() {
 
   useEffect(() => {
     const completeOAuth = async () => {
+      const params = originalSearchRef.current;
       console.log("OAuthComplete: Full URL:", window.location.href);
-      console.log("OAuthComplete: Parsed params:", Object.fromEntries(searchParams.entries()));
+      console.log("OAuthComplete: Parsed params:", Object.fromEntries(params.entries()));
 
       // --- SLACK NATIVE OAUTH CALLBACK ---
-      const slackCode = searchParams.get("code");
-      const stateParam = searchParams.get("state");
+      const slackCode = params.get("code");
+      const stateParam = params.get("state");
       const isSlackCallback = !!(slackCode && (
         stateParam?.startsWith("slack_") || 
         stateParam?.toLowerCase().includes("slack")
@@ -154,18 +157,18 @@ export default function OAuthComplete() {
 
       // Composio v3 uses 'connected_account_id' in callback
       const connectionId = 
-        searchParams.get("connected_account_id") || 
-        searchParams.get("connectionId") ||
-        searchParams.get("id");
+        params.get("connected_account_id") || 
+        params.get("connectionId") ||
+        params.get("id");
       
-      const toolkitFromUrl = searchParams.get("toolkit");
+      const toolkitFromUrl = params.get("toolkit");
 
       console.log("OAuthComplete: connectionId =", connectionId, "toolkit =", toolkitFromUrl);
 
       if (!connectionId) {
         console.error("OAuthComplete: No connection ID found in URL params");
         setStatus("error");
-        const allParams = Object.fromEntries(searchParams.entries());
+        const allParams = Object.fromEntries(params.entries());
         const paramStr = Object.keys(allParams).length > 0 
           ? `Received: ${JSON.stringify(allParams)}`
           : "No query parameters received.";
@@ -275,7 +278,7 @@ export default function OAuthComplete() {
     };
 
     completeOAuth();
-  }, [searchParams]);
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
