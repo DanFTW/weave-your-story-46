@@ -1,53 +1,115 @@
 
-Investigation complete (no code changes made). Root cause is confirmed with high certainty.
 
-What I validated
-1) Source implementation (current repo)
-- `src/pages/OAuthComplete.tsx` contains a Slack-first callback branch (`code` + `state` containing `slack`) before Composio logic.
-- `supabase/functions/slack-oauth/index.ts` has both `initiate` and `callback` handlers and writes to `user_integrations`.
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-2) Runtime behavior observed
-- Client network shows `POST /functions/v1/slack-oauth` with `{"action":"initiate"}` succeeds and returns redirect URL with `state=slack_<userId>`.
-- Then repeated polling requests to `user_integrations` for `integration_id=slack` return `[]` (never connected).
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-3) Edge-function logs
-- `slack-oauth` logs repeatedly show only: `initiate for user ...`
-- No organic callback logs (`exchanging code`, `saved for user`) during user flow.
+### 1. Database Tables (2 new tables via migration)
 
-4) Direct published-route reproduction
-- Fetching published route with Slack-like params:
-  `/oauth-complete?code=test&state=slack_test`
-  renders: **“Connection incomplete”** and echoes `{code,state}`.
-- That output is the Composio fallback path (`connectionId` missing), proving published `/oauth-complete` is not executing Slack callback handling.
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-5) Controlled backend callback test
-- Manually invoking `slack-oauth` with `action:"callback"` logs `exchanging code` and returns Slack `invalid_code` as expected.
-- This proves backend callback path is reachable and functioning; it is simply not being called in real flow.
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-Failure chain (confirmed)
-```text
-/integration/slack (preview) -> slack-oauth initiate OK -> Slack redirects to published /oauth-complete
--> published /oauth-complete runs Composio fallback (expects connected_account_id)
--> no call to slack-oauth callback
--> no DB upsert for slack
--> preview polling never finds connected row
--> user sees persistent failure/blocked state
+### 2. Edge Function: `restaurant-bookmark-sync`
+
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
+
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+
+### 6. Registration (data + routing)
+
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
 ```
 
-Observed patterns/anomalies
-- Pattern: repeated `initiate`, zero callback invocations.
-- Pattern: zero `slack` rows in `user_integrations`.
-- Anomaly: React ref warning in `OAuthConfirmDialog`; unrelated to OAuth failure.
-- Cross-origin nuance: flow starts in preview but callback is hard-routed to published domain.
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
 
-Root cause (certain)
-- The published frontend serving `/oauth-complete` is stale/out-of-sync with the current repo logic (or otherwise not deploying the Slack callback branch). Backend is not the blocker.
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
 
-Initial solution (based on evidence)
-1. Redeploy/publish frontend so live `/oauth-complete` includes the Slack branch now present in source.
-2. Re-test from published app URL (`/integration/slack`), not preview.
-3. Verify success criteria:
-   - `slack-oauth` logs include `exchanging code` then `saved for user`.
-   - `user_integrations` contains `integration_id='slack', status='connected'`.
-   - Slack detail page reflects connected state.
-4. Optional hardening after fix: show a notice when Slack connect is started in preview, instructing completion/validation on published URL.
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+
+### 8. Wire trigger into memory save
+
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+
+### Summary of files to create/modify
+
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
+
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+
+**Database migration:** 2 tables + RLS policies
+

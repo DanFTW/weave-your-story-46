@@ -93,11 +93,23 @@ export default function OAuthComplete() {
         console.log("OAuthComplete: Slack native OAuth callback detected");
         try {
           const { data: { session } } = await supabase.auth.getSession();
+          
+          // Extract userId from state param as fallback (state = "slack_<userId>")
+          // This handles cross-origin scenarios where the session may not be available
+          // (e.g., OAuth started from preview but callback lands on published domain)
+          let resolvedUserId = session?.user?.id;
+          if (!resolvedUserId && stateParam?.startsWith("slack_")) {
+            resolvedUserId = stateParam.slice("slack_".length);
+            console.log("OAuthComplete: Using userId from state param:", resolvedUserId);
+          }
+          
+          console.log("OAuthComplete: Session available:", !!session, "userId:", resolvedUserId);
+          
           const { data, error } = await supabase.functions.invoke("slack-oauth", {
             body: {
               action: "callback",
               code: slackCode,
-              userId: session?.user?.id,
+              userId: resolvedUserId,
             },
           });
 
