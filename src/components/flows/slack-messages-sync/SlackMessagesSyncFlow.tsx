@@ -24,6 +24,7 @@ export function SlackMessagesSyncFlow() {
     stats,
     fetchChannels,
     selectChannel,
+    selectedChannelId,
     activate,
     deactivate,
     manualSync,
