@@ -109,16 +109,7 @@ export function SlackMessagesSyncFlow() {
     navigate("/threads");
   };
 
-  const handleChannelSelected = async (channel: SlackChannel) => {
-    selectChannel(channel.id, channel.name);
-    // Small delay to let state settle, then activate
-    setTimeout(() => {
-      activate();
-    }, 0);
-  };
-
-  // Need to set selectedChannel before activate is called
-  const handleChannelSelectedDirect = (channel: SlackChannel) => {
+  const handleChannelSelected = (channel: SlackChannel) => {
     selectChannel(channel.id, channel.name);
   };
 
