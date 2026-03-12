@@ -421,11 +421,15 @@ async function syncInstagramContent(
       return { success: false, postsSynced: 0, commentsSynced: 0, storiesSynced: 0, memoriesCreated: 0, skippedDuplicates: 0, error: 'LIAM API keys not configured.' };
     }
 
-    // Load existing synced IDs for dedupe
+    // Load existing synced IDs for dedupe — only skip items that have a confirmed memory_id
     const { data: syncedPosts } = await supabase
-      .from('instagram_synced_posts').select('instagram_post_id').eq('user_id', userId);
-    const syncedIds = new Set<string>((syncedPosts || []).map((p: any) => p.instagram_post_id));
-    console.log(`[orchestrate] ${syncedIds.size} previously synced items`);
+      .from('instagram_synced_posts').select('instagram_post_id, memory_id').eq('user_id', userId);
+    const allSyncedPosts = syncedPosts || [];
+    const syncedWithMemory = allSyncedPosts.filter((p: any) => p.memory_id != null);
+    const syncedWithoutMemory = allSyncedPosts.filter((p: any) => p.memory_id == null);
+    const syncedIds = new Set<string>(syncedWithMemory.map((p: any) => p.instagram_post_id));
+    const orphanedIds = new Set<string>(syncedWithoutMemory.map((p: any) => p.instagram_post_id));
+    console.log(`[orchestrate] ${syncedIds.size} confirmed synced, ${orphanedIds.size} orphaned (will re-process)`);
 
     const postCounts: SyncCounts = { fetched: 0, saved: 0, skipped: 0, failed: 0 };
     const storyCounts: SyncCounts = { fetched: 0, saved: 0, skipped: 0, failed: 0 };
