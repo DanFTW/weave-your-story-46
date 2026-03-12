@@ -3,6 +3,19 @@ import { Thread } from "@/types/threads";
 
 export const sampleThreads: Thread[] = [
   {
+    id: "slack-messages-sync",
+    title: "Slack Messages to Memory",
+    description: "Import Slack messages from across workspaces and channels as memories",
+    icon: MessagesSquare,
+    gradient: "purple",
+    status: "active",
+    type: "automation",
+    category: "social",
+    integrations: ["slack"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
+  {
     id: "instagram-analytics",
     title: "Instagram Analytics to Memory",
     description: "Save Instagram analytics like profile views, reach, and follower count as memories",

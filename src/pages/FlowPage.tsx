@@ -316,8 +316,14 @@ export default function FlowPage() {
 
   // === DISCORD AUTOMATION FLOW RENDER ===
 
-  if (config.isDiscordAutomationFlow) {
+   if (config.isDiscordAutomationFlow) {
     return <DiscordAutomationFlow />;
+  }
+
+  // === SLACK MESSAGES SYNC FLOW RENDER ===
+
+  if (config.isSlackMessagesSyncFlow) {
+    return <SlackMessagesSyncFlow />;
   }
 
   // === BIRTHDAY REMINDER FLOW RENDER ===
