@@ -107,6 +107,9 @@ import { WebsiteScrapeFlow } from "@/components/flows/website-scrape";
 // LinkedIn Profile Scrape components
 import { LinkedInProfileScrapeFlow } from "@/components/flows/linkedin-profile-scrape";
 
+// Slack Messages Sync components
+import { SlackMessagesSyncFlow } from "@/components/flows/slack-messages-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
