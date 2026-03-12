@@ -1,115 +1,129 @@
 
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+## Slack Messages to Memory — Implementation Plan
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+### Overview
+Create a new thread "Slack Messages to Memory" that imports Slack messages as memories. The thread flow: Connect Slack → Select Workspaces → Select Channels → Configure Search & Import mode. This follows the Discord automation pattern exactly (auth gate → multi-step picker → config → active monitoring).
 
-### 1. Database Tables (2 new tables via migration)
+### 1. Database Migration (2 tables)
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+**`slack_messages_config`** — mirrors `discord_automation_config`
+- `id` uuid PK default gen_random_uuid()
+- `user_id` uuid NOT NULL
+- `is_active` boolean DEFAULT false
+- `search_mode` boolean DEFAULT false (on = search-based import, off = passive channel import)
+- `selected_workspace_ids` text[] (selected workspace IDs)
+- `selected_channel_ids` text[] (selected channel IDs)
+- `messages_imported` integer DEFAULT 0
+- `last_polled_at` timestamptz
+- `created_at` timestamptz DEFAULT now()
+- `updated_at` timestamptz DEFAULT now()
+- RLS: authenticated user can SELECT/INSERT/UPDATE own rows
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+**`slack_processed_messages`** — dedup table
+- `id` uuid PK default gen_random_uuid()
+- `user_id` uuid NOT NULL
+- `slack_message_id` text NOT NULL
+- `created_at` timestamptz DEFAULT now()
+- UNIQUE on (user_id, slack_message_id)
+- RLS: authenticated user can SELECT/INSERT own rows
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+### 2. Edge Function: `slack-messages-sync`
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+Single edge function with actions:
+- **`list-workspaces`** — Uses Composio `SLACK_LIST_WORKSPACES` or the Slack native token to list workspaces the user belongs to
+- **`list-channels`** — Uses Composio `SLACK_FIND_CHANNELS` to list channels for selected workspaces
+- **`activate`** / **`deactivate`** — Toggle `is_active` on config table
+- **`poll`** — When `search_mode = true`, uses `SLACK_SEARCH_ALL` to search content across selected channels and save matches as memories. When `search_mode = false`, uses `SLACK_FIND_CHANNELS` to list channels then fetches recent messages and saves as memories.
+- **`manual-sync`** — On-demand trigger of the poll action
 
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+Since Slack uses native OAuth (not Composio) in this project, the edge function will use the stored access token from `user_integrations` to call Slack APIs directly (`conversations.list`, `conversations.history`, `search.all`).
 
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
+### 3. Types: `src/types/slackMessagesSync.ts`
 
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+```
+SlackMessagesSyncPhase = "auth-check" | "select-workspaces" | "select-channels" | "configure" | "activating" | "active"
+SlackWorkspace { id, name, icon? }
+SlackChannel { id, name, workspaceId, workspaceName, isMember, isPrivate }
+SlackMessagesSyncConfig { id, userId, isActive, searchMode, selectedWorkspaceIds, selectedChannelIds, messagesImported, lastPolledAt }
+SlackMessagesSyncStats { messagesImported, lastPolled, isActive, searchMode }
+```
 
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+### 4. Hook: `src/hooks/useSlackMessagesSync.ts`
 
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+Mirrors `useDiscordAutomation.ts` — manages phase state machine, loads config from DB, provides `fetchWorkspaces`, `fetchChannels`, `selectWorkspaces`, `selectChannels`, `setSearchMode`, `activate`, `deactivate`, `manualSync`, `resetConfig`.
 
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+### 5. UI Components: `src/components/flows/slack-messages-sync/`
 
-Mirrors the calendar-event-sync component structure:
+Mirrors Discord automation component structure:
 - **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`SlackMessagesSyncFlow.tsx`** — main flow with Slack auth gate (checks `user_integrations` for slack connection, redirects to `/integration/slack` if not connected)
+- **`WorkspacePicker.tsx`** — multi-select toggle list of workspaces (default all selected)
+- **`ChannelPicker.tsx`** — multi-select toggle list of channels grouped by workspace (default all selected)
+- **`SyncConfig.tsx`** — Search & Import toggle (on/off), explanation of each mode, activate button
+- **`ActiveMonitoring.tsx`** — stats, search mode indicator, manual sync, pause, reset
 - **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
 
 ### 6. Registration (data + routing)
 
 **`src/data/threads.ts`** — add entry:
-```
+```typescript
 {
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
+  id: "slack-messages-sync",
+  title: "Slack Messages to Memory",
+  description: "Import Slack messages from across workspaces and channels as memories",
+  icon: MessageSquare, // or Hash
+  gradient: "purple",
   status: "active",
   type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
+  category: "social",
+  integrations: ["slack"],
   triggerType: "automatic",
   flowMode: "thread",
 }
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+**`src/data/threadConfigs.ts`** — add config with 4 steps (Connect Slack, Select Workspaces, Select Channels, Search & Import)
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+**`src/data/flowConfigs.ts`** — add entry with `isSlackMessagesSyncFlow: true`
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+**`src/types/flows.ts`** — add `isSlackMessagesSyncFlow?: boolean`
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+**`src/pages/FlowPage.tsx`** — import `SlackMessagesSyncFlow`, add render block for `config.isSlackMessagesSyncFlow`
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+**`src/pages/Threads.tsx`** — add `'slack-messages-sync'` to `flowEnabledThreads`
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+**`src/pages/ThreadOverview.tsx`** — add `'slack-messages-sync'` to `flowEnabledThreads`
 
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+### 7. Styling
 
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+- Thread card uses Slack brand color (`#4A154B` purple or the existing `purple` gradient) with Slack integration icon
+- Flow header uses `thread-gradient-purple`
+- All components follow existing `px-5`, `rounded-xl`, `bg-card border border-border` patterns
+- CTA buttons use `h-14 rounded-2xl` standard
+- Back button uses `w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm`
 
-### 8. Wire trigger into memory save
+### Files to Create
+1. `src/types/slackMessagesSync.ts`
+2. `src/hooks/useSlackMessagesSync.ts`
+3. `src/components/flows/slack-messages-sync/index.ts`
+4. `src/components/flows/slack-messages-sync/SlackMessagesSyncFlow.tsx`
+5. `src/components/flows/slack-messages-sync/WorkspacePicker.tsx`
+6. `src/components/flows/slack-messages-sync/ChannelPicker.tsx`
+7. `src/components/flows/slack-messages-sync/SyncConfig.tsx`
+8. `src/components/flows/slack-messages-sync/ActiveMonitoring.tsx`
+9. `src/components/flows/slack-messages-sync/ActivatingScreen.tsx`
+10. `supabase/functions/slack-messages-sync/index.ts`
 
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+### Files to Modify
+1. `src/data/threads.ts` — add thread entry
+2. `src/data/threadConfigs.ts` — add thread config
+3. `src/data/flowConfigs.ts` — add flow config
+4. `src/types/flows.ts` — add boolean flag
+5. `src/pages/FlowPage.tsx` — import + render
+6. `src/pages/Threads.tsx` — add to flowEnabledThreads
+7. `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
 
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
+### Database Migration
+- 2 new tables with RLS policies + updated_at trigger on `slack_messages_config`
 
