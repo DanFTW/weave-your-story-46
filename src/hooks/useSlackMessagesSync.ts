@@ -100,8 +100,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       if (error) throw error;
       if (data.error) {
         // Detect token-missing scenario from edge function
-        if (data.error === "Slack not connected") {
-          setPhase("needs-reconnect" as SlackMessagesSyncPhase);
+        if (data.error === "Slack not connected" || data.needsReconnect) {
+          setPhase("needs-reconnect");
           return;
         }
         toast({
@@ -114,13 +114,21 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       }
       setChannels(data.channels || []);
     } catch (error: any) {
-      console.error("Failed to fetch channels:", error);
-      // Also catch if the error message contains the indicator
-      const msg = error?.message || error?.context?.body || "";
-      if (typeof msg === "string" && msg.includes("Slack not connected")) {
-        setPhase("needs-reconnect" as SlackMessagesSyncPhase);
+      let errorBody = "";
+      if (error?.context && typeof error.context.text === "function") {
+        try {
+          errorBody = await error.context.text();
+        } catch {
+          errorBody = "";
+        }
+      }
+
+      if (errorBody.includes("Slack not connected")) {
+        setPhase("needs-reconnect");
         return;
       }
+
+      console.error("Failed to fetch channels:", error);
       toast({
         title: "Failed to fetch channels",
         description: "Could not load your Slack channels. Please try again.",
