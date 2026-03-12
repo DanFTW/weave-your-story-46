@@ -69,11 +69,13 @@ function isMultiProvider(thread: Thread): boolean {
 export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
   const colors = getColorConfig(thread);
 
-  // Get the primary service integration for the icon
+  const multiProvider = isMultiProvider(thread);
+
+  // Get the primary service integration for the icon (single-provider only)
   const serviceIntegrations = thread.integrations?.filter(
     (i) => !fillerIntegrations.includes(i)
   );
-  const primaryIcon = serviceIntegrations?.[0];
+  const primaryIcon = multiProvider ? undefined : serviceIntegrations?.[0];
 
   return (
     <button
