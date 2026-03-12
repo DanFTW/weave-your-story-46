@@ -75,6 +75,7 @@ const App = () => (
               <Route path="/profile" element={<Profile />} />
             </Route>
             <Route path="/thread/:threadId" element={<ProtectedRoute><ThreadOverview /></ProtectedRoute>} />
+            <Route path="/flow/slack-me" element={<Navigate to="/flow/slack-messages-sync" replace />} />
             <Route path="/flow/:flowId" element={<ProtectedRoute><FlowPage /></ProtectedRoute>} />
             <Route path="/memory/:memoryId" element={<ProtectedRoute><MemoryDetail /></ProtectedRoute>} />
             <Route path="/integration/:integrationId" element={<ProtectedRoute><IntegrationDetail /></ProtectedRoute>} />

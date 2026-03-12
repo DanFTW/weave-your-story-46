@@ -44,14 +44,15 @@ export function SlackMessagesSyncFlow() {
 
         const { data } = await supabase
           .from("user_integrations")
-          .select("status, composio_connection_id")
+          .select("status")
           .eq("user_id", session.user.id)
           .eq("integration_id", "slack")
           .eq("status", "connected")
           .maybeSingle();
 
-        const hasUsableToken = Boolean(data?.composio_connection_id);
-        setIsSlackConnected(hasUsableToken);
+        const connected = Boolean(data);
+        console.log("SlackMessagesSyncFlow: auth check result", { connected });
+        setIsSlackConnected(connected);
       } catch (err) {
         console.error("Slack auth check failed:", err);
       } finally {
