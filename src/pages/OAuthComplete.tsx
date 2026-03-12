@@ -278,7 +278,7 @@ export default function OAuthComplete() {
     };
 
     completeOAuth();
-  }, [searchParams]);
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
