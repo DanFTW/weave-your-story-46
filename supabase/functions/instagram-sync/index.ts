@@ -129,6 +129,10 @@ async function fetchInstagramStories(connectionId: string): Promise<{ items: any
 
     const responseText = await response.text();
     if (!response.ok) {
+      if (response.status === 404 && responseText.includes('not found')) {
+        console.log('[fetch] Stories API not available via Composio — skipping');
+        return { items: [] };
+      }
       console.error('[fetch] Stories error:', response.status, responseText.slice(0, 300));
       return { items: [], error: `Failed to fetch stories: ${response.status}` };
     }
