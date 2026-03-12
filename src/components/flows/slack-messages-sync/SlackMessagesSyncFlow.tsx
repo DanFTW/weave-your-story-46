@@ -35,23 +35,26 @@ export function SlackMessagesSyncFlow() {
 
   useEffect(() => {
     const checkSlackAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          setIsCheckingAuth(false);
+          return;
+        }
+        const { data } = await supabase
+          .from("user_integrations")
+          .select("status")
+          .eq("user_id", session.user.id)
+          .eq("integration_id", "slack")
+          .eq("status", "connected")
+          .maybeSingle();
+        const hasUsableToken = Boolean(data);
+        setIsSlackConnected(hasUsableToken);
+      } catch (err) {
+        console.error("Slack auth check failed:", err);
+      } finally {
         setIsCheckingAuth(false);
-        return;
       }
-
-      const { data } = await supabase
-        .from("user_integrations")
-        .select("status, composio_connection_id")
-        .eq("user_id", user.id)
-        .eq("integration_id", "slack")
-        .eq("status", "connected")
-        .maybeSingle();
-
-      const hasUsableToken = Boolean(data?.composio_connection_id);
-      setIsSlackConnected(hasUsableToken);
-      setIsCheckingAuth(false);
     };
     checkSlackAuth();
   }, []);
