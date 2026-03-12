@@ -66,6 +66,13 @@ export function SlackMessagesSyncFlow() {
     }
   }, [isSlackConnected, isCheckingAuth, navigate, initializeAfterAuthCheck]);
 
+  // Trigger activate after channel selection
+  useEffect(() => {
+    if (selectedChannelId && phase === "select-channels") {
+      activate();
+    }
+  }, [selectedChannelId]);
+
   if (isCheckingAuth) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -105,17 +112,6 @@ export function SlackMessagesSyncFlow() {
       />
     );
   }
-
-  const handleBack = () => {
-    navigate("/threads");
-  };
-
-  // Use useEffect to trigger activate after state updates
-  useEffect(() => {
-    if (selectedChannelId && phase === "select-channels") {
-      activate();
-    }
-  }, [selectedChannelId]);
 
   const handleChannelSelected = (channel: SlackChannel) => {
     selectChannel(channel.id, channel.name);
