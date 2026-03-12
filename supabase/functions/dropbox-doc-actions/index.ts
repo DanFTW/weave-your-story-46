@@ -18,6 +18,98 @@ function safeJsonParse(text: string): any {
   }
 }
 
+function base64ToBytes(base64: string): Uint8Array {
+  const binStr = atob(base64);
+  const bytes = new Uint8Array(binStr.length);
+  for (let i = 0; i < binStr.length; i++) {
+    bytes[i] = binStr.charCodeAt(i);
+  }
+  return bytes;
+}
+
+interface ZipEntry {
+  name: string;
+  compressedData: Uint8Array;
+  compressionMethod: number;
+  uncompressedSize: number;
+}
+
+function parseZipEntries(data: Uint8Array): ZipEntry[] {
+  const entries: ZipEntry[] = [];
+  let offset = 0;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+  while (offset < data.length - 4) {
+    const sig = view.getUint32(offset, true);
+    if (sig !== 0x04034b50) break;
+    const compressionMethod = view.getUint16(offset + 8, true);
+    const compressedSize = view.getUint32(offset + 18, true);
+    const uncompressedSize = view.getUint32(offset + 22, true);
+    const nameLen = view.getUint16(offset + 26, true);
+    const extraLen = view.getUint16(offset + 28, true);
+    const nameBytes = data.subarray(offset + 30, offset + 30 + nameLen);
+    const name = new TextDecoder().decode(nameBytes);
+    const dataStart = offset + 30 + nameLen + extraLen;
+    const compressedData = data.subarray(dataStart, dataStart + compressedSize);
+    entries.push({ name, compressedData, compressionMethod, uncompressedSize });
+    offset = dataStart + compressedSize;
+  }
+  return entries;
+}
+
+async function decompressEntry(entry: ZipEntry): Promise<Uint8Array> {
+  if (entry.compressionMethod === 0) return entry.compressedData;
+  if (entry.compressionMethod === 8) {
+    // Deno supports "deflate-raw" for raw deflate (no zlib header)
+    const ds = new DecompressionStream("deflate-raw" as CompressionFormat);
+    const writer = ds.writable.getWriter();
+    const reader = ds.readable.getReader();
+    writer.write(entry.compressedData);
+    writer.close();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const totalLen = chunks.reduce((sum, c) => sum + c.length, 0);
+    const result = new Uint8Array(totalLen);
+    let pos = 0;
+    for (const chunk of chunks) { result.set(chunk, pos); pos += chunk.length; }
+    return result;
+  }
+  throw new Error(`Unsupported compression: ${entry.compressionMethod}`);
+}
+
+async function extractTextFromDocx(base64Data: string): Promise<string> {
+  try {
+    const zipBytes = base64ToBytes(base64Data);
+    console.log(`[Dropbox] ZIP bytes length: ${zipBytes.length}, first 4 bytes: ${Array.from(zipBytes.subarray(0, 4)).map(b => b.toString(16)).join(" ")}`);
+    const entries = parseZipEntries(zipBytes);
+    console.log(`[Dropbox] ZIP entries found: ${entries.length}, names: ${entries.map(e => e.name).join(", ")}`);
+    const docEntry = entries.find(e => e.name === "word/document.xml");
+    if (!docEntry) {
+      console.error("[Dropbox] No word/document.xml found");
+      return "";
+    }
+    console.log(`[Dropbox] document.xml compressed size: ${docEntry.compressedData.length}, method: ${docEntry.compressionMethod}`);
+    const xmlBytes = await decompressEntry(docEntry);
+    const xmlText = new TextDecoder().decode(xmlBytes);
+    console.log(`[Dropbox] XML length: ${xmlText.length}, preview: ${xmlText.slice(0, 200)}`);
+    const textParts: string[] = [];
+    const regex = /<w:t[^>]*>([^<]*)<\/w:t>/g;
+    let match;
+    while ((match = regex.exec(xmlText)) !== null) {
+      textParts.push(match[1]);
+    }
+    console.log(`[Dropbox] Extracted ${textParts.length} text parts`);
+    return textParts.join(" ").trim();
+  } catch (e) {
+    console.error("[Dropbox] Failed to extract docx text:", e);
+    return "";
+  }
+}
+
 // === MAIN HANDLER ===
 
 Deno.serve(async (req) => {
@@ -206,15 +298,33 @@ Deno.serve(async (req) => {
       let content = "";
       const d = toolData?.data;
       if (d) {
-        // Check response_data first
-        const rd = d.response_data;
-        if (typeof rd === "string" && rd.trim()) {
-          content = rd.trim();
-        } else if (rd && typeof rd === "object") {
-          if (typeof rd.content === "string" && rd.content.trim()) content = rd.content.trim();
-          else if (typeof rd.text === "string" && rd.text.trim()) content = rd.text.trim();
-          else if (typeof rd.file_content === "string" && rd.file_content.trim()) content = rd.file_content.trim();
-          else if (typeof rd.data === "string" && rd.data.trim()) content = rd.data.trim();
+        // Handle file_content_bytes (base64-encoded binary like .docx)
+        if (typeof d.file_content_bytes === "string" && d.file_content_bytes.length > 0) {
+          const fName = (d.file_name || fileName || "").toLowerCase();
+          console.log(`[Dropbox Export] Got file_content_bytes (${d.file_content_bytes.length} chars), file: ${fName}`);
+          if (fName.endsWith(".docx")) {
+            content = await extractTextFromDocx(d.file_content_bytes);
+          } else {
+            // Try decoding as plain text
+            try {
+              content = new TextDecoder().decode(base64ToBytes(d.file_content_bytes));
+            } catch {
+              content = "";
+            }
+          }
+        }
+
+        // Check response_data
+        if (!content) {
+          const rd = d.response_data;
+          if (typeof rd === "string" && rd.trim()) {
+            content = rd.trim();
+          } else if (rd && typeof rd === "object") {
+            if (typeof rd.content === "string" && rd.content.trim()) content = rd.content.trim();
+            else if (typeof rd.text === "string" && rd.text.trim()) content = rd.text.trim();
+            else if (typeof rd.file_content === "string" && rd.file_content.trim()) content = rd.file_content.trim();
+            else if (typeof rd.data === "string" && rd.data.trim()) content = rd.data.trim();
+          }
         }
 
         // Check top-level fields
@@ -224,8 +334,9 @@ Deno.serve(async (req) => {
           else if (typeof d.text === "string" && d.text.trim()) content = d.text.trim();
         }
 
-        // Check for s3url pattern (presigned download URL)
+        // Check for s3url pattern
         if (!content) {
+          const rd = d.response_data;
           const s3url = d.downloaded_file_content?.s3url || rd?.downloaded_file_content?.s3url;
           if (s3url && typeof s3url === "string") {
             console.log("[Dropbox] Fetching content from s3url...");
@@ -241,10 +352,9 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Last resort: stringify response_data
-        if (!content && rd && typeof rd === "object") {
-          const stringified = JSON.stringify(rd);
-          if (stringified.length > 10) content = stringified;
+        // Last resort: use message field if it contains useful info
+        if (!content && typeof d.message === "string" && d.message.length > 20) {
+          content = d.message;
         }
       }
 
