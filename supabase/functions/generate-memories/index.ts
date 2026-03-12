@@ -91,7 +91,49 @@ serve(async (req) => {
     let systemPrompt: string;
     let userPrompt: string;
     
-    if (flowType === 'food') {
+    if (flowType === 'dropbox-doc' || flowType === 'googledrive-doc') {
+      // Document-based flow: extract factual statements from document content
+      const docSource = flowType === 'dropbox-doc' ? 'Dropbox' : 'Google Drive';
+      console.log(`[generate-memories] Document flow (${docSource}), content length: ${
+        entries[0]?.data?.content ? String(entries[0].data.content).length : 0
+      }`);
+
+      systemPrompt = `You extract factual memories from document content for a personal memory app.
+The user's name is: ${userName}
+
+CRITICAL RULES:
+- ONE fact per memory. Never combine multiple facts.
+- Keep each memory under 15 words.
+- Use first person referencing ${userName}: "${userName} noted that...", "${userName}'s document mentions..."
+- Extract key facts, dates, names, decisions, preferences, action items, and notable details.
+- If the document is short, still extract at least one memory from it.
+- Do NOT generate memories about the document itself (e.g. "document was created on..."). Focus on the CONTENT.
+
+EXAMPLES of good document memories:
+- "${userName} noted that the project deadline is March 15th"
+- "${userName}'s meeting covered the Q2 budget review"
+- "${userName} prefers the vendor proposal from Acme Corp"
+- "${userName} has a dentist appointment next Tuesday"
+- "${userName} listed eggs, milk, and bread as needed items"
+
+BAD examples (never do this):
+- "${userName} has a document in ${docSource}" (about the document, not content)
+- "The document was last edited on Tuesday" (metadata, not content)
+- "${userName} noted facts and listed items and made plans" (combines multiple facts)
+
+Respond with JSON: {"memories": [{"content": "...", "entryId": "...", "entryName": "document_content"}]}`;
+
+      userPrompt = `Extract factual memories from this document. Create one memory per distinct fact, detail, or action item. The user's name is ${userName}.
+
+Document title: ${entries[0]?.data?.title || 'Untitled'}
+Document content:
+${entries[0]?.data?.content || ''}
+
+Entry IDs:
+${entries.map(e => `- ${e.id}: document`).join('\n')}
+
+Return JSON with "memories" array. Each memory must reference "${userName}" and contain ONE fact from the document content.`;
+    } else if (flowType === 'food') {
       systemPrompt = `You generate simple, first-person memories about food preferences for a personal memory app.
 The user's name is: ${userName}
 
