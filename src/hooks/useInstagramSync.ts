@@ -153,10 +153,13 @@ export function useInstagramSync(): UseInstagramSyncReturn {
         if (result.postsSynced) parts.push(`${result.postsSynced} post${result.postsSynced !== 1 ? 's' : ''}`);
         if (result.storiesSynced) parts.push(`${result.storiesSynced} stor${result.storiesSynced !== 1 ? 'ies' : 'y'}`);
         
-        toast({
-          title: "Sync complete",
-          description: `Synced ${parts.join(' and ') || '0 items'} and created ${result.memoriesCreated} memor${result.memoriesCreated !== 1 ? 'ies' : 'y'}.`,
-        });
+        let description = parts.length
+          ? `Synced ${parts.join(' and ')} and created ${result.memoriesCreated} memor${result.memoriesCreated !== 1 ? 'ies' : 'y'}.`
+          : result.skippedDuplicates
+            ? `All ${result.skippedDuplicates} items already synced. No new memories needed.`
+            : 'No items found to sync.';
+
+        toast({ title: "Sync complete", description });
         
         await loadConfig();
         setPhase('active');
