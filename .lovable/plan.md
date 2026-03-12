@@ -1,68 +1,115 @@
 
-Investigation complete (read-only). I traced `/flow/instagram-sync` end-to-end through UI hook, edge function, DB state, and edge logs.
 
-### What I verified
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-1. **Flow path used by the page**
-   - `/flow/instagram-sync` → `useInstagramSync.syncNow()` → `instagram-sync` edge function (`action: "sync"`).
-   - In edge function, post creation is gated by dedupe from `instagram_synced_posts`.
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-2. **Latest sync run evidence (from `instagram-sync` logs)**
-   - `Config — posts: true, comments: true, stories: true`
-   - `21 previously synced items`
-   - `Normalized 21 posts`
-   - Final: `posts: {"fetched":21,"saved":0,"skipped":21,"failed":0}`
+### 1. Database Tables (2 new tables via migration)
 
-3. **DB state for the same user (`327c3c6a-...`)**
-   - `instagram_synced_posts`: **21 rows total**, all treated as synced markers.
-   - `instagram_synced_post_content`: **21 rows** (local post snapshots exist).
-   - `instagram_sync_config`: `posts_synced_count=21`, `memories_created_count=21`, last sync updated.
-   - `user_integrations`: Instagram status is `connected`.
-   - `user_api_keys`: all required keys present.
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-### Failures recorded + exact reasons
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-1. **Primary failure (posts not newly generated)**
-   - **Observed behavior:** posts are detected (21 fetched) but no memories are generated in current runs.
-   - **Reason (certain):** every fetched post is deduped by `instagram_synced_posts.instagram_post_id` before memory creation is attempted.
-   - **Code path:** `isDuplicate(syncedIds, item.externalId)` short-circuits all 21 items; therefore `createMemory(...)` is never reached for posts in this run.
+### 2. Edge Function: `restaurant-bookmark-sync`
 
-2. **Stories failure (known integration limitation)**
-   - **Observed behavior:** stories always 0.
-   - **Reason (certain):** Composio returns missing tool for `INSTAGRAM_GET_IG_USER_STORIES`; function now skips gracefully (no crash), so story sync does not produce data.
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
 
-3. **Comments behavior**
-   - **Observed behavior:** comments are attempted per post but skipped due missing Composio comments tool (`INSTAGRAM_GET_IG_MEDIA_COMMENTS`).
-   - **Reason (certain):** integration endpoint not available; handled as skip.
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
 
-### Patterns/anomalies
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
 
-1. **Dedupe marker and actual memory creation are not strongly linked**
-   - `instagram_synced_posts` is the sole dedupe source.
-   - Once a post ID exists there, future runs skip it regardless of whether re-generation is desired.
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
 
-2. **Historical counters can appear successful while current run creates nothing**
-   - Config shows `memories_created_count=21`, but latest run created `0`.
-   - This can make the UI look “already synced” while current sync does no creation work.
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
 
-3. **No force-reset observed in recent `instagram-sync` logs**
-   - No `action: force-reset-sync` entry in the captured recent logs.
-   - Current dedupe set remained intact during the failing run.
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
 
-### Root cause (with certainty)
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
 
-For the current unresolved issue in `/flow/instagram-sync`, the root cause is:
-- **All detected posts are being skipped by dedupe because they already exist in `instagram_synced_posts`; therefore post memory creation is not executed at all in current sync runs.**
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
 
-This is directly proven by logs (`fetched 21 / skipped 21 / saved 0`), code flow (dedupe before create), and DB state (21 sync markers present).
+### 6. Registration (data + routing)
 
-### Initial solution options (evidence-based)
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
+```
 
-1. **Operational reset path (no code behavior change)**
-   - Clear dedupe markers (`force-reset-sync`) and run sync again so posts are processed and memory creation executes.
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
 
-2. **Code hardening path (prevents repeat of this class of issue)**
-   - Make dedupe depend on a stronger “success marker” (e.g., confirmed memory linkage) rather than only external ID presence.
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
 
-3. **Observability improvement**
-   - Add explicit run-level reporting for “skipped due existing marker” vs “created now” in UI copy to avoid false perception of active generation.
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+
+### 8. Wire trigger into memory save
+
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+
+### Summary of files to create/modify
+
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
+
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+
+**Database migration:** 2 tables + RLS policies
+

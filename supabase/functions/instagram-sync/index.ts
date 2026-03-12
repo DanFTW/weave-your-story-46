@@ -310,12 +310,14 @@ function isDuplicate(syncedIds: Set<string>, externalId: string): boolean {
   return syncedIds.has(externalId);
 }
 
-async function persistSyncRecord(supabase: any, userId: string, externalId: string): Promise<boolean> {
-  const { error } = await supabase.from('instagram_synced_posts').insert({
+async function persistSyncRecord(supabase: any, userId: string, externalId: string, memoryId?: string): Promise<boolean> {
+  // Use upsert so orphaned records (no memory_id) get updated with the new memory_id
+  const { error } = await supabase.from('instagram_synced_posts').upsert({
     user_id: userId,
     instagram_post_id: externalId,
+    memory_id: memoryId || null,
     synced_at: new Date().toISOString(),
-  });
+  }, { onConflict: 'user_id,instagram_post_id', ignoreDuplicates: false });
   if (error) {
     console.error(`[persist] Sync record error for ${externalId}:`, error.message);
     return false;
@@ -361,7 +363,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
   }
 }
 
-async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<boolean> {
+async function createMemory(apiKeys: any, content: string, imageBase64?: string | null): Promise<{ success: boolean; memoryId?: string }> {
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/liam-memory`, {
       method: 'POST',
@@ -381,14 +383,15 @@ async function createMemory(apiKeys: any, content: string, imageBase64?: string 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[memory] Create error:', response.status, errorText.slice(0, 200));
-      return false;
+      return { success: false };
     }
 
     const result = await response.json();
-    return result.success !== false;
+    const memoryId = result.memory?.id || result.id || result.memoryId || null;
+    return { success: result.success !== false, memoryId: memoryId || undefined };
   } catch (error) {
     console.error('[memory] Create error:', error);
-    return false;
+    return { success: false };
   }
 }
 
@@ -421,11 +424,15 @@ async function syncInstagramContent(
       return { success: false, postsSynced: 0, commentsSynced: 0, storiesSynced: 0, memoriesCreated: 0, skippedDuplicates: 0, error: 'LIAM API keys not configured.' };
     }
 
-    // Load existing synced IDs for dedupe
+    // Load existing synced IDs for dedupe — only skip items that have a confirmed memory_id
     const { data: syncedPosts } = await supabase
-      .from('instagram_synced_posts').select('instagram_post_id').eq('user_id', userId);
-    const syncedIds = new Set<string>((syncedPosts || []).map((p: any) => p.instagram_post_id));
-    console.log(`[orchestrate] ${syncedIds.size} previously synced items`);
+      .from('instagram_synced_posts').select('instagram_post_id, memory_id').eq('user_id', userId);
+    const allSyncedPosts = syncedPosts || [];
+    const syncedWithMemory = allSyncedPosts.filter((p: any) => p.memory_id != null);
+    const syncedWithoutMemory = allSyncedPosts.filter((p: any) => p.memory_id == null);
+    const syncedIds = new Set<string>(syncedWithMemory.map((p: any) => p.instagram_post_id));
+    const orphanedIds = new Set<string>(syncedWithoutMemory.map((p: any) => p.instagram_post_id));
+    console.log(`[orchestrate] ${syncedIds.size} confirmed synced, ${orphanedIds.size} orphaned (will re-process)`);
 
     const postCounts: SyncCounts = { fetched: 0, saved: 0, skipped: 0, failed: 0 };
     const storyCounts: SyncCounts = { fetched: 0, saved: 0, skipped: 0, failed: 0 };
@@ -450,11 +457,11 @@ async function syncInstagramContent(
         try {
           const { content, imageUrl } = formatPostMemory(item);
           const imageBase64 = imageUrl ? await fetchImageAsBase64(imageUrl) : null;
-          const ok = await createMemory(apiKeys, content, imageBase64);
+          const { success: ok, memoryId } = await createMemory(apiKeys, content, imageBase64);
 
           if (ok) {
             await persistLocalContent(supabase, userId, item, imageUrl);
-            const recorded = await persistSyncRecord(supabase, userId, item.externalId);
+            const recorded = await persistSyncRecord(supabase, userId, item.externalId, memoryId);
             if (recorded) {
               postCounts.saved++;
               totalMemories++;
@@ -480,10 +487,10 @@ async function syncInstagramContent(
 
               const postMediaUrl = getDisplayMediaUrl(item) || undefined;
               const content = formatCommentMemory(comment, item.caption || undefined, postMediaUrl);
-              const ok = await createMemory(apiKeys, content, null);
+              const { success: ok, memoryId } = await createMemory(apiKeys, content, null);
 
               if (ok) {
-                const recorded = await persistSyncRecord(supabase, userId, commentKey);
+                const recorded = await persistSyncRecord(supabase, userId, commentKey, memoryId);
                 if (recorded) {
                   commentsSynced++;
                   totalMemories++;
@@ -516,11 +523,11 @@ async function syncInstagramContent(
         try {
           const { content, imageUrl } = formatStoryMemory(item);
           const imageBase64 = imageUrl ? await fetchImageAsBase64(imageUrl) : null;
-          const ok = await createMemory(apiKeys, content, imageBase64);
+          const { success: ok, memoryId } = await createMemory(apiKeys, content, imageBase64);
 
           if (ok) {
             await persistLocalContent(supabase, userId, item, imageUrl);
-            const recorded = await persistSyncRecord(supabase, userId, item.externalId);
+            const recorded = await persistSyncRecord(supabase, userId, item.externalId, memoryId);
             if (recorded) {
               storyCounts.saved++;
               totalMemories++;
