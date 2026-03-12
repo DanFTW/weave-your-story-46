@@ -83,20 +83,25 @@ async function decompressEntry(entry: ZipEntry): Promise<Uint8Array> {
 async function extractTextFromDocx(base64Data: string): Promise<string> {
   try {
     const zipBytes = base64ToBytes(base64Data);
+    console.log(`[Dropbox] ZIP bytes length: ${zipBytes.length}, first 4 bytes: ${Array.from(zipBytes.subarray(0, 4)).map(b => b.toString(16)).join(" ")}`);
     const entries = parseZipEntries(zipBytes);
+    console.log(`[Dropbox] ZIP entries found: ${entries.length}, names: ${entries.map(e => e.name).join(", ")}`);
     const docEntry = entries.find(e => e.name === "word/document.xml");
     if (!docEntry) {
-      console.error("[Dropbox] No word/document.xml. Entries:", entries.map(e => e.name));
+      console.error("[Dropbox] No word/document.xml found");
       return "";
     }
+    console.log(`[Dropbox] document.xml compressed size: ${docEntry.compressedData.length}, method: ${docEntry.compressionMethod}`);
     const xmlBytes = await decompressEntry(docEntry);
     const xmlText = new TextDecoder().decode(xmlBytes);
+    console.log(`[Dropbox] XML length: ${xmlText.length}, preview: ${xmlText.slice(0, 200)}`);
     const textParts: string[] = [];
     const regex = /<w:t[^>]*>([^<]*)<\/w:t>/g;
     let match;
     while ((match = regex.exec(xmlText)) !== null) {
       textParts.push(match[1]);
     }
+    console.log(`[Dropbox] Extracted ${textParts.length} text parts`);
     return textParts.join(" ").trim();
   } catch (e) {
     console.error("[Dropbox] Failed to extract docx text:", e);
