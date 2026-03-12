@@ -28,6 +28,7 @@ export default function IntegrationDetail() {
   const iosContacts = useIOSContacts();
   const composio = useComposio(isIOSContacts ? "__unused__" : (integrationId || "gmail"));
   
+  const hook = isIOSContacts ? iosContacts : composio;
   const {
     connectedAccount,
     connecting,
@@ -35,7 +36,8 @@ export default function IntegrationDetail() {
     connect,
     disconnect,
     checkStatus,
-  } = isIOSContacts ? iosContacts : composio;
+  } = hook;
+  const checking = 'checking' in hook ? (hook as any).checking : false;
 
   // Track if we've already handled the return redirect
   const hasHandledReturn = useRef(false);
