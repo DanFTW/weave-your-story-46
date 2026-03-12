@@ -187,7 +187,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   box: "ac_wBJCQEG3imPm",
   googlesuper: "ac_2kVKJUxBH97r",
   fireflies: "ac_67tCzpRn7AdZ",
-  slack: "ac_H9kYZsVaw_gS",
+  slack: "ac_1wq5vJ92z9wT",
   googlecalendar: "ac_Tahf9NrBD7Vy",
   googlemaps: "ac_dg71KiJ5nLgN",
   googlesheets: "ac_P0DYB0XdGLn3",
