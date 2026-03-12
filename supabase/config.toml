@@ -119,3 +119,6 @@ verify_jwt = false
 
 [functions.linkedin-profile-scrape]
 verify_jwt = false
+
+[functions.slack-oauth]
+verify_jwt = false

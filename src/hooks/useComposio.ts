@@ -317,19 +317,27 @@ export function useComposio(toolkit: string): UseComposioReturn {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Call edge function to revoke Composio connection and delete DB record
-      const { error } = await supabase.functions.invoke("composio-disconnect", {
-        body: { toolkit },
-      });
-
-      if (error) {
-        console.error("Disconnect edge function error:", error);
-        // Fallback: just delete from our database
+      if (toolkit.toLowerCase() === "slack") {
+        // Slack: just delete the DB record (no Composio connection to revoke)
         await supabase
           .from("user_integrations")
           .delete()
           .eq("user_id", session.user.id)
-          .eq("integration_id", toolkit.toLowerCase());
+          .eq("integration_id", "slack");
+      } else {
+        // Call edge function to revoke Composio connection and delete DB record
+        const { error } = await supabase.functions.invoke("composio-disconnect", {
+          body: { toolkit },
+        });
+
+        if (error) {
+          console.error("Disconnect edge function error:", error);
+          await supabase
+            .from("user_integrations")
+            .delete()
+            .eq("user_id", session.user.id)
+            .eq("integration_id", toolkit.toLowerCase());
+        }
       }
 
       setConnectedAccount(null);

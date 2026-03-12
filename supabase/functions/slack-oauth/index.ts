@@ -20,11 +20,12 @@ serve(async (req) => {
   }
 
   try {
-    const { action, code, baseUrl } = await req.json();
+    const body = await req.json();
+    const { action, code, userId: bodyUserId } = body;
+    const authHeader = req.headers.get("Authorization");
 
     // ---------- INITIATE ----------
     if (action === "initiate") {
-      const authHeader = req.headers.get("Authorization");
       if (!authHeader) {
         return new Response(JSON.stringify({ error: "Authorization required" }), {
           status: 401,
@@ -43,16 +44,14 @@ serve(async (req) => {
         });
       }
 
-      // Use state param to carry toolkit identifier back through the redirect
       const state = `slack_${user.id}`;
-
       const redirectUrl = `https://slack.com/oauth/v2/authorize?` +
         `client_id=${SLACK_CLIENT_ID}` +
         `&user_scope=${encodeURIComponent(SLACK_USER_SCOPES)}` +
         `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
         `&state=${encodeURIComponent(state)}`;
 
-      console.log("slack-oauth: initiate redirect URL built for user", user.id);
+      console.log("slack-oauth: initiate for user", user.id);
 
       return new Response(JSON.stringify({ redirectUrl }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -93,7 +92,7 @@ serve(async (req) => {
         );
       }
 
-      // Extract user token info - for user token scopes, token is in authed_user
+      // For user token scopes, token is in authed_user
       const userToken = tokenData.authed_user?.access_token;
       const slackUserId = tokenData.authed_user?.id;
 
@@ -105,7 +104,7 @@ serve(async (req) => {
         );
       }
 
-      // Fetch user profile from Slack
+      // Fetch user profile
       let accountName = "";
       let accountEmail = "";
       let avatarUrl = "";
@@ -115,21 +114,18 @@ serve(async (req) => {
           headers: { Authorization: `Bearer ${userToken}` },
         });
         const userInfo = await userInfoRes.json();
-
         if (userInfo.ok && userInfo.user) {
           accountName = userInfo.user.real_name || userInfo.user.name || "";
           accountEmail = userInfo.user.profile?.email || "";
           avatarUrl = userInfo.user.profile?.image_72 || "";
         }
-        console.log("slack-oauth: fetched user info:", { accountName, accountEmail });
+        console.log("slack-oauth: user info:", { accountName, accountEmail });
       } catch (e) {
         console.error("slack-oauth: failed to fetch user info:", e);
       }
 
-      // Determine the Supabase user — try auth header first, fall back to state param
-      const authHeader = req.headers.get("Authorization");
+      // Determine user ID from auth header or body
       let userId: string | null = null;
-
       if (authHeader) {
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           global: { headers: { Authorization: authHeader } },
@@ -137,16 +133,7 @@ serve(async (req) => {
         const { data: { user } } = await supabase.auth.getUser();
         userId = user?.id || null;
       }
-
-      // Fall back: extract user ID from state param if passed
-      const stateParam = new URL(req.url).searchParams.get("state");
-      if (!userId && stateParam?.startsWith("slack_")) {
-        // Note: this is a fallback; the caller should pass userId in the body
-      }
-
-      // The caller (OAuthComplete) should pass userId in body if available
-      const bodyUserId = (await req.json().catch(() => ({}))).userId;
-      if (!userId) userId = bodyUserId;
+      if (!userId) userId = bodyUserId || null;
 
       if (!userId) {
         console.error("slack-oauth: could not determine user ID");
@@ -156,7 +143,7 @@ serve(async (req) => {
         );
       }
 
-      // Use service role to upsert the integration record
+      // Use service role to upsert
       const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -171,7 +158,7 @@ serve(async (req) => {
             account_email: accountEmail,
             account_avatar_url: avatarUrl,
             connected_at: new Date().toISOString(),
-            composio_connection_id: null, // Not using Composio
+            composio_connection_id: null,
           },
           { onConflict: "user_id,integration_id" }
         );
@@ -184,7 +171,7 @@ serve(async (req) => {
         );
       }
 
-      console.log("slack-oauth: connection saved successfully for user", userId);
+      console.log("slack-oauth: saved for user", userId);
 
       return new Response(
         JSON.stringify({ success: true, toolkit: "slack" }),
