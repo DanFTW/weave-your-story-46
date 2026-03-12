@@ -1,97 +1,115 @@
-### Problem
 
-The Google Drive Document Tracker currently lets the user search for a doc, but when they click save it creates a single raw memory directly from the export step instead of using the AI memory-generation flow.
 
-The intended behavior is:
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-**search by document title/name → select doc → export the document body/content → generate multiple memories → preview/edit → confirm save**
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-### Changes
+### 1. Database Tables (2 new tables via migration)
 
-**1. Add** `export-doc` **action**  
-**File:** `supabase/functions/googledrive-automation-triggers/index.ts`
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-Add a new `export-doc` action that only exports the selected document’s content and returns:
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
 
-- `content`
-- `title`
-- `fileId`
+### 2. Edge Function: `restaurant-bookmark-sync`
 
-This keeps **document retrieval** separate from **memory creation**.
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
 
-Keep existing `save-doc` unchanged for monitoring/polling flows.
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
 
----
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
 
-**2. Update Google Drive hook to support generate → preview → confirm**  
-**File:** `src/hooks/useGoogleDriveAutomation.ts`
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
 
-Follow the same pattern as the website scrape flow.
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
 
-Add:
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
 
-- `generatedMemories`
-- `selectedDoc`
-- `generateFromDoc(fileId, fileName)`
-  - uses the selected doc’s **title/name** only for search/selection
-  - calls `export-doc`
-  - sends the exported **document content** into `generate-memories`
-  - stores preview state
-- preview editing helpers
-- `confirmMemories()` to save approved memories, then mark the doc as processed
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
 
-Update phases to include:
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
 
-- `generating`
-- `preview`
-- `success`
+### 6. Registration (data + routing)
 
----
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
+```
 
-**3. Update types**  
-**File:** `src/types/googleDriveAutomation.ts`
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
 
-Add:
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
 
-- `generating`
-- `preview`
-- `success`
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
 
-to `GoogleDriveAutomationPhase`.
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
 
----
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
 
-**4. Update the flow component for new phases**  
-**File:** `src/components/flows/googledrive-automation/GoogleDriveAutomationFlow.tsx`
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
 
-Add UI for:
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
 
-- generating state
-- preview/edit state
-- success state
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
 
-Reuse the same patterns already used elsewhere. No redesign.
+### 8. Wire trigger into memory save
 
----
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
 
-**5. Update DocumentSearch action**  
-**File:** `src/components/flows/googledrive-automation/DocumentSearch.tsx`
+### Summary of files to create/modify
 
-Change the current action from immediate save to generate flow.
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
 
-- keep **search by title/name**
-- on selection, call `generateFromDoc`
-- change button label from **Save** to **Generate**
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
 
----
+**Database migration:** 2 tables + RLS policies
 
-### Summary
-
-The key behavior should be:
-
-- use the doc **title/name** to find the file
-- use the doc’s **actual exported body/content** to generate memories
-- preview/edit before saving
-- do not create a single raw memory directly from metadata or export output
-
-No new files needed. No redesign. Follow the same architecture and UX pattern as the website scrape flow.

@@ -530,6 +530,32 @@ Deno.serve(async (req) => {
       });
     }
 
+    // === EXPORT DOC (content only, no memory creation) ===
+    if (action === "export-doc") {
+      const { fileId, fileName } = body;
+      if (!fileId) {
+        return new Response(JSON.stringify({ error: "fileId required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const content = await exportDocContent(connectionId, fileId);
+      if (!content || content.trim().length === 0) {
+        return new Response(JSON.stringify({ error: "Could not extract document content" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        content, 
+        title: fileName || "Untitled",
+        fileId,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // === SAVE DOC ===
     if (action === "save-doc") {
       const { fileId, fileName } = body;

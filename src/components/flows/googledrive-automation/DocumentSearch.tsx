@@ -9,10 +9,10 @@ interface DocumentSearchProps {
   searchResults: GoogleDriveSearchResult[];
   isSaving: Record<string, boolean>;
   onSearch: (query: string) => void;
-  onSave: (fileId: string, fileName: string) => void;
+  onGenerate: (fileId: string, fileName: string) => void;
 }
 
-export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch, onSave }: DocumentSearchProps) {
+export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch, onGenerate }: DocumentSearchProps) {
   const [query, setQuery] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -50,7 +50,7 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Search Documents</h3>
-        <p className="text-xs text-muted-foreground">Find Google Docs by title and save as memories</p>
+        <p className="text-xs text-muted-foreground">Find Google Docs by title and generate memories</p>
       </div>
 
       <div className="flex gap-2">
@@ -109,11 +109,11 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
               ) : (
                 <Button
                   size="sm"
-                  onClick={() => onSave(doc.id, doc.name)}
+                  onClick={() => onGenerate(doc.id, doc.name)}
                   disabled={isSaving[doc.id]}
                   className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white rounded-lg shrink-0"
                 >
-                  {isSaving[doc.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                  {isSaving[doc.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Generate"}
                 </Button>
               )}
             </div>
