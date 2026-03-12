@@ -82,7 +82,12 @@ export default function OAuthComplete() {
       // --- SLACK NATIVE OAUTH CALLBACK ---
       const slackCode = searchParams.get("code");
       const stateParam = searchParams.get("state");
-      const isSlackCallback = slackCode && stateParam?.startsWith("slack_");
+      const isSlackCallback = !!(slackCode && (
+        stateParam?.startsWith("slack_") || 
+        stateParam?.toLowerCase().includes("slack")
+      ));
+
+      console.log("OAuthComplete: Slack detection:", { slackCode: !!slackCode, stateParam, isSlackCallback });
 
       if (isSlackCallback) {
         console.log("OAuthComplete: Slack native OAuth callback detected");
