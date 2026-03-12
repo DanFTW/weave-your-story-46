@@ -1136,9 +1136,9 @@ export const threadConfigs: Record<string, ThreadConfig> = {
   },
   "slack-messages-sync": {
     id: "slack-messages-sync",
-    title: "Slack Messages to Memory",
-    subtitle: "Import messages as memories",
-    description: "Connects to your Slack workspace and imports messages from selected channels as memories. Choose between passive import or active search mode.",
+    title: "Slack Channel Monitor",
+    subtitle: "Monitor channel messages",
+    description: "Monitor a Slack channel and automatically import all messages as memories. Search channel content on demand.",
     gradient: "purple",
     icon: MessagesSquare,
     steps: [
@@ -1152,21 +1152,14 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       {
         id: "channels",
         type: "setup",
-        title: "Select Channels",
-        description: "Choose which channels to import from",
+        title: "Select Channel",
+        description: "Choose a channel to monitor",
         icon: Hash,
-      },
-      {
-        id: "configure",
-        type: "setup",
-        title: "Search & Import",
-        description: "Configure import mode",
-        icon: Settings,
       },
       {
         id: "active",
         type: "save",
-        title: "Always-On Sync",
+        title: "Always-On Monitoring",
         description: "Messages imported automatically",
         icon: Wifi,
         badge: "LIVE",

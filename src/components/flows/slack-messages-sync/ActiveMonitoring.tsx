@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ChevronLeft, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,9 +8,9 @@ import { formatDistanceToNow } from "date-fns";
 
 interface ActiveMonitoringProps {
   stats: SlackMessagesSyncStats;
-  selectedChannelCount: number;
   onPause: () => Promise<void>;
   onSyncNow: () => Promise<void>;
+  onSearch: (query: string) => Promise<void>;
   onReset: () => Promise<void>;
   isLoading: boolean;
   isPolling: boolean;
@@ -17,18 +18,25 @@ interface ActiveMonitoringProps {
 
 export function ActiveMonitoring({
   stats,
-  selectedChannelCount,
   onPause,
   onSyncNow,
+  onSearch,
   onReset,
   isLoading,
   isPolling,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
 
   const lastPolledText = stats.lastPolled
     ? formatDistanceToNow(new Date(stats.lastPolled), { addSuffix: true })
     : "Never";
+
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      onSearch(searchQuery.trim());
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-nav">
@@ -44,9 +52,9 @@ export function ActiveMonitoring({
 
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-white truncate">
-              Slack Messages to Memory
+              Slack Channel Monitor
             </h1>
-            <p className="text-white/70 text-sm truncate">Sync active</p>
+            <p className="text-white/70 text-sm truncate">Monitoring active</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -63,14 +71,16 @@ export function ActiveMonitoring({
       <div className="px-5 pt-5 space-y-6">
         {/* Channel Info */}
         <div className="p-4 rounded-xl bg-card border border-border">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[#4A154B] flex items-center justify-center">
               <Hash className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="font-medium text-foreground">{selectedChannelCount} channels</p>
+              <p className="font-medium text-foreground">
+                #{stats.channelName || "channel"}
+              </p>
               <p className="text-sm text-muted-foreground">
-                {stats.searchMode ? "Search mode" : "Passive import"}
+                All messages imported as memories
               </p>
             </div>
           </div>
@@ -96,25 +106,33 @@ export function ActiveMonitoring({
           </div>
         </div>
 
-        {/* Mode indicator */}
-        <div className="p-4 rounded-xl bg-muted/50 border border-border">
-          <div className="flex items-center gap-3">
-            {stats.searchMode ? (
-              <Search className="w-5 h-5 text-[#4A154B]" />
-            ) : (
-              <Hash className="w-5 h-5 text-[#4A154B]" />
-            )}
-            <div>
-              <p className="font-medium text-foreground text-sm">
-                {stats.searchMode ? "Search & Import Mode" : "Passive Import Mode"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {stats.searchMode
-                  ? "Searching content across selected channels"
-                  : "Importing recent messages from selected channels"}
-              </p>
-            </div>
+        {/* Search */}
+        <div className="p-4 rounded-xl bg-card border border-border">
+          <div className="flex items-center gap-2 mb-3">
+            <Search className="w-4 h-4 text-[#4A154B]" />
+            <p className="font-medium text-foreground text-sm">Search Channel</p>
           </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              placeholder="Search messages..."
+              className="flex-1 h-10 px-3 rounded-lg bg-muted border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#4A154B]/30"
+            />
+            <Button
+              size="sm"
+              onClick={handleSearch}
+              disabled={isPolling || !searchQuery.trim()}
+              className="h-10 bg-[#4A154B] hover:bg-[#4A154B]/90"
+            >
+              {isPolling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Search across channel content and save matches as memories
+          </p>
         </div>
 
         {/* Actions */}
@@ -136,7 +154,7 @@ export function ActiveMonitoring({
             className="w-full h-12"
           >
             <Pause className="w-4 h-4 mr-2" />
-            Pause Sync
+            Pause Monitor
           </Button>
 
           <Button

@@ -1,7 +1,6 @@
 export type SlackMessagesSyncPhase =
   | 'auth-check'
   | 'select-channels'
-  | 'configure'
   | 'activating'
   | 'active';
 
@@ -17,8 +16,8 @@ export interface SlackMessagesSyncConfig {
   id: string;
   userId: string;
   isActive: boolean;
-  searchMode: boolean;
-  selectedChannelIds: string[];
+  selectedChannelId: string | null;
+  selectedChannelName: string | null;
   messagesImported: number;
   lastPolledAt: string | null;
 }
@@ -27,5 +26,5 @@ export interface SlackMessagesSyncStats {
   messagesImported: number;
   lastPolled: string | null;
   isActive: boolean;
-  searchMode: boolean;
+  channelName: string | null;
 }
