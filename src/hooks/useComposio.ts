@@ -12,6 +12,7 @@ export interface ConnectedAccount {
 interface UseComposioReturn {
   connectedAccount: ConnectedAccount | null;
   connecting: boolean;
+  checking: boolean;
   isConnected: boolean;
   connect: (customRedirectPath?: string, forceReauth?: boolean) => Promise<void>;
   disconnect: () => Promise<void>;
@@ -29,6 +30,7 @@ function isMobileBrowser(): boolean {
 export function useComposio(toolkit: string): UseComposioReturn {
   const [connectedAccount, setConnectedAccount] = useState<ConnectedAccount | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   
   // Refs for polling
@@ -283,6 +285,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
 
   // Check existing connection status
   const checkStatus = useCallback(async () => {
+    setChecking(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -308,6 +311,8 @@ export function useComposio(toolkit: string): UseComposioReturn {
       }
     } catch (error) {
       console.error("Error checking status:", error);
+    } finally {
+      setChecking(false);
     }
   }, [toolkit]);
 
@@ -352,6 +357,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
   return {
     connectedAccount,
     connecting,
+    checking,
     isConnected,
     connect,
     disconnect,
