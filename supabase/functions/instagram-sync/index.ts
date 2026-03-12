@@ -310,12 +310,14 @@ function isDuplicate(syncedIds: Set<string>, externalId: string): boolean {
   return syncedIds.has(externalId);
 }
 
-async function persistSyncRecord(supabase: any, userId: string, externalId: string): Promise<boolean> {
-  const { error } = await supabase.from('instagram_synced_posts').insert({
+async function persistSyncRecord(supabase: any, userId: string, externalId: string, memoryId?: string): Promise<boolean> {
+  // Use upsert so orphaned records (no memory_id) get updated with the new memory_id
+  const { error } = await supabase.from('instagram_synced_posts').upsert({
     user_id: userId,
     instagram_post_id: externalId,
+    memory_id: memoryId || null,
     synced_at: new Date().toISOString(),
-  });
+  }, { onConflict: 'user_id,instagram_post_id', ignoreDuplicates: false });
   if (error) {
     console.error(`[persist] Sync record error for ${externalId}:`, error.message);
     return false;
