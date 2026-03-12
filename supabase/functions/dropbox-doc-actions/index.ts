@@ -292,15 +292,33 @@ Deno.serve(async (req) => {
       let content = "";
       const d = toolData?.data;
       if (d) {
-        // Check response_data first
-        const rd = d.response_data;
-        if (typeof rd === "string" && rd.trim()) {
-          content = rd.trim();
-        } else if (rd && typeof rd === "object") {
-          if (typeof rd.content === "string" && rd.content.trim()) content = rd.content.trim();
-          else if (typeof rd.text === "string" && rd.text.trim()) content = rd.text.trim();
-          else if (typeof rd.file_content === "string" && rd.file_content.trim()) content = rd.file_content.trim();
-          else if (typeof rd.data === "string" && rd.data.trim()) content = rd.data.trim();
+        // Handle file_content_bytes (base64-encoded binary like .docx)
+        if (typeof d.file_content_bytes === "string" && d.file_content_bytes.length > 0) {
+          const fName = (d.file_name || fileName || "").toLowerCase();
+          console.log(`[Dropbox Export] Got file_content_bytes (${d.file_content_bytes.length} chars), file: ${fName}`);
+          if (fName.endsWith(".docx")) {
+            content = await extractTextFromDocx(d.file_content_bytes);
+          } else {
+            // Try decoding as plain text
+            try {
+              content = new TextDecoder().decode(base64ToBytes(d.file_content_bytes));
+            } catch {
+              content = "";
+            }
+          }
+        }
+
+        // Check response_data
+        if (!content) {
+          const rd = d.response_data;
+          if (typeof rd === "string" && rd.trim()) {
+            content = rd.trim();
+          } else if (rd && typeof rd === "object") {
+            if (typeof rd.content === "string" && rd.content.trim()) content = rd.content.trim();
+            else if (typeof rd.text === "string" && rd.text.trim()) content = rd.text.trim();
+            else if (typeof rd.file_content === "string" && rd.file_content.trim()) content = rd.file_content.trim();
+            else if (typeof rd.data === "string" && rd.data.trim()) content = rd.data.trim();
+          }
         }
 
         // Check top-level fields
@@ -310,8 +328,9 @@ Deno.serve(async (req) => {
           else if (typeof d.text === "string" && d.text.trim()) content = d.text.trim();
         }
 
-        // Check for s3url pattern (presigned download URL)
+        // Check for s3url pattern
         if (!content) {
+          const rd = d.response_data;
           const s3url = d.downloaded_file_content?.s3url || rd?.downloaded_file_content?.s3url;
           if (s3url && typeof s3url === "string") {
             console.log("[Dropbox] Fetching content from s3url...");
@@ -327,10 +346,9 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Last resort: stringify response_data
-        if (!content && rd && typeof rd === "object") {
-          const stringified = JSON.stringify(rd);
-          if (stringified.length > 10) content = stringified;
+        // Last resort: use message field if it contains useful info
+        if (!content && typeof d.message === "string" && d.message.length > 20) {
+          content = d.message;
         }
       }
 
