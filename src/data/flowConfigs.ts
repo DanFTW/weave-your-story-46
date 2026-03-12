@@ -624,6 +624,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     fields: [],
     isWebsiteScrapeFlow: true,
   },
+  "slack-messages-sync": {
+    id: "slack-messages-sync",
+    title: "Slack Messages to Memory",
+    subtitle: "Import Slack messages",
+    description: "Import Slack messages from across workspaces and channels as memories.",
+    gradient: "purple",
+    icon: MessagesSquare,
+    entryName: "message",
+    entryNamePlural: "messages",
+    memoryTag: "SLACK",
+    fields: [],
+    isSlackMessagesSyncFlow: true,
+  },
 };
 
 export function getFlowConfig(flowId: string): FlowConfig | undefined {
