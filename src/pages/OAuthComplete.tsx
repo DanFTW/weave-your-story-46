@@ -90,6 +90,7 @@ export default function OAuthComplete() {
         stateParam?.toLowerCase().includes("slack")
       ));
 
+      console.log("OAuthComplete marker: ref-snapshot-v2");
       console.log("OAuthComplete: Slack detection:", { slackCode: !!slackCode, stateParam, isSlackCallback });
 
       if (isSlackCallback) {
