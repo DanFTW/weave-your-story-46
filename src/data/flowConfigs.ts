@@ -535,9 +535,9 @@ export const flowConfigs: Record<string, FlowConfig> = {
   },
   "googledrive-tracker": {
     id: "googledrive-tracker",
-    title: "Google Drive Document Tracker",
-    subtitle: "Automatic document monitoring",
-    description: "Automatically save new Google Docs as memories.",
+    title: "Document Tracker",
+    subtitle: "Search & generate from documents",
+    description: "Save documents from Google Drive or Dropbox as memories.",
     gradient: "blue",
     icon: FileText,
     entryName: "document",

@@ -914,18 +914,18 @@ export const threadConfigs: Record<string, ThreadConfig> = {
   },
   "googledrive-tracker": {
     id: "googledrive-tracker",
-    title: "Google Drive Document Tracker",
-    subtitle: "Automatic document memories",
-    description: "Automatically save new Google Docs as memories when they're created in your Drive.",
+    title: "Document Tracker",
+    subtitle: "Save documents as memories",
+    description: "Save documents from Google Drive or Dropbox as memories.",
     gradient: "blue",
     icon: FileText,
     steps: [
       {
         id: "connect",
         type: "integration",
-        title: "Connect Google Drive",
+        title: "Connect Google Drive or Dropbox",
         description: "Authorize access to your documents",
-        iconUrl: "/src/assets/integrations/googledrive.svg",
+        icon: FileText,
       },
       {
         id: "configure",

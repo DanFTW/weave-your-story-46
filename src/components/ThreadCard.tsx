@@ -48,11 +48,22 @@ function getColorConfig(thread: Thread): CardColorConfig {
   const serviceIntegrations = thread.integrations?.filter(
     (i) => !fillerIntegrations.includes(i)
   );
+  // Multi-provider threads use neutral gradient fallback
+  if (serviceIntegrations && serviceIntegrations.length > 1) {
+    return gradientFallbackColors[thread.gradient];
+  }
   const primary = serviceIntegrations?.[0];
   if (primary && integrationColors[primary]) {
     return integrationColors[primary];
   }
   return gradientFallbackColors[thread.gradient];
+}
+
+function isMultiProvider(thread: Thread): boolean {
+  const serviceIntegrations = thread.integrations?.filter(
+    (i) => !fillerIntegrations.includes(i)
+  );
+  return (serviceIntegrations?.length ?? 0) > 1;
 }
 
 export function ThreadCard({ thread, onClick, className }: ThreadCardProps) {
