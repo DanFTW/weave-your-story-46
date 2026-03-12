@@ -78,12 +78,13 @@ export default function OAuthComplete() {
 
   useEffect(() => {
     const completeOAuth = async () => {
+      const params = originalSearchRef.current;
       console.log("OAuthComplete: Full URL:", window.location.href);
-      console.log("OAuthComplete: Parsed params:", Object.fromEntries(searchParams.entries()));
+      console.log("OAuthComplete: Parsed params:", Object.fromEntries(params.entries()));
 
       // --- SLACK NATIVE OAUTH CALLBACK ---
-      const slackCode = searchParams.get("code");
-      const stateParam = searchParams.get("state");
+      const slackCode = params.get("code");
+      const stateParam = params.get("state");
       const isSlackCallback = !!(slackCode && (
         stateParam?.startsWith("slack_") || 
         stateParam?.toLowerCase().includes("slack")
