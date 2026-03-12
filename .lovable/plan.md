@@ -1,36 +1,53 @@
 
-Investigation summary (no code changes made):
+Investigation complete (no code changes made). Root cause is confirmed with high certainty.
 
-1) What I checked
-- Workflow files: `src/hooks/useComposio.ts`, `src/pages/OAuthComplete.tsx`, `supabase/functions/slack-oauth/index.ts`, `supabase/config.toml`.
-- Runtime evidence: edge logs for `slack-oauth`, auth logs, query state, and a direct fetch of `/oauth-complete` on the published URL with Slack-like params.
+What I validated
+1) Source implementation (current repo)
+- `src/pages/OAuthComplete.tsx` contains a Slack-first callback branch (`code` + `state` containing `slack`) before Composio logic.
+- `supabase/functions/slack-oauth/index.ts` has both `initiate` and `callback` handlers and writes to `user_integrations`.
 
-2) Evidence found
-- `slack-oauth` is being called for `action: "initiate"` (multiple recent logs).
-- There are no `slack-oauth` callback logs (`action: "callback"` path not reached).
-- `user_integrations` currently has no `integration_id='slack'` rows (no successful completion persisted).
-- Published `/oauth-complete?code=...&state=slack_...` currently renders **“Connection incomplete”** and shows received `{code,state}` — meaning it is still executing the Composio-style `connected_account_id` path instead of Slack callback handling.
-- Current Slack redirect URI is hardcoded to the published domain, so OAuth returns there (not preview).
+2) Runtime behavior observed
+- Client network shows `POST /functions/v1/slack-oauth` with `{"action":"initiate"}` succeeds and returns redirect URL with `state=slack_<userId>`.
+- Then repeated polling requests to `user_integrations` for `integration_id=slack` return `[]` (never connected).
 
-3) Root cause (high confidence)
-Primary: Environment/build mismatch in the callback step.
-- Slack OAuth returns to the published app.
-- The published `/oauth-complete` behavior is still effectively on the Composio path for that request pattern, so it logs `connectionId=null, toolkit=null` and never calls `slack-oauth` callback.
-- Result: polling never sees a connected row, so Slack appears “blocked”/stuck.
+3) Edge-function logs
+- `slack-oauth` logs repeatedly show only: `initiate for user ...`
+- No organic callback logs (`exchanging code`, `saved for user`) during user flow.
 
-Secondary contributor:
-- Testing from preview can mask this, because Slack always redirects to published URL.
+4) Direct published-route reproduction
+- Fetching published route with Slack-like params:
+  `/oauth-complete?code=test&state=slack_test`
+  renders: **“Connection incomplete”** and echoes `{code,state}`.
+- That output is the Composio fallback path (`connectionId` missing), proving published `/oauth-complete` is not executing Slack callback handling.
 
-4) Initial solution to apply next
-- Ensure the latest frontend build containing Slack callback handling is active on the **published** domain.
-- Validate callback branch on published: when URL has `code` + `state=slack_*`, call `slack-oauth` with `{ action: "callback", code }` before Composio logic.
-- Keep Composio branch untouched for other integrations.
-- Add one guardrail: if user starts Slack connect from preview, show a clear notice to complete/test Slack on published URL to avoid false failures.
+5) Controlled backend callback test
+- Manually invoking `slack-oauth` with `action:"callback"` logs `exchanging code` and returns Slack `invalid_code` as expected.
+- This proves backend callback path is reachable and functioning; it is simply not being called in real flow.
 
-5) Quick verification checklist after rollout
-- Connect Slack from `https://weave-your-story-46.lovable.app/integration/slack`.
-- Confirm `slack-oauth` logs show both:
-  - `initiate for user ...`
-  - `exchanging code for token...` then `saved for user ...`
-- Confirm `user_integrations` gets a `slack` row with `status='connected'`.
-- Confirm `/integrations/slack` shows connected state.
+Failure chain (confirmed)
+```text
+/integration/slack (preview) -> slack-oauth initiate OK -> Slack redirects to published /oauth-complete
+-> published /oauth-complete runs Composio fallback (expects connected_account_id)
+-> no call to slack-oauth callback
+-> no DB upsert for slack
+-> preview polling never finds connected row
+-> user sees persistent failure/blocked state
+```
+
+Observed patterns/anomalies
+- Pattern: repeated `initiate`, zero callback invocations.
+- Pattern: zero `slack` rows in `user_integrations`.
+- Anomaly: React ref warning in `OAuthConfirmDialog`; unrelated to OAuth failure.
+- Cross-origin nuance: flow starts in preview but callback is hard-routed to published domain.
+
+Root cause (certain)
+- The published frontend serving `/oauth-complete` is stale/out-of-sync with the current repo logic (or otherwise not deploying the Slack callback branch). Backend is not the blocker.
+
+Initial solution (based on evidence)
+1. Redeploy/publish frontend so live `/oauth-complete` includes the Slack branch now present in source.
+2. Re-test from published app URL (`/integration/slack`), not preview.
+3. Verify success criteria:
+   - `slack-oauth` logs include `exchanging code` then `saved for user`.
+   - `user_integrations` contains `integration_id='slack', status='connected'`.
+   - Slack detail page reflects connected state.
+4. Optional hardening after fix: show a notice when Slack connect is started in preview, instructing completion/validation on published URL.
