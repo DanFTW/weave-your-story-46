@@ -213,7 +213,7 @@ async function exportDocContent(connectionId: string, fileId: string): Promise<s
       keys: data?.data ? Object.keys(data.data).slice(0, 10) : [],
     }));
 
-    return extractTextContent(data);
+    return await extractTextContent(data);
   } catch (error) {
     console.error("[GoogleDrive] Export error:", error);
     return "";
