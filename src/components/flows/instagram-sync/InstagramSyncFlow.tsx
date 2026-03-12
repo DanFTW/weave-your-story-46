@@ -64,10 +64,12 @@ export function InstagramSyncFlow() {
   const handleSaveConfig = async (config: { 
     syncPosts: boolean; 
     syncComments: boolean;
+    syncStories: boolean;
   }) => {
     await saveConfig({
       syncPosts: config.syncPosts,
       syncComments: config.syncComments,
+      syncStories: config.syncStories,
     });
   };
 
