@@ -8,6 +8,7 @@ import {
   GoogleDriveAutomationConfig,
   GoogleDriveDocStats,
   GoogleDriveSearchResult,
+  DocSource,
 } from "@/types/googleDriveAutomation";
 
 export function useGoogleDriveAutomation() {
