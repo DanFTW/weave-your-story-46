@@ -168,8 +168,14 @@ Deno.serve(async (req) => {
 
       console.log(`[Dropbox] Reading file: ${fileId}`);
 
-      // Determine the path — fileId might be an id: prefixed string or a path
-      const filePath = fileId.startsWith("id:") ? fileId : fileId;
+      // DROPBOX_READ_FILE expects a path argument
+      const filePath = (fileId || "").trim();
+
+      if (!filePath) {
+        return new Response(JSON.stringify({ error: "Invalid file path" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       const toolResponse = await fetch(
         "https://backend.composio.dev/api/v3/tools/execute/DROPBOX_READ_FILE",
@@ -178,7 +184,7 @@ Deno.serve(async (req) => {
           headers: { "Content-Type": "application/json", "x-api-key": COMPOSIO_API_KEY },
           body: JSON.stringify({
             connected_account_id: connectionId,
-            arguments: { file_path: filePath },
+            arguments: { path: filePath },
           }),
         }
       );
