@@ -81,6 +81,9 @@ verify_jwt = false
 [functions.googledrive-automation-webhook]
 verify_jwt = false
 
+[functions.dropbox-doc-actions]
+verify_jwt = false
+
 [functions.discord-automation-triggers]
 verify_jwt = false
 
