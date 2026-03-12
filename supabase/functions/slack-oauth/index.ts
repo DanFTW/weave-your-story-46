@@ -117,7 +117,7 @@ serve(async (req) => {
         if (userInfo.ok && userInfo.user) {
           accountName = userInfo.user.real_name || userInfo.user.name || "";
           accountEmail = userInfo.user.profile?.email || "";
-          avatarUrl = userInfo.user.profile?.image_72 || "";
+          avatarUrl = userInfo.user.profile?.image_192 || userInfo.user.profile?.image_72 || "";
         }
         console.log("slack-oauth: user info:", { accountName, accountEmail });
       } catch (e) {
