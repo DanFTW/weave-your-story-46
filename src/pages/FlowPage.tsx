@@ -107,6 +107,9 @@ import { WebsiteScrapeFlow } from "@/components/flows/website-scrape";
 // LinkedIn Profile Scrape components
 import { LinkedInProfileScrapeFlow } from "@/components/flows/linkedin-profile-scrape";
 
+// Slack Messages Sync components
+import { SlackMessagesSyncFlow } from "@/components/flows/slack-messages-sync";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -313,8 +316,14 @@ export default function FlowPage() {
 
   // === DISCORD AUTOMATION FLOW RENDER ===
 
-  if (config.isDiscordAutomationFlow) {
+   if (config.isDiscordAutomationFlow) {
     return <DiscordAutomationFlow />;
+  }
+
+  // === SLACK MESSAGES SYNC FLOW RENDER ===
+
+  if (config.isSlackMessagesSyncFlow) {
+    return <SlackMessagesSyncFlow />;
   }
 
   // === BIRTHDAY REMINDER FLOW RENDER ===

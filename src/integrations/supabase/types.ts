@@ -1225,6 +1225,66 @@ export type Database = {
         }
         Relationships: []
       }
+      slack_messages_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_polled_at: string | null
+          messages_imported: number
+          search_mode: boolean
+          selected_channel_ids: string[] | null
+          selected_workspace_ids: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_polled_at?: string | null
+          messages_imported?: number
+          search_mode?: boolean
+          selected_channel_ids?: string[] | null
+          selected_workspace_ids?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_polled_at?: string | null
+          messages_imported?: number
+          search_mode?: boolean
+          selected_channel_ids?: string[] | null
+          selected_workspace_ids?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      slack_processed_messages: {
+        Row: {
+          created_at: string
+          id: string
+          slack_message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          slack_message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          slack_message_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       todoist_automation_config: {
         Row: {
           created_at: string

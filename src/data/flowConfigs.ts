@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -623,6 +623,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "WEBSITE",
     fields: [],
     isWebsiteScrapeFlow: true,
+  },
+  "slack-messages-sync": {
+    id: "slack-messages-sync",
+    title: "Slack Messages to Memory",
+    subtitle: "Import Slack messages",
+    description: "Import Slack messages from across workspaces and channels as memories.",
+    gradient: "purple",
+    icon: MessagesSquare,
+    entryName: "message",
+    entryNamePlural: "messages",
+    memoryTag: "SLACK",
+    fields: [],
+    isSlackMessagesSyncFlow: true,
   },
 };
 
