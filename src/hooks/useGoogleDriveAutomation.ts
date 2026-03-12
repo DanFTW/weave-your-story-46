@@ -328,6 +328,7 @@ export function useGoogleDriveAutomation() {
   return {
     phase, setPhase, config, stats, isLoading, isActivating, isPolling,
     isSearching, searchResults, isSaving,
+    activeSource, setActiveSource,
     generatedMemories, selectedDoc, isConfirming, savedCount,
     loadConfig, activateMonitoring, deactivateMonitoring,
     searchDocs, generateFromDoc,
