@@ -487,10 +487,10 @@ async function syncInstagramContent(
 
               const postMediaUrl = getDisplayMediaUrl(item) || undefined;
               const content = formatCommentMemory(comment, item.caption || undefined, postMediaUrl);
-              const ok = await createMemory(apiKeys, content, null);
+              const { success: ok, memoryId } = await createMemory(apiKeys, content, null);
 
               if (ok) {
-                const recorded = await persistSyncRecord(supabase, userId, commentKey);
+                const recorded = await persistSyncRecord(supabase, userId, commentKey, memoryId);
                 if (recorded) {
                   commentsSynced++;
                   totalMemories++;
