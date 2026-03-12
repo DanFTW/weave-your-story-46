@@ -131,6 +131,53 @@ export function useComposio(toolkit: string): UseComposioReturn {
 
       // Build redirect URL to OAuth completion page using current origin
       const baseUrl = window.location.origin;
+
+      // --- SLACK: Native OAuth (bypass Composio) ---
+      if (toolkit.toLowerCase() === "slack") {
+        const isMobile = isMobileBrowser();
+        const returnUrl = customRedirectPath 
+          ? `${baseUrl}${customRedirectPath}`
+          : `${baseUrl}/integration/slack`;
+        if (isMobile) {
+          localStorage.setItem('oauth_return_url', returnUrl);
+        } else {
+          sessionStorage.setItem('oauth_return_url', returnUrl);
+        }
+
+        const { data, error } = await supabase.functions.invoke("slack-oauth", {
+          body: { action: "initiate" },
+        });
+
+        if (error || !data?.redirectUrl) {
+          console.error("Slack OAuth initiate error:", error);
+          toast.error("Failed to start Slack connection");
+          setConnecting(false);
+          return;
+        }
+
+        // Start polling for connection status
+        startPolling();
+
+        // Redirect to Slack OAuth
+        if (isMedian()) {
+          const opened = median.window.open(data.redirectUrl, 'appbrowser');
+          if (!opened) {
+            stopPolling();
+            window.location.assign(data.redirectUrl);
+          }
+        } else if (isMobile) {
+          stopPolling();
+          window.location.assign(data.redirectUrl);
+        } else {
+          const popup = window.open(data.redirectUrl, '_blank');
+          if (!popup || popup.closed) {
+            stopPolling();
+            window.location.assign(data.redirectUrl);
+          }
+        }
+        return;
+      }
+      // --- END SLACK ---
       
       // Store return URL for redirect after OAuth completion
       // Use localStorage on mobile (survives navigation to external OAuth sites)
