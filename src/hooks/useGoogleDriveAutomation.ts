@@ -249,7 +249,7 @@ export function useGoogleDriveAutomation() {
       });
       setPhase('ready');
     }
-  }, [toast, getSession]);
+  }, [toast, getSession, activeSource]);
 
   const updateMemory = useCallback((id: string, content: string) => {
     setGeneratedMemories(prev => prev.map(m => m.id === id ? { ...m, content } : m));
