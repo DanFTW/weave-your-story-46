@@ -357,6 +357,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
   return {
     connectedAccount,
     connecting,
+    checking,
     isConnected,
     connect,
     disconnect,

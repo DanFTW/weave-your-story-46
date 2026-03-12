@@ -136,7 +136,7 @@ export default function IntegrationDetail() {
     navigate("/integrations");
   };
 
-  const isLoading = connecting;
+  const isLoading = connecting || checking;
 
   const returnUrl = `${window.location.origin}/integration/${integrationId}`;
 
