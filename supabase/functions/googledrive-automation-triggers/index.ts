@@ -98,23 +98,28 @@ function safeJsonParse(text: string): any {
 function extractTextContent(data: any): string {
   if (!data?.data) return "";
 
-  const rd = data.data.response_data;
+  const d = data.data;
+  // Check downloaded_file_content (Google Drive download response)
+  if (typeof d.downloaded_file_content === "string" && d.downloaded_file_content.trim()) return d.downloaded_file_content.trim();
+
+  const rd = d.response_data;
   // Direct string
   if (typeof rd === "string" && rd.trim()) return rd.trim();
   // Nested .content
   if (rd && typeof rd === "object") {
     if (typeof rd.content === "string" && rd.content.trim()) return rd.content.trim();
     if (typeof rd.text === "string" && rd.text.trim()) return rd.text.trim();
+    if (typeof rd.downloaded_file_content === "string" && rd.downloaded_file_content.trim()) return rd.downloaded_file_content.trim();
     // Base64 bytes field
     if (typeof rd.data === "string" && rd.data.length > 0) {
       try { return new TextDecoder().decode(Uint8Array.from(atob(rd.data), c => c.charCodeAt(0))); } catch { /* not base64 */ }
     }
   }
   // Fallback: data.content
-  if (typeof data.data.content === "string" && data.data.content.trim()) return data.data.content.trim();
+  if (typeof d.content === "string" && d.content.trim()) return d.content.trim();
   // Last resort: stringify if object
   if (rd && typeof rd === "object") return JSON.stringify(rd);
-  if (typeof data.data === "string" && data.data.trim()) return data.data.trim();
+  if (typeof d === "string" && d.trim()) return d.trim();
   return "";
 }
 
