@@ -1,3 +1,5 @@
+export type DocSource = 'googledrive' | 'dropbox';
+
 export type GoogleDriveAutomationPhase =
   | 'auth-check'
   | 'ready'
@@ -27,4 +29,5 @@ export interface GoogleDriveSearchResult {
   createdTime: string;
   webViewLink: string;
   alreadySaved: boolean;
+  source?: DocSource;
 }

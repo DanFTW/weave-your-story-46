@@ -8,6 +8,7 @@ import {
   GoogleDriveAutomationConfig,
   GoogleDriveDocStats,
   GoogleDriveSearchResult,
+  DocSource,
 } from "@/types/googleDriveAutomation";
 
 export function useGoogleDriveAutomation() {
@@ -21,6 +22,7 @@ export function useGoogleDriveAutomation() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<GoogleDriveSearchResult[]>([]);
   const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
+  const [activeSource, setActiveSource] = useState<DocSource>('googledrive');
 
   // Generate → preview → confirm state
   const [generatedMemories, setGeneratedMemories] = useState<GeneratedMemory[]>([]);
@@ -159,7 +161,9 @@ export function useGoogleDriveAutomation() {
       const session = await getSession();
       if (!session) return [];
 
-      const { data, error } = await supabase.functions.invoke('googledrive-automation-triggers', {
+      const fnName = activeSource === 'dropbox' ? 'dropbox-doc-actions' : 'googledrive-automation-triggers';
+
+      const { data, error } = await supabase.functions.invoke(fnName, {
         body: { action: 'search-docs', query },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -179,7 +183,7 @@ export function useGoogleDriveAutomation() {
     } finally {
       setIsSearching(false);
     }
-  }, [toast, getSession]);
+  }, [toast, getSession, activeSource]);
 
   // === NEW: Generate memories from document content ===
 
@@ -191,9 +195,11 @@ export function useGoogleDriveAutomation() {
       const session = await getSession();
       if (!session) { setPhase('ready'); return; }
 
+      const fnName = activeSource === 'dropbox' ? 'dropbox-doc-actions' : 'googledrive-automation-triggers';
+
       // Step 1: Export document content
       const { data: exportData, error: exportError } = await supabase.functions.invoke(
-        'googledrive-automation-triggers',
+        fnName,
         {
           body: { action: 'export-doc', fileId, fileName },
           headers: { Authorization: `Bearer ${session.access_token}` },
@@ -211,9 +217,11 @@ export function useGoogleDriveAutomation() {
         ? content.substring(0, 12000) + '\n\n[Content truncated...]'
         : content;
 
+      const memoryTag = activeSource === 'dropbox' ? 'DROPBOX' : 'GOOGLEDRIVE';
+
       const { data: genData, error: genError } = await supabase.functions.invoke('generate-memories', {
         body: {
-          flowType: 'googledrive-doc',
+          flowType: activeSource === 'dropbox' ? 'dropbox-doc' : 'googledrive-doc',
           entryName: 'document content',
           entryNamePlural: 'document contents',
           entries: [{
@@ -221,7 +229,7 @@ export function useGoogleDriveAutomation() {
             data: { content: truncated, title: fileName },
             createdAt: new Date().toISOString(),
           }],
-          memoryTag: 'GOOGLEDRIVE',
+          memoryTag,
         },
       });
 
@@ -241,7 +249,7 @@ export function useGoogleDriveAutomation() {
       });
       setPhase('ready');
     }
-  }, [toast, getSession]);
+  }, [toast, getSession, activeSource]);
 
   const updateMemory = useCallback((id: string, content: string) => {
     setGeneratedMemories(prev => prev.map(m => m.id === id ? { ...m, content } : m));
@@ -276,7 +284,8 @@ export function useGoogleDriveAutomation() {
       if (selectedDoc) {
         const session = await getSession();
         if (session) {
-          await supabase.functions.invoke('googledrive-automation-triggers', {
+          const saveFnName = activeSource === 'dropbox' ? 'dropbox-doc-actions' : 'googledrive-automation-triggers';
+          await supabase.functions.invoke(saveFnName, {
             body: { action: 'save-doc', fileId: selectedDoc.fileId, fileName: selectedDoc.fileName },
             headers: { Authorization: `Bearer ${session.access_token}` },
           });
@@ -319,6 +328,7 @@ export function useGoogleDriveAutomation() {
   return {
     phase, setPhase, config, stats, isLoading, isActivating, isPolling,
     isSearching, searchResults, isSaving,
+    activeSource, setActiveSource,
     generatedMemories, selectedDoc, isConfirming, savedCount,
     loadConfig, activateMonitoring, deactivateMonitoring,
     searchDocs, generateFromDoc,

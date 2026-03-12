@@ -1,18 +1,31 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Loader2, FileText, Check } from "lucide-react";
+import { Search, Loader2, FileText, Check, HardDrive, Cloud } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { GoogleDriveSearchResult } from "@/types/googleDriveAutomation";
+import { GoogleDriveSearchResult, DocSource } from "@/types/googleDriveAutomation";
+import { cn } from "@/lib/utils";
 
 interface DocumentSearchProps {
   isSearching: boolean;
   searchResults: GoogleDriveSearchResult[];
   isSaving: Record<string, boolean>;
+  activeSource: DocSource;
+  availableSources: DocSource[];
+  onSourceChange: (source: DocSource) => void;
   onSearch: (query: string) => void;
   onGenerate: (fileId: string, fileName: string) => void;
 }
 
-export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch, onGenerate }: DocumentSearchProps) {
+const sourceConfig: Record<DocSource, { label: string; icon: typeof HardDrive; color: string }> = {
+  googledrive: { label: "Google Drive", icon: HardDrive, color: "#4285F4" },
+  dropbox: { label: "Dropbox", icon: Cloud, color: "#0061FF" },
+};
+
+export function DocumentSearch({
+  isSearching, searchResults, isSaving,
+  activeSource, availableSources, onSourceChange,
+  onSearch, onGenerate,
+}: DocumentSearchProps) {
   const [query, setQuery] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -22,6 +35,13 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, []);
+
+  const handleSourceChange = (source: DocSource) => {
+    if (source === activeSource) return;
+    setQuery("");
+    setHasSearched(false);
+    onSourceChange(source);
+  };
 
   const handleInputChange = (value: string) => {
     setQuery(value);
@@ -46,12 +66,41 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
     onSearch(query.trim());
   };
 
+  const showToggle = availableSources.length > 1;
+  const activeCfg = sourceConfig[activeSource];
+
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Search Documents</h3>
-        <p className="text-xs text-muted-foreground">Find Google Docs by title and generate memories</p>
+        <p className="text-xs text-muted-foreground">Find documents by title and generate memories</p>
       </div>
+
+      {/* Source toggle */}
+      {showToggle && (
+        <div className="flex gap-1 p-1 bg-secondary/50 rounded-xl">
+          {availableSources.map((source) => {
+            const cfg = sourceConfig[source];
+            const isActive = source === activeSource;
+            const Icon = cfg.icon;
+            return (
+              <button
+                key={source}
+                onClick={() => handleSourceChange(source)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all",
+                  isActive
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {cfg.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <div className="relative flex-1">
@@ -67,7 +116,8 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
         <Button
           onClick={handleSearch}
           disabled={isSearching || !query.trim()}
-          className="h-11 px-5 rounded-xl bg-[#4285F4] hover:bg-[#4285F4]/90 text-white"
+          style={{ backgroundColor: activeCfg.color }}
+          className="h-11 px-5 rounded-xl text-white hover:opacity-90"
         >
           {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
         </Button>
@@ -75,7 +125,7 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
 
       {isSearching && (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 text-[#4285F4] animate-spin" />
+          <Loader2 className="w-6 h-6 animate-spin" style={{ color: activeCfg.color }} />
         </div>
       )}
 
@@ -111,7 +161,8 @@ export function DocumentSearch({ isSearching, searchResults, isSaving, onSearch,
                   size="sm"
                   onClick={() => onGenerate(doc.id, doc.name)}
                   disabled={isSaving[doc.id]}
-                  className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white rounded-lg shrink-0"
+                  style={{ backgroundColor: activeCfg.color }}
+                  className="text-white rounded-lg shrink-0 hover:opacity-90"
                 >
                   {isSaving[doc.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Generate"}
                 </Button>
