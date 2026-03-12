@@ -43,13 +43,14 @@ export function SlackMessagesSyncFlow() {
 
       const { data } = await supabase
         .from("user_integrations")
-        .select("status")
+        .select("status, composio_connection_id")
         .eq("user_id", user.id)
         .eq("integration_id", "slack")
         .eq("status", "connected")
         .maybeSingle();
 
-      setIsSlackConnected(!!data);
+      const hasUsableToken = Boolean(data?.composio_connection_id);
+      setIsSlackConnected(hasUsableToken);
       setIsCheckingAuth(false);
     };
     checkSlackAuth();
