@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSlackMessagesSync } from "@/hooks/useSlackMessagesSync";

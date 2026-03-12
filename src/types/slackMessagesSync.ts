@@ -2,7 +2,8 @@ export type SlackMessagesSyncPhase =
   | 'auth-check'
   | 'select-channels'
   | 'activating'
-  | 'active';
+  | 'active'
+  | 'needs-reconnect';
 
 export interface SlackChannel {
   id: string;
