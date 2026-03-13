@@ -17,6 +17,7 @@ export interface SlackChannel {
   name: string;
   isMember: boolean;
   isPrivate: boolean;
+  isDm?: boolean;
   numMembers?: number;
 }
 
