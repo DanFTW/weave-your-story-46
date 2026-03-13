@@ -202,7 +202,7 @@ export function SlackMessagesSyncFlow() {
             channels={channels}
             isLoading={isLoading}
             onConfirmChannels={handleChannelsConfirmed}
-            onRefresh={fetchChannels}
+            onRefresh={() => fetchChannels(workspace?.id)}
           />
         )}
       </div>

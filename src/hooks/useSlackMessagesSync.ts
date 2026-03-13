@@ -128,10 +128,10 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     setIsLoading(false);
   }, [hasInitialized, loadConfig]);
 
-  const fetchChannels = useCallback(async () => {
+  const fetchChannels = useCallback(async (teamId?: string) => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("slack-messages-sync", { body: { action: "list-channels" } });
+      const { data, error } = await supabase.functions.invoke("slack-messages-sync", { body: { action: "list-channels", ...(teamId && { teamId }) } });
       if (error) throw error;
       if (data.error) {
         if (data.error === "Slack not connected" || data.needsReconnect) { setPhase("needs-reconnect"); return; }
