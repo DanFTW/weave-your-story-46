@@ -62,7 +62,7 @@ export function ChannelPicker({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Select channels to monitor.
+          Select channels or DMs to monitor.
         </p>
         <Button variant="ghost" size="icon" onClick={onRefresh} disabled={isLoading}>
           <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
