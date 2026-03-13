@@ -1235,6 +1235,8 @@ export type Database = {
           search_mode: boolean
           selected_channel_ids: string[] | null
           selected_workspace_ids: string[] | null
+          trigger_word: string | null
+          trigger_word_enabled: boolean | null
           updated_at: string
           user_id: string
         }
@@ -1247,6 +1249,8 @@ export type Database = {
           search_mode?: boolean
           selected_channel_ids?: string[] | null
           selected_workspace_ids?: string[] | null
+          trigger_word?: string | null
+          trigger_word_enabled?: boolean | null
           updated_at?: string
           user_id: string
         }
@@ -1259,6 +1263,8 @@ export type Database = {
           search_mode?: boolean
           selected_channel_ids?: string[] | null
           selected_workspace_ids?: string[] | null
+          trigger_word?: string | null
+          trigger_word_enabled?: boolean | null
           updated_at?: string
           user_id?: string
         }
