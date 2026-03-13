@@ -437,5 +437,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     resetConfig,
     initializeAfterAuthCheck,
     workspaceError,
+    recentMessages,
+    fetchRecentMessages,
   };
 }
