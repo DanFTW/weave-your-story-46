@@ -536,11 +536,34 @@ serve(async (req) => {
           });
         }
 
+        // Diagnostic logging
+        console.log(`[Discord Poll] Fetched ${messages.length} messages`);
+        if (messages.length > 0) {
+          const sample = messages[0];
+          console.log(`[Discord Poll] Sample msg: id=${sample.id}, author.bot=${sample.author?.bot}, content.length=${(sample.content || '').length}, embeds=${sample.embeds?.length || 0}, attachments=${sample.attachments?.length || 0}, content="${(sample.content || '').substring(0, 80)}"`);
+        }
+        const botCount = messages.filter((m: any) => m.author?.bot).length;
+        const emptyCount = messages.filter((m: any) => !m.author?.bot && !(m.content?.trim()) && !(m.embeds?.length) && !(m.attachments?.length)).length;
+        console.log(`[Discord Poll] Skipping: ${botCount} bot msgs, ${emptyCount} truly-empty msgs`);
+
         let imported = 0;
         for (const msg of messages) {
-          // Skip bot messages and empty content
+          // Skip bot messages
           if (msg.author?.bot) continue;
-          if (!msg.content || msg.content.trim() === "") continue;
+
+          // Build content from message body, embeds, or attachments
+          let messageText = msg.content?.trim() || '';
+          if (!messageText && msg.embeds?.length > 0) {
+            messageText = msg.embeds
+              .map((e: any) => [e.title, e.description].filter(Boolean).join(': '))
+              .join('\n');
+          }
+          if (!messageText && msg.attachments?.length > 0) {
+            messageText = msg.attachments
+              .map((a: any) => `[Attachment: ${a.filename}]`)
+              .join(', ');
+          }
+          if (!messageText) continue; // truly empty
 
           // Deduplicate
           const { data: dup } = await supabaseClient
@@ -558,7 +581,7 @@ serve(async (req) => {
           });
           const authorDisplayName = msg.author?.global_name || msg.author?.username || "Unknown";
           const authorUsername = msg.author?.username || "unknown";
-          const memContent = `💬 Discord Message in #${pollConfig.channel_name || "unknown"}\n\nFrom: ${authorDisplayName} (@${authorUsername})\nMessage: ${msg.content}\nSent: ${sentDate}`;
+          const memContent = `💬 Discord Message in #${pollConfig.channel_name || "unknown"}\n\nFrom: ${authorDisplayName} (@${authorUsername})\nMessage: ${messageText}\nSent: ${sentDate}`;
 
           const memRes = await fetch(`${SUPABASE_URL}/functions/v1/liam-memory`, {
             method: "POST",
