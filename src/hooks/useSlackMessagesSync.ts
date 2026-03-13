@@ -33,6 +33,8 @@ interface UseSlackMessagesSyncReturn {
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
   workspaceError: boolean;
+  recentMessages: SlackRecentMessage[];
+  fetchRecentMessages: () => Promise<void>;
 }
 
 export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
