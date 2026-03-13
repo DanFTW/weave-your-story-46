@@ -198,7 +198,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
       setPhase("active");
       const label = selectedChannelNames.map(n => `#${n}`).join(", ");
-      toast({ title: "Channel monitor activated", description: `Now monitoring ${label}.` });
+      toast({ title: "Message monitor activated", description: `Now monitoring ${label}.` });
     } catch (error) {
       console.error("Failed to activate:", error);
       setPhase("select-channels");
