@@ -377,22 +377,9 @@ serve(async (req) => {
 
           const memoryContent = `Slack message from ${msg.username || "unknown"} in #${msg.channel?.name || "unknown"}: ${msg.text}`;
 
-          const liamResp = await fetch("https://web.askbuddy.ai/api/memories", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": liamApiKey,
-              "x-user-key": liamUserKey,
-              "x-private-key": liamPrivateKey,
-              "x-user-id": user.id,
-            },
-            body: JSON.stringify({
-              content: memoryContent,
-              tags: ["SLACK"],
-            }),
-          });
+          const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
 
-          if (liamResp.ok) {
+          if (liamResult.ok) {
             await adminClient.from("slack_processed_messages").insert({
               user_id: user.id,
               slack_message_id: messageId,
