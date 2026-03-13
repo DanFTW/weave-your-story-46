@@ -195,6 +195,8 @@ export type Database = {
           server_id: string | null
           server_name: string | null
           trigger_instance_id: string | null
+          trigger_word: string | null
+          trigger_word_enabled: boolean | null
           updated_at: string
           user_id: string
         }
@@ -210,6 +212,8 @@ export type Database = {
           server_id?: string | null
           server_name?: string | null
           trigger_instance_id?: string | null
+          trigger_word?: string | null
+          trigger_word_enabled?: boolean | null
           updated_at?: string
           user_id: string
         }
@@ -225,6 +229,8 @@ export type Database = {
           server_id?: string | null
           server_name?: string | null
           trigger_instance_id?: string | null
+          trigger_word?: string | null
+          trigger_word_enabled?: boolean | null
           updated_at?: string
           user_id?: string
         }
@@ -232,21 +238,27 @@ export type Database = {
       }
       discord_processed_messages: {
         Row: {
+          author_name: string | null
           created_at: string
           discord_message_id: string
           id: string
+          message_content: string | null
           user_id: string
         }
         Insert: {
+          author_name?: string | null
           created_at?: string
           discord_message_id: string
           id?: string
+          message_content?: string | null
           user_id: string
         }
         Update: {
+          author_name?: string | null
           created_at?: string
           discord_message_id?: string
           id?: string
+          message_content?: string | null
           user_id?: string
         }
         Relationships: []
