@@ -19,6 +19,7 @@ interface UseSlackMessagesSyncReturn {
   isLoading: boolean;
   isPolling: boolean;
   stats: SlackMessagesSyncStats;
+  recentMessages: SlackRecentMessage[];
   fetchChannels: () => Promise<void>;
   fetchWorkspace: () => Promise<void>;
   selectWorkspace: (workspace: SlackWorkspace) => void;
