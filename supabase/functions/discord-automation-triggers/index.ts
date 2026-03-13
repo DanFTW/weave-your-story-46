@@ -546,6 +546,12 @@ serve(async (req) => {
         const emptyCount = messages.filter((m: any) => !m.author?.bot && !(m.content?.trim()) && !(m.embeds?.length) && !(m.attachments?.length)).length;
         console.log(`[Discord Poll] Skipping: ${botCount} bot msgs, ${emptyCount} truly-empty msgs`);
 
+        // TRIGGER WORD BEHAVIOR: When enabled, this filters ALL messages in the channel
+        // by whether they contain the trigger word (case-insensitive). It applies to messages
+        // from ANY user in the channel, not just the authenticated Supabase user.
+        const pollTriggerWordEnabled = pollConfig.trigger_word_enabled === true;
+        const pollTriggerWord = pollConfig.trigger_word || "";
+
         let imported = 0;
         for (const msg of messages) {
           // Skip bot messages
@@ -564,6 +570,13 @@ serve(async (req) => {
               .join(', ');
           }
           if (!messageText) continue; // truly empty
+
+          // Trigger word filter
+          if (pollTriggerWordEnabled && pollTriggerWord) {
+            if (!messageText.toLowerCase().includes(pollTriggerWord.toLowerCase())) {
+              continue;
+            }
+          }
 
           // Deduplicate
           const { data: dup } = await supabaseClient
@@ -600,7 +613,12 @@ serve(async (req) => {
 
           await supabaseClient
             .from("discord_processed_messages")
-            .insert({ user_id: user.id, discord_message_id: msg.id });
+            .insert({
+              user_id: user.id,
+              discord_message_id: msg.id,
+              message_content: messageText.substring(0, 500),
+              author_name: authorDisplayName,
+            });
 
           imported++;
         }
@@ -618,6 +636,149 @@ serve(async (req) => {
 
         console.log(`[Discord Poll] Imported ${imported} messages`);
         return new Response(JSON.stringify({ messagesImported: imported }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "search": {
+        // Search channel messages by query string and import matches as memories
+        const { query: searchQuery } = await req.json().catch(() => ({ query: "" }));
+
+        const { data: searchConfig } = await supabaseClient
+          .from("discord_automation_config")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+
+        if (!searchConfig || !searchConfig.channel_id) {
+          return new Response(JSON.stringify({ error: "No channel configured" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const searchBotToken = Deno.env.get("DISCORD_BOT_TOKEN");
+        if (!searchBotToken) {
+          return new Response(JSON.stringify({ error: "Bot token not configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Fetch last 50 messages and filter client-side (Discord bots can't use search API)
+        const searchMessagesUrl = `https://discord.com/api/v10/channels/${searchConfig.channel_id}/messages?limit=50`;
+        const searchCtrl = new AbortController();
+        const searchTimeout = setTimeout(() => searchCtrl.abort(), 15_000);
+
+        let searchMessages: any[];
+        try {
+          const sRes = await fetch(searchMessagesUrl, {
+            headers: { Authorization: `Bot ${searchBotToken}` },
+            signal: searchCtrl.signal,
+          });
+          clearTimeout(searchTimeout);
+
+          if (!sRes.ok) {
+            return new Response(JSON.stringify({ error: `Discord API error (${sRes.status})` }), {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          searchMessages = await sRes.json();
+        } catch (e) {
+          clearTimeout(searchTimeout);
+          return new Response(JSON.stringify({ error: "Failed to fetch messages for search" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (!Array.isArray(searchMessages)) {
+          return new Response(JSON.stringify({ messagesImported: 0 }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const queryLower = (searchQuery || "").toLowerCase();
+        let searchImported = 0;
+
+        for (const msg of searchMessages) {
+          if (msg.author?.bot) continue;
+
+          let messageText = msg.content?.trim() || '';
+          if (!messageText && msg.embeds?.length > 0) {
+            messageText = msg.embeds
+              .map((e: any) => [e.title, e.description].filter(Boolean).join(': '))
+              .join('\n');
+          }
+          if (!messageText && msg.attachments?.length > 0) {
+            messageText = msg.attachments
+              .map((a: any) => `[Attachment: ${a.filename}]`)
+              .join(', ');
+          }
+          if (!messageText) continue;
+
+          // Filter by search query
+          if (queryLower && !messageText.toLowerCase().includes(queryLower)) {
+            continue;
+          }
+
+          // Deduplicate
+          const { data: dup } = await supabaseClient
+            .from("discord_processed_messages")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("discord_message_id", msg.id)
+            .maybeSingle();
+          if (dup) continue;
+
+          const sentDate = new Date(msg.timestamp).toLocaleString("en-US", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          });
+          const authorDisplayName = msg.author?.global_name || msg.author?.username || "Unknown";
+          const authorUsername = msg.author?.username || "unknown";
+          const memContent = `💬 Discord Message in #${searchConfig.channel_name || "unknown"}\n\nFrom: ${authorDisplayName} (@${authorUsername})\nMessage: ${messageText}\nSent: ${sentDate}`;
+
+          const memRes = await fetch(`${SUPABASE_URL}/functions/v1/liam-memory`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "x-supabase-user-id": user.id,
+            },
+            body: JSON.stringify({ action: "create", content: memContent, tag: "DISCORD" }),
+          });
+
+          if (!memRes.ok) {
+            console.error("[Discord Search] Memory creation failed for msg:", msg.id);
+            continue;
+          }
+
+          await supabaseClient
+            .from("discord_processed_messages")
+            .insert({
+              user_id: user.id,
+              discord_message_id: msg.id,
+              message_content: messageText.substring(0, 500),
+              author_name: authorDisplayName,
+            });
+
+          searchImported++;
+        }
+
+        if (searchImported > 0) {
+          await supabaseClient
+            .from("discord_automation_config")
+            .update({
+              messages_tracked: (searchConfig.messages_tracked || 0) + searchImported,
+              last_checked_at: new Date().toISOString(),
+            })
+            .eq("user_id", user.id);
+        }
+
+        console.log(`[Discord Search] Imported ${searchImported} messages for query "${searchQuery}"`);
+        return new Response(JSON.stringify({ messagesImported: searchImported }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
