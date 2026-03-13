@@ -30,10 +30,20 @@ export interface DiscordAutomationConfig {
   connectedAccountId: string | null;
   messagesTracked: number;
   lastCheckedAt: string | null;
+  triggerWord: string;
+  triggerWordEnabled: boolean;
 }
 
 export interface DiscordAutomationStats {
   messagesTracked: number;
   lastChecked: string | null;
   isActive: boolean;
+}
+
+export interface DiscordRecentMessage {
+  id: string;
+  discordMessageId: string;
+  messageContent: string | null;
+  authorName: string | null;
+  createdAt: string;
 }

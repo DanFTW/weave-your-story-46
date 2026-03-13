@@ -7,6 +7,7 @@ import {
   DiscordChannel,
   DiscordAutomationConfig,
   DiscordAutomationStats,
+  DiscordRecentMessage,
 } from "@/types/discordAutomation";
 
 interface UseDiscordAutomationReturn {
@@ -29,6 +30,11 @@ interface UseDiscordAutomationReturn {
   initializeAfterAuthCheck: () => Promise<void>;
   syncNow: () => Promise<void>;
   isSyncing: boolean;
+  recentMessages: DiscordRecentMessage[];
+  triggerWord: string;
+  triggerWordEnabled: boolean;
+  updateTriggerWord: (word: string, enabled: boolean) => Promise<void>;
+  searchChannel: (query: string) => Promise<void>;
 }
 
 export function useDiscordAutomation(): UseDiscordAutomationReturn {
@@ -43,12 +49,42 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [recentMessages, setRecentMessages] = useState<DiscordRecentMessage[]>([]);
+  const [triggerWord, setTriggerWord] = useState("");
+  const [triggerWordEnabled, setTriggerWordEnabled] = useState(false);
 
   const stats: DiscordAutomationStats = {
     messagesTracked: config?.messagesTracked ?? 0,
     lastChecked: config?.lastCheckedAt ?? null,
     isActive: config?.isActive ?? false,
   };
+
+  const loadRecentMessages = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("discord_processed_messages" as any)
+      .select("*")
+      .eq("user_id", user.id)
+      .not("message_content", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (data) {
+      setRecentMessages(
+        (data as any[]).map((r) => ({
+          id: r.id,
+          discordMessageId: r.discord_message_id,
+          messageContent: r.message_content,
+          authorName: r.author_name,
+          createdAt: r.created_at,
+        }))
+      );
+    }
+  }, []);
 
   const loadConfig = useCallback(async () => {
     const {
@@ -76,10 +112,16 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
         connectedAccountId: c.connected_account_id,
         messagesTracked: c.messages_tracked ?? 0,
         lastCheckedAt: c.last_checked_at,
+        triggerWord: c.trigger_word || "",
+        triggerWordEnabled: c.trigger_word_enabled ?? false,
       });
+      setTriggerWord(c.trigger_word || "");
+      setTriggerWordEnabled(c.trigger_word_enabled ?? false);
 
       if (c.is_active) {
         setPhase("active");
+        // Load recent messages when active
+        await loadRecentMessages();
       } else if (c.channel_id) {
         setPhase("configure");
       } else if (c.server_id) {
@@ -90,7 +132,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } else {
       setPhase("select-server");
     }
-  }, []);
+  }, [loadRecentMessages]);
 
   const initializeAfterAuthCheck = useCallback(async () => {
     if (hasInitialized) return;
@@ -217,6 +259,8 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
                 connectedAccountId: null,
                 messagesTracked: 0,
                 lastCheckedAt: null,
+                triggerWord: "",
+                triggerWordEnabled: false,
               }
         );
 
@@ -403,6 +447,9 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       setConfig(null);
       setServers([]);
       setChannels([]);
+      setRecentMessages([]);
+      setTriggerWord("");
+      setTriggerWordEnabled(false);
       setPhase("select-server");
     } catch (error) {
       console.error("Failed to reset:", error);
@@ -439,8 +486,9 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
           ? `Imported ${count} new message${count > 1 ? "s" : ""}.`
           : "No new messages found.",
       });
-      // Refresh config to update stats
+      // Refresh config and recent messages
       await loadConfig();
+      await loadRecentMessages();
     } catch (error) {
       console.error("Failed to sync:", error);
       toast({
@@ -451,7 +499,76 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } finally {
       setIsSyncing(false);
     }
-  }, [toast, loadConfig]);
+  }, [toast, loadConfig, loadRecentMessages]);
+
+  const updateTriggerWord = useCallback(async (word: string, enabled: boolean) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    try {
+      await supabase
+        .from("discord_automation_config" as any)
+        .update({ trigger_word: word || null, trigger_word_enabled: enabled })
+        .eq("user_id", user.id);
+
+      setTriggerWord(word);
+      setTriggerWordEnabled(enabled);
+      setConfig((prev) => prev ? { ...prev, triggerWord: word, triggerWordEnabled: enabled } : null);
+
+      toast({
+        title: "Trigger word updated",
+        description: enabled && word
+          ? `Only messages containing "${word}" will be saved`
+          : "All messages will be saved",
+      });
+    } catch (error) {
+      console.error("Failed to update trigger word:", error);
+      toast({
+        title: "Update failed",
+        description: "Could not update trigger word settings.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  const searchChannel = useCallback(async (query: string) => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "discord-automation-triggers",
+        { body: { action: "search", query } }
+      );
+      if (error) throw error;
+      if (data?.error) {
+        toast({
+          title: "Search failed",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
+      }
+      const count = data?.messagesImported ?? 0;
+      toast({
+        title: "Search complete",
+        description: count > 0
+          ? `Found and imported ${count} matching message${count > 1 ? "s" : ""}.`
+          : "No matching messages found.",
+      });
+      await loadConfig();
+      await loadRecentMessages();
+    } catch (error) {
+      console.error("Failed to search:", error);
+      toast({
+        title: "Search failed",
+        description: "Could not search messages. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [toast, loadConfig, loadRecentMessages]);
 
   return {
     phase,
@@ -473,5 +590,10 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     initializeAfterAuthCheck,
     syncNow,
     isSyncing,
+    recentMessages,
+    triggerWord,
+    triggerWordEnabled,
+    updateTriggerWord,
+    searchChannel,
   };
 }

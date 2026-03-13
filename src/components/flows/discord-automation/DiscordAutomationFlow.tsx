@@ -35,6 +35,11 @@ export function DiscordAutomationFlow() {
     initializeAfterAuthCheck,
     syncNow,
     isSyncing,
+    recentMessages,
+    triggerWord,
+    triggerWordEnabled,
+    updateTriggerWord,
+    searchChannel,
   } = useDiscordAutomation();
 
   // Check Discord connection on mount
@@ -98,11 +103,16 @@ export function DiscordAutomationFlow() {
         stats={stats}
         serverName={config?.serverName || "Unknown Server"}
         channelName={config?.channelName || "Unknown Channel"}
+        recentMessages={recentMessages}
         onPause={deactivateMonitoring}
         onReset={resetConfig}
         onSyncNow={syncNow}
+        onSearch={searchChannel}
         isLoading={isLoading}
         isSyncing={isSyncing}
+        triggerWord={triggerWord}
+        triggerWordEnabled={triggerWordEnabled}
+        onUpdateTriggerWord={updateTriggerWord}
       />
     );
   }
