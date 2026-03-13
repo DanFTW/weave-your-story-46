@@ -177,9 +177,12 @@ serve(async (req) => {
       let totalImported = 0;
 
       try {
+        const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+
         const historyResult = await slackApi("conversations.history", {
           channel: channelId,
-          limit: 20,
+          limit: 200,
+          oldest: String(thirtyDaysAgo),
         });
 
         if (historyResult.ok) {
