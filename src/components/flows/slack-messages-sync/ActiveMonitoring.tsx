@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { ChevronLeft, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, Search } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronUp, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, Search, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { SlackMessagesSyncStats } from "@/types/slackMessagesSync";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SlackMessagesSyncStats, SlackRecentMessage } from "@/types/slackMessagesSync";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
 interface ActiveMonitoringProps {
   stats: SlackMessagesSyncStats;
+  recentMessages: SlackRecentMessage[];
   onPause: () => Promise<void>;
   onSyncNow: () => Promise<void>;
   onSearch: (query: string) => Promise<void>;
@@ -18,6 +20,7 @@ interface ActiveMonitoringProps {
 
 export function ActiveMonitoring({
   stats,
+  recentMessages,
   onPause,
   onSyncNow,
   onSearch,
@@ -27,6 +30,7 @@ export function ActiveMonitoring({
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [messagesOpen, setMessagesOpen] = useState(true);
 
   const lastPolledText = stats.lastPolled
     ? formatDistanceToNow(new Date(stats.lastPolled), { addSuffix: true })
@@ -105,6 +109,63 @@ export function ActiveMonitoring({
             <p className="text-sm font-medium text-foreground">{lastPolledText}</p>
           </div>
         </div>
+
+        {/* Recent Messages */}
+        <Collapsible open={messagesOpen} onOpenChange={setMessagesOpen}>
+          <div className="rounded-xl bg-card border border-border overflow-hidden">
+            <CollapsibleTrigger asChild>
+              <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-[#4A154B]" />
+                  <span className="font-medium text-foreground text-sm">Recent Messages</span>
+                  {recentMessages.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-[#4A154B]/10 text-[#4A154B] text-xs font-medium">
+                      {recentMessages.length}
+                    </span>
+                  )}
+                </div>
+                {messagesOpen ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="border-t border-border">
+                {recentMessages.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <p className="text-sm text-muted-foreground">No messages imported yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Tap "Sync Now" to import messages</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border max-h-80 overflow-y-auto">
+                    {recentMessages.map((msg) => (
+                      <div key={msg.id} className="px-4 py-3 flex gap-3">
+                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <User className="w-3.5 h-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm font-medium text-foreground truncate">
+                              {msg.authorName || "Unknown"}
+                            </span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                              {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
+                            {msg.messageContent || "No content"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
 
         {/* Search */}
         <div className="p-4 rounded-xl bg-card border border-border">
