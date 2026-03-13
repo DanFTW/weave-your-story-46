@@ -311,6 +311,25 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     }
   }, [toast, fetchRecentMessages]);
 
+  const updateTriggerWord = useCallback(async (word: string, enabled: boolean) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from("slack_messages_config" as any)
+        .update({ trigger_word: word || null, trigger_word_enabled: enabled })
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setTriggerWord(word);
+      setTriggerWordEnabled(enabled);
+      setConfig(prev => prev ? { ...prev, triggerWord: word || null, triggerWordEnabled: enabled } : null);
+      toast({ title: "Trigger word updated", description: enabled && word ? `Filtering for "${word}"` : "All messages will be saved." });
+    } catch (error) {
+      console.error("Failed to update trigger word:", error);
+      toast({ title: "Update failed", description: "Could not save trigger word settings.", variant: "destructive" });
+    }
+  }, [toast]);
+
   const resetConfig = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
