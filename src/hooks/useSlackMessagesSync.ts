@@ -19,6 +19,9 @@ interface UseSlackMessagesSyncReturn {
   isLoading: boolean;
   isPolling: boolean;
   stats: SlackMessagesSyncStats;
+  triggerWord: string;
+  triggerWordEnabled: boolean;
+  updateTriggerWord: (word: string, enabled: boolean) => Promise<void>;
   fetchChannels: (teamId?: string) => Promise<void>;
   fetchWorkspace: () => Promise<void>;
   selectWorkspace: (workspace: SlackWorkspace) => void;
