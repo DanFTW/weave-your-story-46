@@ -36,6 +36,8 @@ export function SlackMessagesSyncFlow() {
     resetConfig,
     initializeAfterAuthCheck,
     workspaceError,
+    recentMessages,
+    fetchRecentMessages,
   } = useSlackMessagesSync();
 
   useEffect(() => {
