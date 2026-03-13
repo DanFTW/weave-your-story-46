@@ -282,25 +282,14 @@ serve(async (req) => {
 
             const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
 
-            const liamPayload = { content: memoryContent, tags: ["SLACK"] };
-            console.log(`[poll] Sending to LIAM API:`, JSON.stringify(liamPayload));
+            const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
 
-            const liamResp = await fetch("https://web.askbuddy.ai/api/memories", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-api-key": liamApiKey,
-                "x-user-key": liamUserKey,
-                "x-private-key": liamPrivateKey,
-                "x-user-id": user.id,
-              },
-              body: JSON.stringify(liamPayload),
-            });
+            console.log(`[poll] Sending to LIAM API:`, JSON.stringify({ content: memoryContent }));
 
-            const liamRespText = await liamResp.text();
-            console.log(`[poll] LIAM API response status=${liamResp.status} body=${liamRespText}`);
+            const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
+            console.log(`[poll] LIAM API response status=${liamResult.status} body=${liamResult.body}`);
 
-            if (liamResp.ok) {
+            if (liamResult.ok) {
               await adminClient.from("slack_processed_messages").insert({
                 user_id: user.id,
                 slack_message_id: messageId,
