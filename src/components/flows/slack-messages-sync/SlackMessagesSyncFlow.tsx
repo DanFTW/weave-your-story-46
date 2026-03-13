@@ -152,7 +152,7 @@ export function SlackMessagesSyncFlow() {
 
   const handleWorkspaceSelected = (ws: SlackWorkspace) => {
     selectWorkspace(ws);
-    fetchChannels();
+    fetchChannels(ws.id);
   };
 
   const handleChannelsConfirmed = (selected: SlackChannel[]) => {
@@ -202,7 +202,7 @@ export function SlackMessagesSyncFlow() {
             channels={channels}
             isLoading={isLoading}
             onConfirmChannels={handleChannelsConfirmed}
-            onRefresh={fetchChannels}
+            onRefresh={() => fetchChannels(workspace?.id)}
           />
         )}
       </div>

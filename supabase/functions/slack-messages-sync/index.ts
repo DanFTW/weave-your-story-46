@@ -108,7 +108,8 @@ serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-    const { action, query } = await req.json();
+    const body = await req.json();
+    const { action, query } = body;
 
     // Get the shared Slack user token from Supabase secrets
     const sharedSlackToken = Deno.env.get("SLACK_USER_TOKEN");
@@ -207,11 +208,14 @@ serve(async (req) => {
     }
 
     if (action === "list-channels") {
-      const result = await slackApi("conversations.list", {
+      const { teamId } = body;
+      const listParams: Record<string, string | number | boolean> = {
         types: "public_channel,private_channel",
         exclude_archived: true,
         limit: 200,
-      });
+      };
+      if (teamId) listParams.team = teamId;
+      const result = await slackApi("conversations.list", listParams);
 
       if (!result.ok) {
         return new Response(JSON.stringify({ error: result.error || "Failed to list channels" }), {
