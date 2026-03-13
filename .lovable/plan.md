@@ -1,61 +1,115 @@
 
 
-## Root Cause Analysis: Discord Channel Listing 401
+## Restaurant Memories to Google Maps Bookmark — Implementation Plan
 
-### The Problem
+This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
 
-The `get-channels` action fails with 401 on ALL connections despite `get-servers` working fine. The logs confirm:
+### 1. Database Tables (2 new tables via migration)
 
-```text
-get-servers flow:
-  discordbot (ca_q7ZCuMZhmxET) → users/@me/guilds → 200 ✓ (95 guilds)
-  discord    (ca_cfsE1mvRdQyj) → users/@me/guilds → 429 (rate limited)
+**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
+- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE own rows
 
-get-channels flow:
-  discordbot → guilds/{id}/channels with Bearer → 401 ✗
-  discordbot → guilds/{id}/channels with Bot    → 401 ✗
-  discord    → guilds/{id}/channels with Bearer → 401 ✗
-  discord    → guilds/{id}/channels with Bot    → 401 ✗
+**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
+- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
+- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
+- Unique constraint on `(user_id, memory_id)`
+
+### 2. Edge Function: `restaurant-bookmark-sync`
+
+Single edge function (mirrors `calendar-event-sync`) with actions:
+- **`activate`** / **`deactivate`** — toggle `is_active` on config table
+- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
+- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
+- **`update-pending`** — update fields on a pending item
+- **`dismiss-pending`** — mark as dismissed
+- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+
+AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+
+### 3. Types: `src/types/restaurantBookmarkSync.ts`
+
+Mirrors `calendarEventSync.ts`:
+- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
+- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
+- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
+- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+
+### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+
+Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+
+### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+
+Mirrors the calendar-event-sync component structure:
+- **`index.ts`** — barrel export
+- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
+- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
+- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
+- **`ActivatingScreen.tsx`** — loading animation during activation
+- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+
+### 6. Registration (data + routing)
+
+**`src/data/threads.ts`** — add entry:
+```
+{
+  id: "restaurant-bookmark-sync",
+  title: "Restaurant Memories to Google Maps Bookmark",
+  icon: MapPin,  // from lucide-react
+  gradient: "teal",
+  status: "active",
+  type: "automation",
+  category: "personal",
+  integrations: ["googlemaps"],
+  triggerType: "automatic",
+  flowMode: "thread",
+}
 ```
 
-### Why It Fails
+**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
 
-Both Composio connections use `auth_scheme: OAUTH2`. They provide **OAuth2 user tokens** — not actual Discord Bot tokens from the Developer Portal.
+**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
 
-- `GET /users/@me/guilds` works with OAuth2 user tokens (requires `guilds` scope) — this is why server listing succeeds.
-- `GET /guilds/{id}/channels` is a **Bot-only endpoint**. It requires the real Bot token (the one from Discord Developer Portal > Bot > Token). An OAuth2 user token with a "Bot" prefix is still an OAuth2 token and gets rejected.
+**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
 
-**The Composio discordbot integration does NOT provide the actual bot token. It provides an OAuth2 token authorized through the bot's application, which is fundamentally different.**
+**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
 
-### Solution
+**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
 
-Store the actual Discord Bot token as a Supabase Edge Function secret and use it directly for the channels endpoint (and for activation/webhook setup which also needs bot auth).
+**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
 
-**Changes required:**
+### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
 
-1. **Add a `DISCORD_BOT_TOKEN` secret** in Supabase with the real bot token from Discord Developer Portal.
+Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
 
-2. **Update `discord-automation-triggers` edge function** — for the `get-channels` action, use `DISCORD_BOT_TOKEN` directly with `Authorization: Bot ${token}` instead of going through Composio credentials. Keep the Composio OAuth flow for `get-servers` (which works via `users/@me/guilds`).
+### 8. Wire trigger into memory save
 
-3. **Update the `activate` action** — the trigger setup via Composio should still work, but channel-level operations that hit Discord API directly should use the bot token.
+Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
 
-### Technical Detail
+### Summary of files to create/modify
 
-```text
-Current (broken):
-  Composio OAuth2 token → "Bot <oauth_token>" → Discord channels API → 401
+**Create (8 files):**
+- `src/types/restaurantBookmarkSync.ts`
+- `src/hooks/useRestaurantBookmarkSync.ts`
+- `src/components/flows/restaurant-bookmark-sync/index.ts`
+- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
+- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
+- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
+- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
+- `src/utils/triggerRestaurantBookmarkSync.ts`
+- `supabase/functions/restaurant-bookmark-sync/index.ts`
 
-Proposed fix:
-  DISCORD_BOT_TOKEN secret → "Bot <real_bot_token>" → Discord channels API → 200
-```
+**Modify (6 files):**
+- `src/data/threads.ts` — add thread entry
+- `src/data/threadConfigs.ts` — add thread config
+- `src/data/flowConfigs.ts` — add flow config
+- `src/types/flows.ts` — add boolean flag
+- `src/pages/FlowPage.tsx` — import + render
+- `src/pages/Threads.tsx` — add to flowEnabledThreads
+- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
+- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
 
-The `get-servers` flow continues using Composio connections (OAuth2 token works for `users/@me/guilds`). Only channel listing and any other bot-privileged endpoints switch to the direct bot token.
-
-### Files Changed
-| File | Change |
-|------|--------|
-| `supabase/functions/discord-automation-triggers/index.ts` | Use `DISCORD_BOT_TOKEN` env var for channel listing instead of Composio credentials |
-
-### Prerequisite
-You need to add the `DISCORD_BOT_TOKEN` secret in the Supabase dashboard with the bot token from [Discord Developer Portal](https://discord.com/developers/applications) > your app > Bot > Reset Token.
+**Database migration:** 2 tables + RLS policies
 
