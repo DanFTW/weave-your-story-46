@@ -140,8 +140,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     setIsLoading(true);
     await loadConfig();
     setIsLoading(false);
-    fetchRecentMessages();
-  }, [hasInitialized, loadConfig, fetchRecentMessages]);
+    // fetchRecentMessages will be called separately after init
+  }, [hasInitialized, loadConfig]);
 
   const fetchChannels = useCallback(async () => {
     setIsLoading(true);
