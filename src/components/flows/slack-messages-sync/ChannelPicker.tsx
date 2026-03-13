@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Hash, Lock, RefreshCw } from "lucide-react";
+import { Hash, Lock, RefreshCw, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SlackChannel } from "@/types/slackMessagesSync";
