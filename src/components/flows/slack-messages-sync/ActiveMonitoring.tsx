@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronDown, ChevronUp, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, Search, User } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronUp, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, Search, User, Filter } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SlackMessagesSyncStats, SlackRecentMessage } from "@/types/slackMessagesSync";
 import { cn } from "@/lib/utils";
