@@ -126,7 +126,7 @@ serve(async (req) => {
     }
 
     // Determine which token to use based on action
-    const usePerUserToken = action === "list-workspace" || action === "list-channels";
+    const usePerUserToken = action === "list-workspace" || action === "list-channels" || action === "poll" || action === "search";
     let slackToken: string | null | undefined;
 
     if (usePerUserToken) {
