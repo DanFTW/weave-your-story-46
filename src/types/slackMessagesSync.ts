@@ -24,8 +24,8 @@ export interface SlackMessagesSyncConfig {
   id: string;
   userId: string;
   isActive: boolean;
-  selectedChannelId: string | null;
-  selectedChannelName: string | null;
+  selectedChannelIds: string[];
+  selectedChannelNames: string[];
   messagesImported: number;
   lastPolledAt: string | null;
 }
@@ -34,7 +34,7 @@ export interface SlackMessagesSyncStats {
   messagesImported: number;
   lastPolled: string | null;
   isActive: boolean;
-  channelName: string | null;
+  channelNames: string[];
 }
 
 export interface SlackRecentMessage {
