@@ -160,22 +160,63 @@ export function useComposio(toolkit: string): UseComposioReturn {
         // Start polling for connection status
         startPolling();
 
-        // Redirect to Slack OAuth
-        if (isMedian()) {
-          const opened = median.window.open(data.redirectUrl, 'appbrowser');
-          if (!opened) {
+        // Helper: open the OAuth URL in the appropriate context
+        const openOAuthUrl = (url: string) => {
+          if (isMedian()) {
+            const opened = median.window.open(url, 'appbrowser');
+            if (!opened) {
+              stopPolling();
+              window.location.assign(url);
+            }
+          } else if (isMobile) {
             stopPolling();
-            window.location.assign(data.redirectUrl);
+            window.location.assign(url);
+          } else {
+            const popup = window.open(url, 'slack_oauth', 'width=600,height=700');
+            if (!popup || popup.closed) {
+              stopPolling();
+              window.location.assign(url);
+            }
           }
-        } else if (isMobile) {
-          stopPolling();
-          window.location.assign(data.redirectUrl);
+        };
+
+        // When forceReauth, sign out of Slack first to clear cached session cookies
+        if (forceReauth) {
+          const SIGNOUT_DELAY = 2000; // ms to wait for signout to process
+          const slackSignoutUrl = 'https://slack.com/signout';
+
+          if (isMedian()) {
+            // Open signout in appbrowser, wait, close it, then open OAuth in fresh appbrowser
+            median.window.open(slackSignoutUrl, 'appbrowser');
+            setTimeout(() => {
+              median.appbrowser.close();
+              setTimeout(() => {
+                openOAuthUrl(data.redirectUrl);
+              }, 500);
+            }, SIGNOUT_DELAY);
+          } else if (!isMobile) {
+            // Desktop: open signout in a popup, wait, then navigate it to OAuth URL
+            const popup = window.open(slackSignoutUrl, 'slack_oauth', 'width=600,height=700');
+            if (popup && !popup.closed) {
+              setTimeout(() => {
+                try {
+                  popup.location.href = data.redirectUrl;
+                } catch {
+                  // Cross-origin navigation failed, close and reopen
+                  popup.close();
+                  openOAuthUrl(data.redirectUrl);
+                }
+              }, SIGNOUT_DELAY);
+            } else {
+              // Popup blocked — best-effort direct redirect
+              openOAuthUrl(data.redirectUrl);
+            }
+          } else {
+            // Mobile: can't do popup trick, best-effort direct redirect
+            openOAuthUrl(data.redirectUrl);
+          }
         } else {
-          const popup = window.open(data.redirectUrl, '_blank');
-          if (!popup || popup.closed) {
-            stopPolling();
-            window.location.assign(data.redirectUrl);
-          }
+          openOAuthUrl(data.redirectUrl);
         }
         return;
       }
