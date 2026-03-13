@@ -186,7 +186,13 @@ serve(async (req) => {
         });
 
         if (historyResult.ok) {
-          for (const msg of historyResult.messages || []) {
+          const allMessages = historyResult.messages || [];
+          const nonSubtypeMessages = allMessages.filter((m: any) => !m.subtype);
+          console.log(`[poll] conversations.history returned ${allMessages.length} total messages, ${nonSubtypeMessages.length} without subtype`);
+
+          let skippedCount = 0;
+
+          for (const msg of allMessages) {
             if (msg.subtype) continue;
 
             const messageId = `${channelId}_${msg.ts}`;
@@ -198,9 +204,15 @@ serve(async (req) => {
               .eq("slack_message_id", messageId)
               .maybeSingle();
 
-            if (existing) continue;
+            if (existing) {
+              skippedCount++;
+              continue;
+            }
 
             const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
+
+            const liamPayload = { content: memoryContent, tags: ["SLACK"] };
+            console.log(`[poll] Sending to LIAM API:`, JSON.stringify(liamPayload));
 
             const liamResp = await fetch("https://web.askbuddy.ai/api/memories", {
               method: "POST",
@@ -211,11 +223,11 @@ serve(async (req) => {
                 "x-private-key": liamPrivateKey,
                 "x-user-id": user.id,
               },
-              body: JSON.stringify({
-                content: memoryContent,
-                tags: ["SLACK"],
-              }),
+              body: JSON.stringify(liamPayload),
             });
+
+            const liamRespText = await liamResp.text();
+            console.log(`[poll] LIAM API response status=${liamResp.status} body=${liamRespText}`);
 
             if (liamResp.ok) {
               await adminClient.from("slack_processed_messages").insert({
@@ -225,6 +237,8 @@ serve(async (req) => {
               totalImported++;
             }
           }
+
+          console.log(`[poll] Skipped ${skippedCount} already-processed messages, imported ${totalImported} new messages`);
         }
       } catch (err) {
         console.error(`Failed to fetch history for channel ${channelId}:`, err);
