@@ -281,20 +281,39 @@ serve(async (req) => {
         });
       }
 
-      const liamApiKey = Deno.env.get("LIAM_API_KEY");
-      const liamUserKey = Deno.env.get("LIAM_USER_KEY");
-      const liamPrivateKey = Deno.env.get("LIAM_PRIVATE_KEY");
+      const { data: userKeys, error: keysError } = await adminClient
+        .from("user_api_keys")
+        .select("api_key, private_key, user_key")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      if (!liamApiKey || !liamUserKey || !liamPrivateKey) {
-        return new Response(JSON.stringify({ error: "LIAM API keys not configured" }), {
-          status: 500,
+      if (keysError || !userKeys?.api_key || !userKeys?.private_key || !userKeys?.user_key) {
+        return new Response(JSON.stringify({ error: "LIAM API keys not configured. Please set up your API keys first." }), {
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      const liamApiKey = userKeys.api_key;
+      const liamUserKey = userKeys.user_key;
+      const liamPrivateKey = userKeys.private_key;
+
       let totalImported = 0;
       let totalBackfilled = 0;
       const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+
+      // Build userId → displayName map
+      let userMap: Record<string, string> = {};
+      try {
+        const usersResult = await slackApi("users.list", {});
+        if (usersResult.ok && usersResult.members) {
+          for (const member of usersResult.members) {
+            userMap[member.id] = member.real_name || member.profile?.display_name || member.name || member.id;
+          }
+        }
+      } catch (err) {
+        console.error("[poll] Failed to fetch users.list:", err);
+      }
 
       for (const channelId of channelIds) {
         try {
@@ -322,7 +341,8 @@ serve(async (req) => {
 
               if (existing) continue;
 
-              const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
+              const authorName = userMap[msg.user] || msg.user || "unknown";
+              const memoryContent = `Slack message from ${authorName}: ${msg.text}`;
               const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
 
               if (liamResult.ok) {
@@ -330,7 +350,7 @@ serve(async (req) => {
                   user_id: user.id,
                   slack_message_id: messageId,
                   message_content: (msg.text || "").substring(0, 500),
-                  author_name: msg.user || "unknown",
+                  author_name: authorName,
                 });
                 totalImported++;
               }
@@ -340,11 +360,12 @@ serve(async (req) => {
             for (const msg of allMessages) {
               if (msg.subtype) continue;
               const messageId = `${channelId}_${msg.ts}`;
+              const authorName = userMap[msg.user] || msg.user || "unknown";
               const { data: updated } = await adminClient
                 .from("slack_processed_messages")
                 .update({
                   message_content: (msg.text || "").substring(0, 500),
-                  author_name: msg.user || "unknown",
+                  author_name: authorName,
                 })
                 .eq("user_id", user.id)
                 .eq("slack_message_id", messageId)
@@ -396,16 +417,22 @@ serve(async (req) => {
       const channelName = (configData.selected_workspace_ids || [])[0];
       const searchQuery = channelName ? `in:#${channelName} ${query}` : query;
 
-      const liamApiKey = Deno.env.get("LIAM_API_KEY");
-      const liamUserKey = Deno.env.get("LIAM_USER_KEY");
-      const liamPrivateKey = Deno.env.get("LIAM_PRIVATE_KEY");
+      const { data: userKeys, error: keysError } = await adminClient
+        .from("user_api_keys")
+        .select("api_key, private_key, user_key")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      if (!liamApiKey || !liamUserKey || !liamPrivateKey) {
-        return new Response(JSON.stringify({ error: "LIAM API keys not configured" }), {
-          status: 500,
+      if (keysError || !userKeys?.api_key || !userKeys?.private_key || !userKeys?.user_key) {
+        return new Response(JSON.stringify({ error: "LIAM API keys not configured. Please set up your API keys first." }), {
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      const liamApiKey = userKeys.api_key;
+      const liamUserKey = userKeys.user_key;
+      const liamPrivateKey = userKeys.private_key;
 
       let totalImported = 0;
 
