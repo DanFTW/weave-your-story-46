@@ -379,6 +379,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       });
     } finally {
       setIsPolling(false);
+      fetchRecentMessages();
     }
   }, [toast]);
 
