@@ -15,11 +15,11 @@ export function ActivatingScreen() {
       <Loader2 className="w-8 h-8 text-[#4A154B] animate-spin mb-6" />
 
       <h2 className="text-xl font-bold text-foreground mb-2 text-center">
-        Activating Slack Channel Monitor
+        Activating Slack Message Monitor
       </h2>
 
       <p className="text-muted-foreground text-center max-w-xs">
-        Setting up channel monitoring for your Slack workspace...
+        Setting up message monitoring for your Slack workspace...
       </p>
     </div>
   );

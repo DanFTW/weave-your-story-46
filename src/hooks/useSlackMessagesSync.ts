@@ -198,11 +198,11 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
       setPhase("active");
       const label = selectedChannelNames.map(n => `#${n}`).join(", ");
-      toast({ title: "Channel monitor activated", description: `Now monitoring ${label}.` });
+      toast({ title: "Message monitor activated", description: `Now monitoring ${label}.` });
     } catch (error) {
       console.error("Failed to activate:", error);
       setPhase("select-channels");
-      toast({ title: "Activation failed", description: "Could not start channel monitor. Please try again.", variant: "destructive" });
+      toast({ title: "Activation failed", description: "Could not start message monitor. Please try again.", variant: "destructive" });
     }
   }, [selectedChannelIds, selectedChannelNames, toast]);
 
@@ -215,7 +215,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       if (error) throw error;
       setConfig(prev => prev ? { ...prev, isActive: false } : null);
       setPhase("select-channels");
-      toast({ title: "Monitor paused", description: "Slack channel monitoring has been paused." });
+      toast({ title: "Monitor paused", description: "Slack message monitoring has been paused." });
     } catch (error) {
       console.error("Failed to deactivate:", error);
       toast({ title: "Deactivation failed", description: "Could not pause monitor. Please try again.", variant: "destructive" });

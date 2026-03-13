@@ -1136,9 +1136,9 @@ export const threadConfigs: Record<string, ThreadConfig> = {
   },
   "slack-messages-sync": {
     id: "slack-messages-sync",
-    title: "Slack Channel Monitor",
-    subtitle: "Monitor channel messages",
-    description: "Monitor a Slack channel and automatically import all messages as memories. Search channel content on demand.",
+    title: "Slack Message Monitor",
+    subtitle: "Monitor Slack messages",
+    description: "Monitor Slack messages and automatically import them as memories. Search message content on demand.",
     gradient: "purple",
     icon: MessagesSquare,
     steps: [
