@@ -42,6 +42,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const [hasLoadError, setHasLoadError] = useState(false);
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const stats: DiscordAutomationStats = {
     messagesTracked: config?.messagesTracked ?? 0,
