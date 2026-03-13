@@ -56,6 +56,13 @@ export function DiscordAutomationFlow() {
     }
   }, [discord.isConnected, isCheckingAuth, navigate, initializeAfterAuthCheck]);
 
+  // Auto-fetch servers when entering select-server phase
+  useEffect(() => {
+    if (phase === "select-server" && servers.length === 0 && !isLoading && !hasLoadError) {
+      fetchServers();
+    }
+  }, [phase, servers.length, isLoading, hasLoadError, fetchServers]);
+
   // Show loading while checking auth
   if (isCheckingAuth) {
     return (
