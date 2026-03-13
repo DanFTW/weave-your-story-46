@@ -39,23 +39,16 @@ serve(async (req) => {
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
     const { action, query } = await req.json();
 
-    // Get the user's Slack access token
-    const { data: integration } = await adminClient
-      .from("user_integrations")
-      .select("composio_connection_id")
-      .eq("user_id", user.id)
-      .eq("integration_id", "slack")
-      .eq("status", "connected")
-      .maybeSingle();
+    // Get the Slack user token from Supabase secrets
+    const slackToken = Deno.env.get("SLACK_USER_TOKEN");
 
-    if (!integration?.composio_connection_id) {
+    if (!slackToken) {
       const missingTokenPayload = {
         error: "Slack not connected",
         code: "SLACK_TOKEN_MISSING",
         needsReconnect: true,
       };
 
-      // For initial channel loading, return 200 so the client can gracefully route to reconnect UI.
       if (action === "list-channels") {
         return new Response(JSON.stringify(missingTokenPayload), {
           status: 200,
@@ -68,8 +61,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const slackToken = integration.composio_connection_id;
 
     async function slackApi(method: string, params: Record<string, any> = {}) {
       const url = new URL(`https://slack.com/api/${method}`);

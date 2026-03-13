@@ -158,7 +158,7 @@ serve(async (req) => {
             account_email: accountEmail,
             account_avatar_url: avatarUrl,
             connected_at: new Date().toISOString(),
-            composio_connection_id: userToken,
+            
           },
           { onConflict: "user_id,integration_id" }
         );
