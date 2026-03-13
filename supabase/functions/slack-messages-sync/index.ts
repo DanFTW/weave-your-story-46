@@ -281,16 +281,22 @@ serve(async (req) => {
         });
       }
 
-      const liamApiKey = Deno.env.get("LIAM_API_KEY");
-      const liamUserKey = Deno.env.get("LIAM_USER_KEY");
-      const liamPrivateKey = Deno.env.get("LIAM_PRIVATE_KEY");
+      const { data: userKeys, error: keysError } = await adminClient
+        .from("user_api_keys")
+        .select("api_key, private_key, user_key")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      if (!liamApiKey || !liamUserKey || !liamPrivateKey) {
-        return new Response(JSON.stringify({ error: "LIAM API keys not configured" }), {
-          status: 500,
+      if (keysError || !userKeys?.api_key || !userKeys?.private_key || !userKeys?.user_key) {
+        return new Response(JSON.stringify({ error: "LIAM API keys not configured. Please set up your API keys first." }), {
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      const liamApiKey = userKeys.api_key;
+      const liamUserKey = userKeys.user_key;
+      const liamPrivateKey = userKeys.private_key;
 
       let totalImported = 0;
       let totalBackfilled = 0;
