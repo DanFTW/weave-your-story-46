@@ -202,7 +202,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     } catch (error) {
       console.error("Failed to activate:", error);
       setPhase("select-channels");
-      toast({ title: "Activation failed", description: "Could not start channel monitor. Please try again.", variant: "destructive" });
+      toast({ title: "Activation failed", description: "Could not start message monitor. Please try again.", variant: "destructive" });
     }
   }, [selectedChannelIds, selectedChannelNames, toast]);
 
