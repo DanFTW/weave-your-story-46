@@ -137,7 +137,7 @@ serve(async (req) => {
       });
     }
 
-    const { action, serverId, channelId, triggerInstanceId } = await req.json();
+    const { action, serverId, channelId, triggerInstanceId, query } = await req.json();
 
     // Get user's Discord connections (check both 'discord' and 'discordbot' integration IDs)
     const { data: integrations } = await supabaseClient
