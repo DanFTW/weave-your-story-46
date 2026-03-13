@@ -11,7 +11,9 @@ interface ActiveMonitoringProps {
   channelName: string;
   onPause: () => Promise<void>;
   onReset: () => Promise<void>;
+  onSyncNow: () => Promise<void>;
   isLoading: boolean;
+  isSyncing: boolean;
 }
 
 export function ActiveMonitoring({
