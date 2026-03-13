@@ -22,7 +22,9 @@ export function ActiveMonitoring({
   channelName,
   onPause,
   onReset,
+  onSyncNow,
   isLoading,
+  isSyncing,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
 
