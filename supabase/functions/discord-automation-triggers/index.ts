@@ -264,130 +264,89 @@ serve(async (req) => {
           });
         }
 
-        // Prefer bot connection first since channel listing requires bot auth
-        const channelConnectionIds = [
-          botIntegration?.composio_connection_id,
-          discordIntegration?.composio_connection_id,
-        ].filter((id): id is string => !!id && id.startsWith("ca_"));
-        const uniqueChannelConnIds = [...new Set(channelConnectionIds)];
-
-        console.log(`[Discord] Fetching channels for server: ${serverId}, connections to try: ${uniqueChannelConnIds.join(", ")}`);
-
-        let lastStatus = 0;
-        for (const connId of uniqueChannelConnIds) {
-          let creds: { token: string; authHeader: string; scheme: DiscordAuthScheme };
-          try {
-            creds = await getDiscordCredentials(connId);
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : "Unknown error";
-            console.error(`[Discord] Token retrieval failed for ${connId}:`, msg);
-            continue;
-          }
-
-          const channelUrl = `https://discord.com/api/v10/guilds/${serverId}/channels`;
-
-          const attemptFetch = async (authHeaderVal: string) => {
-            const ctrl = new AbortController();
-            const t = setTimeout(() => ctrl.abort(), 10_000);
-            try {
-              const r = await fetch(channelUrl, {
-                headers: { Authorization: authHeaderVal },
-                signal: ctrl.signal,
-              });
-              clearTimeout(t);
-              return r;
-            } catch (e) {
-              clearTimeout(t);
-              throw e;
-            }
-          };
-
-          try {
-            let discordRes = await attemptFetch(creds.authHeader);
-            let body = await discordRes.text();
-            lastStatus = discordRes.status;
-            console.log(`[Discord] Channels API status: ${discordRes.status} (conn: ${connId}, scheme: ${creds.scheme}), body: ${body.substring(0, 500)}`);
-
-            // On 401, retry once with the opposite auth scheme for this connection
-            if (discordRes.status === 401) {
-              const opposite: DiscordAuthScheme = creds.scheme === "Bot" ? "Bearer" : "Bot";
-              console.log(`[Discord] Retrying ${connId} with opposite scheme: ${opposite}`);
-              let retryCreds: { token: string; authHeader: string; scheme: DiscordAuthScheme };
-              try {
-                retryCreds = await getDiscordCredentials(connId, opposite);
-              } catch {
-                console.warn(`[Discord] Retry creds failed for ${connId}, skipping`);
-                continue;
-              }
-              discordRes = await attemptFetch(retryCreds.authHeader);
-              body = await discordRes.text();
-              lastStatus = discordRes.status;
-              console.log(`[Discord] Channels API retry status: ${discordRes.status} (conn: ${connId}, scheme: ${opposite}), body: ${body.substring(0, 500)}`);
-            }
-
-            if (discordRes.status === 429) {
-              const retryAfter = discordRes.headers.get("Retry-After") || "a few";
-              return new Response(JSON.stringify({
-                error: "Rate limited by Discord",
-                details: `Try again in ${retryAfter} seconds`,
-                channels: [],
-                requiresReconnect: false,
-              }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-            }
-
-            if (discordRes.status === 401) {
-              console.warn(`[Discord] Connection ${connId} returned 401 after retry, trying next...`);
-              continue;
-            }
-
-            if (discordRes.status === 403) {
-              console.warn(`[Discord] Connection ${connId} returned 403 (bot not in server or missing permissions)`);
-              continue;
-            }
-
-            if (!discordRes.ok) {
-              return new Response(JSON.stringify({
-                error: "Failed to load channels",
-                details: `Discord API error (HTTP ${discordRes.status})`,
-                channels: [],
-                requiresReconnect: false,
-              }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-            }
-
-            const allChannels = JSON.parse(body);
-            const textChannels = Array.isArray(allChannels)
-              ? allChannels
-                  .filter((c: any) => c.type === 0 || c.type === 5)
-                  .map((c: any) => ({ id: c.id, name: c.name, type: c.type }))
-              : [];
-
-            return new Response(JSON.stringify({ channels: textChannels, requiresReconnect: false }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : "Unknown error";
-            console.error(`[Discord] Channel listing failed for ${connId}:`, msg);
-            continue;
-          }
+        // Use the real Discord Bot token from secrets — OAuth2 tokens don't work for guild channel listing
+        const botToken = Deno.env.get("DISCORD_BOT_TOKEN");
+        if (!botToken) {
+          console.error("[Discord] DISCORD_BOT_TOKEN secret is missing");
+          return new Response(JSON.stringify({
+            error: "Discord bot token not configured. Please contact support.",
+            channels: [],
+            requiresReconnect: false,
+          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // All connections failed — differentiate 403 (permissions) from 401 (auth)
-        const is403 = lastStatus === 403;
-        const hasBotConn = !!botIntegration?.composio_connection_id;
-        return new Response(JSON.stringify({
-          error: is403
-            ? "Bot does not have access to this server. Please add the bot to the server or choose a different one."
-            : hasBotConn
-              ? "Discord bot authorization has expired. Please reconnect Discord."
-              : "No Discord bot connection found. Please connect the Discord bot integration.",
-          details: is403
-            ? "The bot lacks permissions for this server's channels."
-            : hasBotConn
-              ? "The bot token is no longer valid. Reconnecting will generate a fresh token."
-              : "Channel listing requires a bot connection.",
-          channels: [],
-          requiresReconnect: !is403,
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const channelUrl = `https://discord.com/api/v10/guilds/${serverId}/channels`;
+        console.log(`[Discord] Fetching channels for server ${serverId} using DISCORD_BOT_TOKEN`);
+
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10_000);
+        try {
+          const discordRes = await fetch(channelUrl, {
+            headers: { Authorization: `Bot ${botToken}` },
+            signal: ctrl.signal,
+          });
+          clearTimeout(t);
+
+          const body = await discordRes.text();
+          console.log(`[Discord] Channels API status: ${discordRes.status}, body: ${body.substring(0, 500)}`);
+
+          if (discordRes.status === 429) {
+            const retryAfter = discordRes.headers.get("Retry-After") || "a few";
+            return new Response(JSON.stringify({
+              error: "Rate limited by Discord",
+              details: `Try again in ${retryAfter} seconds`,
+              channels: [],
+              requiresReconnect: false,
+            }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (discordRes.status === 401) {
+            return new Response(JSON.stringify({
+              error: "Discord bot token is invalid or expired. Please update the DISCORD_BOT_TOKEN secret.",
+              channels: [],
+              requiresReconnect: true,
+            }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (discordRes.status === 403) {
+            return new Response(JSON.stringify({
+              error: "Bot does not have access to this server. Please add the bot to the server or choose a different one.",
+              details: "The bot lacks permissions for this server's channels.",
+              channels: [],
+              requiresReconnect: false,
+            }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (!discordRes.ok) {
+            return new Response(JSON.stringify({
+              error: "Failed to load channels",
+              details: `Discord API error (HTTP ${discordRes.status})`,
+              channels: [],
+              requiresReconnect: false,
+            }), { status: discordRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const allChannels = JSON.parse(body);
+          const textChannels = Array.isArray(allChannels)
+            ? allChannels
+                .filter((c: any) => c.type === 0 || c.type === 5)
+                .map((c: any) => ({ id: c.id, name: c.name, type: c.type }))
+            : [];
+
+          return new Response(JSON.stringify({ channels: textChannels, requiresReconnect: false }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } catch (e) {
+          clearTimeout(t);
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          console.error(`[Discord] Channel listing failed:`, msg);
+          return new Response(JSON.stringify({
+            error: "Failed to load channels",
+            details: msg,
+            channels: [],
+            requiresReconnect: false,
+          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
       }
 
       case "activate": {
