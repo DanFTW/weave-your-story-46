@@ -172,6 +172,7 @@ export function SlackMessagesSyncFlow() {
     return (
       <ActiveMonitoring
         stats={stats}
+        recentMessages={recentMessages}
         onPause={deactivate}
         onSyncNow={manualSync}
         onSearch={manualSearch}
