@@ -202,6 +202,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
             selectedChannelNames,
             messagesImported: 0,
             lastPolledAt: null,
+            triggerWord: null,
+            triggerWordEnabled: false,
           }
       );
 
