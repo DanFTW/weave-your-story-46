@@ -88,7 +88,9 @@ export function ChannelPicker({
                 className="data-[state=checked]:bg-[#4A154B] data-[state=checked]:border-[#4A154B]"
               />
               <div className="w-10 h-10 rounded-lg bg-[#4A154B]/10 flex items-center justify-center flex-shrink-0">
-                {channel.isPrivate ? (
+                {channel.isDm ? (
+                  <User className="w-5 h-5 text-[#4A154B]" />
+                ) : channel.isPrivate ? (
                   <Lock className="w-5 h-5 text-[#4A154B]" />
                 ) : (
                   <Hash className="w-5 h-5 text-[#4A154B]" />
@@ -96,13 +98,15 @@ export function ChannelPicker({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-foreground">
-                  {channel.isPrivate ? "🔒 " : "#"}{channel.name}
+                  {channel.isDm ? "" : channel.isPrivate ? "🔒 " : "#"}{channel.name}
                 </p>
-                {channel.numMembers !== undefined && (
+                {channel.isDm ? (
+                  <p className="text-xs text-muted-foreground">Direct message</p>
+                ) : channel.numMembers !== undefined ? (
                   <p className="text-xs text-muted-foreground">
                     {channel.numMembers} members
                   </p>
-                )}
+                ) : null}
               </div>
             </button>
           );

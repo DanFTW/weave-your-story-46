@@ -78,6 +78,40 @@ async function createSlackMemory(apiKey: string, privateKeyPem: string, userKey:
   }
 }
 
+// === SLACK USER RESOLUTION ===
+
+async function fetchUserMap(slackToken: string): Promise<Map<string, string>> {
+  const userMap = new Map<string, string>();
+  let cursor: string | undefined;
+  do {
+    const params = new URLSearchParams({ limit: "200" });
+    if (cursor) params.set("cursor", cursor);
+    const resp = await fetch(`https://slack.com/api/users.list?${params}`, {
+      headers: { Authorization: `Bearer ${slackToken}` },
+    });
+    const result = await resp.json();
+    if (!result.ok) {
+      console.error("users.list error:", result.error);
+      break;
+    }
+    for (const member of result.members || []) {
+      const displayName =
+        member.profile?.display_name ||
+        member.profile?.real_name ||
+        member.real_name ||
+        member.name ||
+        member.id;
+      userMap.set(member.id, displayName);
+    }
+    cursor = result.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+  return userMap;
+}
+
+function resolveUserName(userMap: Map<string, string>, userId: string): string {
+  return userMap.get(userId) || userId;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -110,7 +144,6 @@ serve(async (req) => {
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
     const { action, query } = await req.json();
 
-    // Get the Slack user token from Supabase secrets
     const slackToken = Deno.env.get("SLACK_USER_TOKEN");
 
     if (!slackToken) {
@@ -163,6 +196,7 @@ serve(async (req) => {
       return result;
     }
 
+    // === LIST WORKSPACE ===
     if (action === "list-workspace") {
       const result = await slackApi("team.info");
       if (!result.ok) {
@@ -184,9 +218,13 @@ serve(async (req) => {
       });
     }
 
+    // === LIST CHANNELS (including DMs) ===
     if (action === "list-channels") {
+      // Fetch user map for resolving DM partner names
+      const userMap = await fetchUserMap(slackToken!);
+
       const result = await slackApi("conversations.list", {
-        types: "public_channel,private_channel",
+        types: "public_channel,private_channel,im,mpim",
         exclude_archived: true,
         limit: 200,
       });
@@ -198,19 +236,36 @@ serve(async (req) => {
         });
       }
 
-      const channels = (result.channels || []).map((ch: any) => ({
-        id: ch.id,
-        name: ch.name,
-        isMember: ch.is_member ?? false,
-        isPrivate: ch.is_private ?? false,
-        numMembers: ch.num_members,
-      }));
+      const channels = (result.channels || []).map((ch: any) => {
+        const isIm = ch.is_im === true;
+        const isMpim = ch.is_mpim === true;
+        const isDm = isIm || isMpim;
+
+        let name = ch.name || ch.id;
+        if (isIm) {
+          // For 1:1 DMs, resolve the partner's display name
+          name = resolveUserName(userMap, ch.user);
+        } else if (isMpim) {
+          // For group DMs, use the purpose or name_normalized
+          name = ch.purpose?.value || ch.name_normalized || ch.name || ch.id;
+        }
+
+        return {
+          id: ch.id,
+          name,
+          isMember: ch.is_member ?? (isDm ? true : false),
+          isPrivate: ch.is_private ?? isDm,
+          isDm,
+          numMembers: isDm ? undefined : ch.num_members,
+        };
+      });
 
       return new Response(JSON.stringify({ channels }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // === ACTIVATE / DEACTIVATE ===
     if (action === "activate") {
       await adminClient
         .from("slack_messages_config")
@@ -233,6 +288,7 @@ serve(async (req) => {
       });
     }
 
+    // === POLL ===
     if (action === "poll") {
       const { data: configData } = await adminClient
         .from("slack_messages_config")
@@ -266,6 +322,9 @@ serve(async (req) => {
         });
       }
 
+      // Build user map once for resolving all author names
+      const userMap = await fetchUserMap(slackToken!);
+
       let totalImported = 0;
       let totalBackfilled = 0;
       const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
@@ -286,6 +345,7 @@ serve(async (req) => {
               if (msg.subtype) continue;
 
               const messageId = `${channelId}_${msg.ts}`;
+              const resolvedAuthor = resolveUserName(userMap, msg.user || "unknown");
 
               const { data: existing } = await adminClient
                 .from("slack_processed_messages")
@@ -296,7 +356,7 @@ serve(async (req) => {
 
               if (existing) continue;
 
-              const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
+              const memoryContent = `Slack message from ${resolvedAuthor}: ${msg.text}`;
               const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
 
               if (liamResult.ok) {
@@ -304,27 +364,41 @@ serve(async (req) => {
                   user_id: user.id,
                   slack_message_id: messageId,
                   message_content: (msg.text || "").substring(0, 500),
-                  author_name: msg.user || "unknown",
+                  author_name: resolvedAuthor,
                 });
                 totalImported++;
               }
             }
 
-            // Backfill: update existing rows that have null content (from pre-migration imports)
+            // Backfill: update existing rows that have null content or raw user IDs
             for (const msg of allMessages) {
               if (msg.subtype) continue;
               const messageId = `${channelId}_${msg.ts}`;
-              const { data: updated } = await adminClient
+              const resolvedAuthor = resolveUserName(userMap, msg.user || "unknown");
+
+              // Backfill null content
+              const { data: updatedNull } = await adminClient
                 .from("slack_processed_messages")
                 .update({
                   message_content: (msg.text || "").substring(0, 500),
-                  author_name: msg.user || "unknown",
+                  author_name: resolvedAuthor,
                 })
                 .eq("user_id", user.id)
                 .eq("slack_message_id", messageId)
                 .is("message_content", null)
                 .select("id");
-              if (updated && updated.length > 0) totalBackfilled += updated.length;
+              if (updatedNull && updatedNull.length > 0) totalBackfilled += updatedNull.length;
+
+              // Backfill raw user IDs (starts with "U" and looks like a Slack ID)
+              const { data: updatedRawId } = await adminClient
+                .from("slack_processed_messages")
+                .update({ author_name: resolvedAuthor })
+                .eq("user_id", user.id)
+                .eq("slack_message_id", messageId)
+                .eq("author_name", msg.user || "unknown")
+                .neq("author_name", resolvedAuthor)
+                .select("id");
+              if (updatedRawId && updatedRawId.length > 0) totalBackfilled += updatedRawId.length;
             }
           }
         } catch (err) {
@@ -345,6 +419,7 @@ serve(async (req) => {
       });
     }
 
+    // === SEARCH ===
     if (action === "search") {
       if (!query) {
         return new Response(JSON.stringify({ error: "Query required" }), {
@@ -366,7 +441,6 @@ serve(async (req) => {
         });
       }
 
-      const channelId = (configData.selected_channel_ids || [])[0];
       const channelName = (configData.selected_workspace_ids || [])[0];
       const searchQuery = channelName ? `in:#${channelName} ${query}` : query;
 
@@ -380,6 +454,9 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Build user map for resolving author names in search results
+      const userMap = await fetchUserMap(slackToken!);
 
       let totalImported = 0;
 
@@ -403,7 +480,8 @@ serve(async (req) => {
 
           if (existing) continue;
 
-          const memoryContent = `Slack message from ${msg.username || "unknown"} in #${msg.channel?.name || "unknown"}: ${msg.text}`;
+          const resolvedAuthor = msg.username || resolveUserName(userMap, msg.user || "unknown");
+          const memoryContent = `Slack message from ${resolvedAuthor} in #${msg.channel?.name || "unknown"}: ${msg.text}`;
 
           const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
 
@@ -412,7 +490,7 @@ serve(async (req) => {
               user_id: user.id,
               slack_message_id: messageId,
               message_content: (msg.text || "").substring(0, 500),
-              author_name: msg.username || "unknown",
+              author_name: resolvedAuthor,
             });
             totalImported++;
           }
