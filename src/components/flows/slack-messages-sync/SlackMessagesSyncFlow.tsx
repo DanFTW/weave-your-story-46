@@ -180,7 +180,7 @@ export function SlackMessagesSyncFlow() {
             <ChevronLeft className="w-6 h-6 text-white" />
           </button>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-white truncate">Slack Channel Monitor</h1>
+            <h1 className="text-xl font-bold text-white truncate">Slack Message Monitor</h1>
             <p className="text-white/70 text-sm truncate">{headerSubtitle}</p>
           </div>
         </div>

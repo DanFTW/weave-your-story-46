@@ -215,7 +215,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       if (error) throw error;
       setConfig(prev => prev ? { ...prev, isActive: false } : null);
       setPhase("select-channels");
-      toast({ title: "Monitor paused", description: "Slack channel monitoring has been paused." });
+      toast({ title: "Monitor paused", description: "Slack message monitoring has been paused." });
     } catch (error) {
       console.error("Failed to deactivate:", error);
       toast({ title: "Deactivation failed", description: "Could not pause monitor. Please try again.", variant: "destructive" });
