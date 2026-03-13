@@ -49,7 +49,8 @@ serve(async (req) => {
         `client_id=${SLACK_CLIENT_ID}` +
         `&user_scope=${encodeURIComponent(SLACK_USER_SCOPES)}` +
         `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-        `&state=${encodeURIComponent(state)}`;
+        `&state=${encodeURIComponent(state)}` +
+        `&prompt=consent`;
 
       console.log("slack-oauth: initiate for user", user.id);
 
