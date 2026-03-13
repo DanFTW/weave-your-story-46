@@ -1734,6 +1734,7 @@ export type Database = {
       }
       user_integrations: {
         Row: {
+          access_token: string | null
           account_avatar_url: string | null
           account_email: string | null
           account_name: string | null
@@ -1747,6 +1748,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          access_token?: string | null
           account_avatar_url?: string | null
           account_email?: string | null
           account_name?: string | null
@@ -1760,6 +1762,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          access_token?: string | null
           account_avatar_url?: string | null
           account_email?: string | null
           account_name?: string | null
