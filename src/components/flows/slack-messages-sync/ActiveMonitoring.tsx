@@ -81,7 +81,9 @@ export function ActiveMonitoring({
             </div>
             <div>
               <p className="font-medium text-foreground">
-                #{stats.channelName || "channel"}
+                {(stats.channelNames && stats.channelNames.length > 0)
+                  ? stats.channelNames.map(n => `#${n}`).join(", ")
+                  : "#channel"}
               </p>
               <p className="text-sm text-muted-foreground">
                 All messages imported as memories

@@ -16,39 +16,22 @@ export function SlackMessagesSyncFlow() {
   const [isSlackConnected, setIsSlackConnected] = useState(false);
 
   const {
-    phase,
-    setPhase,
-    config,
-    channels,
-    workspace,
-    isLoading,
-    isPolling,
-    stats,
-    fetchChannels,
-    fetchWorkspace,
-    selectWorkspace,
-    selectChannel,
-    selectedChannelId,
-    activate,
-    deactivate,
-    manualSync,
-    manualSearch,
-    resetConfig,
-    initializeAfterAuthCheck,
-    workspaceError,
-    recentMessages,
-    fetchRecentMessages,
+    phase, setPhase, config, channels, workspace,
+    isLoading, isPolling, stats,
+    fetchChannels, fetchWorkspace, selectWorkspace,
+    selectChannels, selectedChannelIds,
+    activate, deactivate, manualSync, manualSearch,
+    resetConfig, initializeAfterAuthCheck, workspaceError,
+    recentMessages, fetchRecentMessages,
   } = useSlackMessagesSync();
+
+  const [shouldActivate, setShouldActivate] = useState(false);
 
   useEffect(() => {
     const checkSlackAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-          setIsCheckingAuth(false);
-          return;
-        }
-
+        if (!session?.user) { setIsCheckingAuth(false); return; }
         const { data } = await supabase
           .from("user_integrations")
           .select("status")
@@ -56,9 +39,7 @@ export function SlackMessagesSyncFlow() {
           .eq("integration_id", "slack")
           .eq("status", "connected")
           .maybeSingle();
-
-        const connected = Boolean(data);
-        setIsSlackConnected(connected);
+        setIsSlackConnected(Boolean(data));
       } catch (err) {
         console.error("Slack auth check failed:", err);
       } finally {
@@ -70,7 +51,6 @@ export function SlackMessagesSyncFlow() {
 
   useEffect(() => {
     if (isCheckingAuth) return;
-
     if (isSlackConnected) {
       initializeAfterAuthCheck();
     } else {
@@ -79,21 +59,20 @@ export function SlackMessagesSyncFlow() {
     }
   }, [isSlackConnected, isCheckingAuth, navigate, initializeAfterAuthCheck]);
 
-  // Fetch workspace when entering select-workspace phase
   useEffect(() => {
     if (phase === "select-workspace" && !workspace && !isLoading) {
       fetchWorkspace();
     }
   }, [phase, workspace, isLoading, fetchWorkspace]);
 
-  // Trigger activate after channel selection
+  // Trigger activate after channels confirmed
   useEffect(() => {
-    if (selectedChannelId && phase === "select-channels") {
+    if (shouldActivate && selectedChannelIds.length > 0 && phase === "select-channels") {
+      setShouldActivate(false);
       activate();
     }
-  }, [selectedChannelId]);
+  }, [shouldActivate, selectedChannelIds, phase, activate]);
 
-  // Fetch recent messages when phase becomes active
   useEffect(() => {
     if (phase === "active") {
       fetchRecentMessages();
@@ -126,11 +105,7 @@ export function SlackMessagesSyncFlow() {
     const handleReconnect = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        await supabase
-          .from("user_integrations")
-          .delete()
-          .eq("user_id", session.user.id)
-          .eq("integration_id", "slack");
+        await supabase.from("user_integrations").delete().eq("user_id", session.user.id).eq("integration_id", "slack");
       }
       sessionStorage.setItem("returnAfterSlackConnect", "/flow/slack-messages-sync");
       navigate("/integration/slack");
@@ -144,21 +119,13 @@ export function SlackMessagesSyncFlow() {
           </div>
           <h2 className="text-xl font-bold text-foreground">Reconnect Slack</h2>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Your Slack connection needs to be refreshed. This usually happens when a previous connection expired or was incomplete.
+            Your Slack connection needs to be refreshed.
           </p>
-          <button
-            onClick={handleReconnect}
-            className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#4A154B] text-white font-semibold text-sm hover:bg-[#3a1040] transition-colors"
-          >
+          <button onClick={handleReconnect} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#4A154B] text-white font-semibold text-sm hover:bg-[#3a1040] transition-colors">
             <RefreshCw className="w-4 h-4" />
             Reconnect Slack
           </button>
-          <button
-            onClick={() => navigate("/threads")}
-            className="text-muted-foreground text-sm underline underline-offset-2"
-          >
-            Go back
-          </button>
+          <button onClick={() => navigate("/threads")} className="text-muted-foreground text-sm underline underline-offset-2">Go back</button>
         </div>
       </div>
     );
@@ -188,8 +155,9 @@ export function SlackMessagesSyncFlow() {
     fetchChannels();
   };
 
-  const handleChannelSelected = (channel: SlackChannel) => {
-    selectChannel(channel.id, channel.name);
+  const handleChannelsConfirmed = (selected: SlackChannel[]) => {
+    selectChannels(selected);
+    setShouldActivate(true);
   };
 
   const handleBack = () => {
@@ -202,26 +170,18 @@ export function SlackMessagesSyncFlow() {
 
   const headerSubtitle = phase === "select-workspace"
     ? "Select a workspace"
-    : "Select a channel to monitor";
+    : "Select channels to monitor";
 
   return (
     <div className="min-h-screen bg-background pb-nav">
       <div className={cn("relative px-5 pt-status-bar pb-6 thread-gradient-purple")}>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleBack}
-            className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
-          >
+          <button onClick={handleBack} className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
             <ChevronLeft className="w-6 h-6 text-white" />
           </button>
-
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-white truncate">
-              Slack Channel Monitor
-            </h1>
-            <p className="text-white/70 text-sm truncate">
-              {headerSubtitle}
-            </p>
+            <h1 className="text-xl font-bold text-white truncate">Slack Channel Monitor</h1>
+            <p className="text-white/70 text-sm truncate">{headerSubtitle}</p>
           </div>
         </div>
       </div>
@@ -241,7 +201,7 @@ export function SlackMessagesSyncFlow() {
           <ChannelPicker
             channels={channels}
             isLoading={isLoading}
-            onSelectChannel={handleChannelSelected}
+            onConfirmChannels={handleChannelsConfirmed}
             onRefresh={fetchChannels}
           />
         )}

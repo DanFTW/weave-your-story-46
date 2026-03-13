@@ -247,8 +247,8 @@ serve(async (req) => {
         });
       }
 
-      const channelId = (configData.selected_channel_ids || [])[0];
-      if (!channelId) {
+      const channelIds: string[] = configData.selected_channel_ids || [];
+      if (channelIds.length === 0) {
         return new Response(JSON.stringify({ error: "No channel selected" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -267,62 +267,51 @@ serve(async (req) => {
       }
 
       let totalImported = 0;
+      const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
 
-      try {
-        const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+      for (const channelId of channelIds) {
+        try {
+          const historyResult = await slackApi("conversations.history", {
+            channel: channelId,
+            limit: 200,
+            oldest: String(thirtyDaysAgo),
+          });
 
-        const historyResult = await slackApi("conversations.history", {
-          channel: channelId,
-          limit: 200,
-          oldest: String(thirtyDaysAgo),
-        });
+          if (historyResult.ok) {
+            const allMessages = historyResult.messages || [];
+            console.log(`[poll] Channel ${channelId}: ${allMessages.length} messages`);
 
-        if (historyResult.ok) {
-          const allMessages = historyResult.messages || [];
-          const nonSubtypeMessages = allMessages.filter((m: any) => !m.subtype);
-          console.log(`[poll] conversations.history returned ${allMessages.length} total messages, ${nonSubtypeMessages.length} without subtype`);
+            for (const msg of allMessages) {
+              if (msg.subtype) continue;
 
-          let skippedCount = 0;
+              const messageId = `${channelId}_${msg.ts}`;
 
-          for (const msg of allMessages) {
-            if (msg.subtype) continue;
+              const { data: existing } = await adminClient
+                .from("slack_processed_messages")
+                .select("id")
+                .eq("user_id", user.id)
+                .eq("slack_message_id", messageId)
+                .maybeSingle();
 
-            const messageId = `${channelId}_${msg.ts}`;
+              if (existing) continue;
 
-            const { data: existing } = await adminClient
-              .from("slack_processed_messages")
-              .select("id")
-              .eq("user_id", user.id)
-              .eq("slack_message_id", messageId)
-              .maybeSingle();
+              const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
+              const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
 
-            if (existing) {
-              skippedCount++;
-              continue;
-            }
-
-            const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
-
-            console.log(`[poll] Sending to LIAM API:`, JSON.stringify({ content: memoryContent }));
-
-            const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
-            console.log(`[poll] LIAM API response status=${liamResult.status} body=${liamResult.body}`);
-
-            if (liamResult.ok) {
-              await adminClient.from("slack_processed_messages").insert({
-                user_id: user.id,
-                slack_message_id: messageId,
-                message_content: (msg.text || "").substring(0, 500),
-                author_name: msg.user || "unknown",
-              });
-              totalImported++;
+              if (liamResult.ok) {
+                await adminClient.from("slack_processed_messages").insert({
+                  user_id: user.id,
+                  slack_message_id: messageId,
+                  message_content: (msg.text || "").substring(0, 500),
+                  author_name: msg.user || "unknown",
+                });
+                totalImported++;
+              }
             }
           }
-
-          console.log(`[poll] Skipped ${skippedCount} already-processed messages, imported ${totalImported} new messages`);
+        } catch (err) {
+          console.error(`Failed to fetch history for channel ${channelId}:`, err);
         }
-      } catch (err) {
-        console.error(`Failed to fetch history for channel ${channelId}:`, err);
       }
 
       await adminClient

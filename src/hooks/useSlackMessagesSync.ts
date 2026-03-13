@@ -22,9 +22,9 @@ interface UseSlackMessagesSyncReturn {
   fetchChannels: () => Promise<void>;
   fetchWorkspace: () => Promise<void>;
   selectWorkspace: (workspace: SlackWorkspace) => void;
-  selectChannel: (channelId: string, channelName: string) => void;
-  selectedChannelId: string | null;
-  selectedChannelName: string | null;
+  selectChannels: (channels: SlackChannel[]) => void;
+  selectedChannelIds: string[];
+  selectedChannelNames: string[];
   activate: () => Promise<void>;
   deactivate: () => Promise<void>;
   manualSync: () => Promise<void>;
@@ -44,8 +44,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
   const [channels, setChannels] = useState<SlackChannel[]>([]);
   const [workspace, setWorkspace] = useState<SlackWorkspace | null>(null);
   const [workspaceError, setWorkspaceError] = useState(false);
-  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
-  const [selectedChannelName, setSelectedChannelName] = useState<string | null>(null);
+  const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([]);
+  const [selectedChannelNames, setSelectedChannelNames] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPolling, setIsPolling] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -55,40 +55,26 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     messagesImported: config?.messagesImported ?? 0,
     lastPolled: config?.lastPolledAt ?? null,
     isActive: config?.isActive ?? false,
-    channelName: config?.selectedChannelName ?? selectedChannelName,
+    channelNames: config?.selectedChannelNames ?? selectedChannelNames,
   };
 
   const fetchWorkspace = useCallback(async () => {
     setIsLoading(true);
     setWorkspaceError(false);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "slack-messages-sync",
-        { body: { action: "list-workspace" } }
-      );
+      const { data, error } = await supabase.functions.invoke("slack-messages-sync", { body: { action: "list-workspace" } });
       if (error) throw error;
       if (data.error) {
-        if (data.error === "Slack not connected" || data.needsReconnect) {
-          setPhase("needs-reconnect");
-          return;
-        }
+        if (data.error === "Slack not connected" || data.needsReconnect) { setPhase("needs-reconnect"); return; }
         setWorkspaceError(true);
-        toast({
-          title: "Failed to load workspace",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast({ title: "Failed to load workspace", description: data.error, variant: "destructive" });
         return;
       }
       setWorkspace(data.workspace || null);
     } catch (error: any) {
       console.error("Failed to fetch workspace:", error);
       setWorkspaceError(true);
-      toast({
-        title: "Failed to fetch workspace",
-        description: "Could not load your Slack workspace. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to fetch workspace", description: "Could not load your Slack workspace. Please try again.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -110,22 +96,22 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
     if (existingConfig) {
       const c = existingConfig as any;
-      const channelIds = c.selected_channel_ids ?? [];
+      const channelIds: string[] = c.selected_channel_ids ?? [];
+      const channelNames: string[] = c.selected_workspace_ids ?? [];
       setConfig({
         id: c.id,
         userId: c.user_id,
         isActive: c.is_active ?? false,
-        selectedChannelId: channelIds[0] ?? null,
-        selectedChannelName: c.selected_workspace_ids?.[0] ?? null,
+        selectedChannelIds: channelIds,
+        selectedChannelNames: channelNames,
         messagesImported: c.messages_imported ?? 0,
         lastPolledAt: c.last_polled_at,
       });
-      setSelectedChannelId(channelIds[0] ?? null);
-      setSelectedChannelName(c.selected_workspace_ids?.[0] ?? null);
+      setSelectedChannelIds(channelIds);
+      setSelectedChannelNames(channelNames);
 
       if (c.is_active) {
         setPhase("active");
-        // Fetch recent messages on init when active - done outside loadConfig to avoid circular dep
       } else {
         setPhase("select-workspace");
       }
@@ -140,27 +126,16 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     setIsLoading(true);
     await loadConfig();
     setIsLoading(false);
-    // fetchRecentMessages will be called separately after init
   }, [hasInitialized, loadConfig]);
 
   const fetchChannels = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "slack-messages-sync",
-        { body: { action: "list-channels" } }
-      );
+      const { data, error } = await supabase.functions.invoke("slack-messages-sync", { body: { action: "list-channels" } });
       if (error) throw error;
       if (data.error) {
-        if (data.error === "Slack not connected" || data.needsReconnect) {
-          setPhase("needs-reconnect");
-          return;
-        }
-        toast({
-          title: "Failed to load channels",
-          description: data.error,
-          variant: "destructive",
-        });
+        if (data.error === "Slack not connected" || data.needsReconnect) { setPhase("needs-reconnect"); return; }
+        toast({ title: "Failed to load channels", description: data.error, variant: "destructive" });
         setChannels([]);
         return;
       }
@@ -168,38 +143,25 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     } catch (error: any) {
       let errorBody = "";
       if (error?.context && typeof error.context.text === "function") {
-        try {
-          errorBody = await error.context.text();
-        } catch {
-          errorBody = "";
-        }
+        try { errorBody = await error.context.text(); } catch { errorBody = ""; }
       }
-
-      if (errorBody.includes("Slack not connected")) {
-        setPhase("needs-reconnect");
-        return;
-      }
-
+      if (errorBody.includes("Slack not connected")) { setPhase("needs-reconnect"); return; }
       console.error("Failed to fetch channels:", error);
-      toast({
-        title: "Failed to fetch channels",
-        description: "Could not load your Slack channels. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to fetch channels", description: "Could not load your Slack channels. Please try again.", variant: "destructive" });
       setChannels([]);
     } finally {
       setIsLoading(false);
     }
   }, [toast]);
 
-  const selectChannel = useCallback((channelId: string, channelName: string) => {
-    setSelectedChannelId(channelId);
-    setSelectedChannelName(channelName);
+  const selectChannels = useCallback((selected: SlackChannel[]) => {
+    setSelectedChannelIds(selected.map((c) => c.id));
+    setSelectedChannelNames(selected.map((c) => c.name));
   }, []);
 
   const activate = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !selectedChannelId) return;
+    if (!user || selectedChannelIds.length === 0) return;
 
     setPhase("activating");
     try {
@@ -210,75 +172,53 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
             user_id: user.id,
             is_active: true,
             search_mode: false,
-            selected_channel_ids: [selectedChannelId],
-            selected_workspace_ids: [selectedChannelName],
+            selected_channel_ids: selectedChannelIds,
+            selected_workspace_ids: selectedChannelNames,
           },
           { onConflict: "user_id" }
         );
 
       if (error) throw error;
 
-      const { error: fnError } = await supabase.functions.invoke(
-        "slack-messages-sync",
-        { body: { action: "activate" } }
-      );
+      const { error: fnError } = await supabase.functions.invoke("slack-messages-sync", { body: { action: "activate" } });
       if (fnError) throw fnError;
 
       setConfig(prev => prev
-        ? { ...prev, isActive: true, selectedChannelId, selectedChannelName }
+        ? { ...prev, isActive: true, selectedChannelIds, selectedChannelNames }
         : {
             id: "",
             userId: user.id,
             isActive: true,
-            selectedChannelId,
-            selectedChannelName,
+            selectedChannelIds,
+            selectedChannelNames,
             messagesImported: 0,
             lastPolledAt: null,
           }
       );
 
       setPhase("active");
-      toast({
-        title: "Channel monitor activated",
-        description: `Now monitoring #${selectedChannelName || "channel"}.`,
-      });
+      const label = selectedChannelNames.map(n => `#${n}`).join(", ");
+      toast({ title: "Channel monitor activated", description: `Now monitoring ${label}.` });
     } catch (error) {
       console.error("Failed to activate:", error);
       setPhase("select-channels");
-      toast({
-        title: "Activation failed",
-        description: "Could not start channel monitor. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Activation failed", description: "Could not start channel monitor. Please try again.", variant: "destructive" });
     }
-  }, [selectedChannelId, selectedChannelName, toast]);
+  }, [selectedChannelIds, selectedChannelNames, toast]);
 
   const deactivate = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from("slack_messages_config" as any)
-        .update({ is_active: false })
-        .eq("user_id", user.id);
-
+      const { error } = await supabase.from("slack_messages_config" as any).update({ is_active: false }).eq("user_id", user.id);
       if (error) throw error;
-
       setConfig(prev => prev ? { ...prev, isActive: false } : null);
       setPhase("select-channels");
-      toast({
-        title: "Monitor paused",
-        description: "Slack channel monitoring has been paused.",
-      });
+      toast({ title: "Monitor paused", description: "Slack channel monitoring has been paused." });
     } catch (error) {
       console.error("Failed to deactivate:", error);
-      toast({
-        title: "Deactivation failed",
-        description: "Could not pause monitor. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Deactivation failed", description: "Could not pause monitor. Please try again.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -288,19 +228,13 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data, error } = await supabase
         .from("slack_processed_messages" as any)
         .select("id, slack_message_id, message_content, author_name, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(20);
-
-      if (error) {
-        console.error("Failed to fetch recent messages:", error);
-        return;
-      }
-
+      if (error) { console.error("Failed to fetch recent messages:", error); return; }
       setRecentMessages(
         (data || []).map((m: any) => ({
           id: m.id,
@@ -318,129 +252,81 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
   const manualSync = useCallback(async () => {
     setIsPolling(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "slack-messages-sync",
-        { body: { action: "poll" } }
-      );
+      const { data, error } = await supabase.functions.invoke("slack-messages-sync", { body: { action: "poll" } });
       if (error) throw error;
-
       if (data.messagesImported !== undefined) {
         setConfig(prev => prev
           ? { ...prev, messagesImported: prev.messagesImported + (data.messagesImported || 0), lastPolledAt: new Date().toISOString() }
           : null
         );
       }
-
       toast({
         title: "Sync complete",
-        description: data.messagesImported
-          ? `Imported ${data.messagesImported} new messages.`
-          : "No new messages found.",
+        description: data.messagesImported ? `Imported ${data.messagesImported} new messages.` : "No new messages found.",
       });
     } catch (error) {
       console.error("Manual sync failed:", error);
-      toast({
-        title: "Sync failed",
-        description: "Could not complete sync. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Sync failed", description: "Could not complete sync. Please try again.", variant: "destructive" });
     } finally {
       setIsPolling(false);
       fetchRecentMessages();
     }
-  }, [toast]);
+  }, [toast, fetchRecentMessages]);
 
   const manualSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;
     setIsPolling(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "slack-messages-sync",
-        { body: { action: "search", query } }
-      );
+      const { data, error } = await supabase.functions.invoke("slack-messages-sync", { body: { action: "search", query } });
       if (error) throw error;
-
       if (data.messagesImported !== undefined) {
         setConfig(prev => prev
           ? { ...prev, messagesImported: prev.messagesImported + (data.messagesImported || 0) }
           : null
         );
       }
-
       toast({
         title: "Search complete",
-        description: data.messagesImported
-          ? `Imported ${data.messagesImported} matching messages.`
-          : "No new matching messages found.",
+        description: data.messagesImported ? `Imported ${data.messagesImported} matching messages.` : "No new matching messages found.",
       });
     } catch (error) {
       console.error("Search failed:", error);
-      toast({
-        title: "Search failed",
-        description: "Could not complete search. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Search failed", description: "Could not complete search. Please try again.", variant: "destructive" });
     } finally {
       setIsPolling(false);
       fetchRecentMessages();
     }
-  }, [toast]);
+  }, [toast, fetchRecentMessages]);
 
   const resetConfig = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from("slack_messages_config" as any)
-        .delete()
-        .eq("user_id", user.id);
-
+      const { error } = await supabase.from("slack_messages_config" as any).delete().eq("user_id", user.id);
       if (error) throw error;
-
       setConfig(null);
       setChannels([]);
       setWorkspace(null);
-      setSelectedChannelId(null);
-      setSelectedChannelName(null);
+      setSelectedChannelIds([]);
+      setSelectedChannelNames([]);
       setHasInitialized(false);
       setPhase("select-workspace");
     } catch (error) {
       console.error("Failed to reset:", error);
-      toast({
-        title: "Reset failed",
-        description: "Could not reset configuration.",
-        variant: "destructive",
-      });
+      toast({ title: "Reset failed", description: "Could not reset configuration.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   }, [toast]);
 
   return {
-    phase,
-    setPhase,
-    config,
-    channels,
-    workspace,
-    isLoading,
-    isPolling,
-    stats,
-    fetchChannels,
-    fetchWorkspace,
-    selectWorkspace,
-    selectChannel,
-    selectedChannelId,
-    selectedChannelName,
-    activate,
-    deactivate,
-    manualSync,
-    manualSearch,
-    resetConfig,
-    initializeAfterAuthCheck,
-    workspaceError,
-    recentMessages,
-    fetchRecentMessages,
+    phase, setPhase, config, channels, workspace,
+    isLoading, isPolling, stats,
+    fetchChannels, fetchWorkspace, selectWorkspace,
+    selectChannels, selectedChannelIds, selectedChannelNames,
+    activate, deactivate, manualSync, manualSearch,
+    resetConfig, initializeAfterAuthCheck, workspaceError,
+    recentMessages, fetchRecentMessages,
   };
 }
