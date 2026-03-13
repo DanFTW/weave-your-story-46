@@ -31,10 +31,14 @@ export function ActiveMonitoring({
   onReset,
   isLoading,
   isPolling,
+  triggerWord,
+  triggerWordEnabled,
+  onUpdateTriggerWord,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [messagesOpen, setMessagesOpen] = useState(true);
+  const [localTriggerWord, setLocalTriggerWord] = useState(triggerWord);
 
   const lastPolledText = stats.lastPolled
     ? formatDistanceToNow(new Date(stats.lastPolled), { addSuffix: true })
