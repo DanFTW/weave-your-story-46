@@ -110,8 +110,30 @@ serve(async (req) => {
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
     const { action, query } = await req.json();
 
-    // Get the Slack user token from Supabase secrets
-    const slackToken = Deno.env.get("SLACK_USER_TOKEN");
+    // Get the shared Slack user token from Supabase secrets
+    const sharedSlackToken = Deno.env.get("SLACK_USER_TOKEN");
+
+    // Helper: fetch per-user Slack token from user_integrations (for workspace/channel discovery)
+    async function getUserSlackToken(): Promise<string | null> {
+      const { data } = await adminClient
+        .from("user_integrations")
+        .select("access_token")
+        .eq("user_id", user.id)
+        .eq("integration_id", "slack")
+        .maybeSingle();
+      return data?.access_token || null;
+    }
+
+    // Determine which token to use based on action
+    const usePerUserToken = action === "list-workspace" || action === "list-channels";
+    let slackToken: string | null | undefined;
+
+    if (usePerUserToken) {
+      // For discovery actions, prefer per-user token, fall back to shared
+      slackToken = await getUserSlackToken() || sharedSlackToken;
+    } else {
+      slackToken = sharedSlackToken;
+    }
 
     if (!slackToken) {
       const missingTokenPayload = {
