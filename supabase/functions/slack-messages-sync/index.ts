@@ -282,8 +282,6 @@ serve(async (req) => {
 
             const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
 
-            const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
-
             console.log(`[poll] Sending to LIAM API:`, JSON.stringify({ content: memoryContent }));
 
             const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
