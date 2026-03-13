@@ -66,12 +66,13 @@ serve(async (req) => {
       const url = new URL(`https://slack.com/api/${method}`);
       const getParams = ["conversations.list", "conversations.history", "users.list"];
 
+      let result;
       if (getParams.includes(method)) {
         Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
         const resp = await fetch(url.toString(), {
           headers: { Authorization: `Bearer ${slackToken}` },
         });
-        return resp.json();
+        result = await resp.json();
       } else {
         const resp = await fetch(url.toString(), {
           method: "POST",
@@ -81,8 +82,14 @@ serve(async (req) => {
           },
           body: JSON.stringify(params),
         });
-        return resp.json();
+        result = await resp.json();
       }
+
+      if (!result.ok) {
+        console.error(`Slack API error in ${method}:`, JSON.stringify(result));
+      }
+
+      return result;
     }
 
     if (action === "list-channels") {
