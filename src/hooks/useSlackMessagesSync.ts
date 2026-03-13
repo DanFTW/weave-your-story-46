@@ -7,6 +7,7 @@ import {
   SlackWorkspace,
   SlackMessagesSyncConfig,
   SlackMessagesSyncStats,
+  SlackRecentMessage,
 } from "@/types/slackMessagesSync";
 
 interface UseSlackMessagesSyncReturn {
