@@ -43,7 +43,11 @@ async function getDiscordCredentials(
     }
 
     const meta = JSON.parse(text);
-    const token = meta?.connectionParams?.access_token || meta?.data?.access_token;
+    const token = meta?.connectionParams?.access_token
+      || meta?.data?.access_token
+      || meta?.data?.params?.access_token
+      || meta?.data?.connectionParams?.access_token
+      || meta?.data?.connection_params?.access_token;
 
     if (!token) {
       throw new Error("No access_token in Composio metadata. Please reconnect Discord.");
