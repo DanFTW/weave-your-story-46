@@ -36,6 +36,8 @@ export function SlackMessagesSyncFlow() {
     resetConfig,
     initializeAfterAuthCheck,
     workspaceError,
+    recentMessages,
+    fetchRecentMessages,
   } = useSlackMessagesSync();
 
   useEffect(() => {
@@ -90,6 +92,13 @@ export function SlackMessagesSyncFlow() {
       activate();
     }
   }, [selectedChannelId]);
+
+  // Fetch recent messages when phase becomes active
+  useEffect(() => {
+    if (phase === "active") {
+      fetchRecentMessages();
+    }
+  }, [phase, fetchRecentMessages]);
 
   if (isCheckingAuth) {
     return (
@@ -163,6 +172,7 @@ export function SlackMessagesSyncFlow() {
     return (
       <ActiveMonitoring
         stats={stats}
+        recentMessages={recentMessages}
         onPause={deactivate}
         onSyncNow={manualSync}
         onSearch={manualSearch}

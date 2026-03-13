@@ -1266,20 +1266,26 @@ export type Database = {
       }
       slack_processed_messages: {
         Row: {
+          author_name: string | null
           created_at: string
           id: string
+          message_content: string | null
           slack_message_id: string
           user_id: string
         }
         Insert: {
+          author_name?: string | null
           created_at?: string
           id?: string
+          message_content?: string | null
           slack_message_id: string
           user_id: string
         }
         Update: {
+          author_name?: string | null
           created_at?: string
           id?: string
+          message_content?: string | null
           slack_message_id?: string
           user_id?: string
         }

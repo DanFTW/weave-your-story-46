@@ -1,0 +1,1 @@
+ALTER TABLE slack_processed_messages ADD COLUMN IF NOT EXISTS message_content text, ADD COLUMN IF NOT EXISTS author_name text;

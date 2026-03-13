@@ -7,6 +7,7 @@ import {
   SlackWorkspace,
   SlackMessagesSyncConfig,
   SlackMessagesSyncStats,
+  SlackRecentMessage,
 } from "@/types/slackMessagesSync";
 
 interface UseSlackMessagesSyncReturn {
@@ -31,6 +32,8 @@ interface UseSlackMessagesSyncReturn {
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
   workspaceError: boolean;
+  recentMessages: SlackRecentMessage[];
+  fetchRecentMessages: () => Promise<void>;
 }
 
 export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
@@ -46,6 +49,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [isPolling, setIsPolling] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [recentMessages, setRecentMessages] = useState<SlackRecentMessage[]>([]);
 
   const stats: SlackMessagesSyncStats = {
     messagesImported: config?.messagesImported ?? 0,
@@ -121,6 +125,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
       if (c.is_active) {
         setPhase("active");
+        // Fetch recent messages on init when active - done outside loadConfig to avoid circular dep
       } else {
         setPhase("select-workspace");
       }
@@ -135,6 +140,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     setIsLoading(true);
     await loadConfig();
     setIsLoading(false);
+    // fetchRecentMessages will be called separately after init
   }, [hasInitialized, loadConfig]);
 
   const fetchChannels = useCallback(async () => {
@@ -278,6 +284,37 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     }
   }, [toast]);
 
+  const fetchRecentMessages = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("slack_processed_messages" as any)
+        .select("id, slack_message_id, message_content, author_name, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error("Failed to fetch recent messages:", error);
+        return;
+      }
+
+      setRecentMessages(
+        (data || []).map((m: any) => ({
+          id: m.id,
+          slackMessageId: m.slack_message_id,
+          messageContent: m.message_content,
+          authorName: m.author_name,
+          createdAt: m.created_at,
+        }))
+      );
+    } catch (err) {
+      console.error("fetchRecentMessages error:", err);
+    }
+  }, []);
+
   const manualSync = useCallback(async () => {
     setIsPolling(true);
     try {
@@ -309,6 +346,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       });
     } finally {
       setIsPolling(false);
+      fetchRecentMessages();
     }
   }, [toast]);
 
@@ -344,6 +382,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       });
     } finally {
       setIsPolling(false);
+      fetchRecentMessages();
     }
   }, [toast]);
 
@@ -401,5 +440,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     resetConfig,
     initializeAfterAuthCheck,
     workspaceError,
+    recentMessages,
+    fetchRecentMessages,
   };
 }
