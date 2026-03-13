@@ -1,115 +1,66 @@
 
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+## Plan: Update Discord Message Tracker Active Monitoring to Match Slack
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+### Summary
+Add Recent Messages, Trigger Word filter, and Search Channel sections to the Discord active monitoring screen, matching the Slack Message Monitor layout. This requires database changes, edge function updates, hook updates, type updates, and UI changes.
 
-### 1. Database Tables (2 new tables via migration)
+### 1. Database Migration
+Add columns to `discord_automation_config` and `discord_processed_messages`:
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+```sql
+ALTER TABLE discord_automation_config
+  ADD COLUMN trigger_word text DEFAULT null,
+  ADD COLUMN trigger_word_enabled boolean DEFAULT false;
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
-
-### 2. Edge Function: `restaurant-bookmark-sync`
-
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
-
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
-
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
-
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
-
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
-
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
-
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
+ALTER TABLE discord_processed_messages
+  ADD COLUMN message_content text DEFAULT null,
+  ADD COLUMN author_name text DEFAULT null;
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+### 2. Edge Function (`discord-automation-triggers/index.ts`)
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+**Poll action** (~line 601): When inserting into `discord_processed_messages`, also store `message_content` (first 500 chars of `messageText`) and `author_name` (`authorDisplayName`). Before the message loop, read `trigger_word` and `trigger_word_enabled` from `pollConfig`. Skip messages that don't contain the trigger word (case-insensitive) when enabled.
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+**New `search` action**: Add a `search` case that fetches messages from the configured channel using the bot token with a query approach (fetch last 50 messages, filter by text match client-side since Discord has no search API for bots), deduplicates, and imports matches as memories. Pattern matches the Slack search action.
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+### 3. Types (`src/types/discordAutomation.ts`)
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+- Add `triggerWord` and `triggerWordEnabled` to `DiscordAutomationConfig`.
+- Add `DiscordRecentMessage` interface: `{ id, discordMessageId, messageContent, authorName, createdAt }`.
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+### 4. Hook (`src/hooks/useDiscordAutomation.ts`)
 
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+- Add state: `recentMessages: DiscordRecentMessage[]`, `triggerWord`, `triggerWordEnabled`.
+- Load `trigger_word`/`trigger_word_enabled` in `loadConfig`.
+- Add `loadRecentMessages()`: fetches last 20 from `discord_processed_messages` where `message_content` is not null, ordered by `created_at desc`.
+- Call `loadRecentMessages()` after `loadConfig` and after `syncNow`.
+- Add `updateTriggerWord(word, enabled)`: updates `discord_automation_config` directly.
+- Add `searchChannel(query)`: invokes edge function with `action: "search"`.
+- Expose new state and functions in return.
 
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+### 5. UI (`discord-automation/ActiveMonitoring.tsx`)
 
-### 8. Wire trigger into memory save
+Rewrite to match Slack's layout exactly, replacing the "How it works" section with:
+1. **Recent Messages** — collapsible list with author avatars, timestamps, content preview (same markup as Slack, using `#5865F2` Discord brand color instead of `#4A154B`).
+2. **Trigger Word Filter** — Switch + text input card (same as Slack).
+3. **Search Channel** — Input + search button card (same as Slack).
+4. Keep existing Sync Now / Pause / Reset buttons.
 
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+New props: `recentMessages`, `triggerWord`, `triggerWordEnabled`, `onUpdateTriggerWord`, `onSearch`.
 
-### Summary of files to create/modify
+### 6. Flow (`DiscordAutomationFlow.tsx`)
 
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
+Pass new props from hook to `ActiveMonitoring`: `recentMessages`, `triggerWord`, `triggerWordEnabled`, `onUpdateTriggerWord`, `onSearch`, rename `isSyncing` usage to match.
 
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+### Files Changed
+- New migration SQL
+- `supabase/functions/discord-automation-triggers/index.ts`
+- `src/types/discordAutomation.ts`
+- `src/hooks/useDiscordAutomation.ts`
+- `src/components/flows/discord-automation/ActiveMonitoring.tsx`
+- `src/components/flows/discord-automation/DiscordAutomationFlow.tsx`
+- `src/integrations/supabase/types.ts` (regenerated)
 
-**Database migration:** 2 tables + RLS policies
+No changes to Slack or any other flow.
 
