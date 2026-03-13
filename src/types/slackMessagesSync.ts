@@ -28,6 +28,8 @@ export interface SlackMessagesSyncConfig {
   selectedChannelNames: string[];
   messagesImported: number;
   lastPolledAt: string | null;
+  triggerWord: string | null;
+  triggerWordEnabled: boolean;
 }
 
 export interface SlackMessagesSyncStats {

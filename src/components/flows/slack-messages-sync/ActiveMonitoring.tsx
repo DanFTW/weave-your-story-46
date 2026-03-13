@@ -177,6 +177,44 @@ export function ActiveMonitoring({
           </div>
         </Collapsible>
 
+        {/* Trigger Word Filter */}
+        <div className="p-4 rounded-xl bg-card border border-border">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#4A154B]" />
+              <p className="font-medium text-foreground text-sm">Trigger Word</p>
+            </div>
+            <Switch
+              checked={triggerWordEnabled}
+              onCheckedChange={(checked) => onUpdateTriggerWord(localTriggerWord, checked)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={localTriggerWord}
+              onChange={(e) => setLocalTriggerWord(e.target.value)}
+              onBlur={() => {
+                if (localTriggerWord !== triggerWord) {
+                  onUpdateTriggerWord(localTriggerWord, triggerWordEnabled);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && localTriggerWord !== triggerWord) {
+                  onUpdateTriggerWord(localTriggerWord, triggerWordEnabled);
+                }
+              }}
+              placeholder="e.g. urgent, action-item..."
+              className="flex-1 h-10 px-3 rounded-lg bg-muted border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#4A154B]/30"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {triggerWordEnabled && triggerWord
+              ? `Only messages containing "${triggerWord}" will be saved`
+              : "When enabled, only messages with the trigger word are saved"}
+          </p>
+        </div>
+
         {/* Search */}
         <div className="p-4 rounded-xl bg-card border border-border">
           <div className="flex items-center gap-2 mb-3">

@@ -147,6 +147,9 @@ export function SlackMessagesSyncFlow() {
         onReset={resetConfig}
         isLoading={isLoading}
         isPolling={isPolling}
+        triggerWord={triggerWord}
+        triggerWordEnabled={triggerWordEnabled}
+        onUpdateTriggerWord={updateTriggerWord}
       />
     );
   }

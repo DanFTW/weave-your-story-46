@@ -360,5 +360,6 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     activate, deactivate, manualSync, manualSearch,
     resetConfig, initializeAfterAuthCheck, workspaceError,
     recentMessages, fetchRecentMessages,
+    triggerWord, triggerWordEnabled, updateTriggerWord,
   };
 }
