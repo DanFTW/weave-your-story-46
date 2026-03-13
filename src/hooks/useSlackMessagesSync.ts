@@ -111,7 +111,11 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
         selectedChannelNames: channelNames,
         messagesImported: c.messages_imported ?? 0,
         lastPolledAt: c.last_polled_at,
+        triggerWord: c.trigger_word ?? null,
+        triggerWordEnabled: c.trigger_word_enabled ?? false,
       });
+      setTriggerWord(c.trigger_word ?? "");
+      setTriggerWordEnabled(c.trigger_word_enabled ?? false);
       setSelectedChannelIds(channelIds);
       setSelectedChannelNames(channelNames);
 
