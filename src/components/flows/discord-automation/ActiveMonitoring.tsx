@@ -111,6 +111,16 @@ export function ActiveMonitoring({
         <div className="space-y-3">
           <Button
             variant="outline"
+            onClick={onSyncNow}
+            disabled={isLoading || isSyncing}
+            className="w-full h-12"
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", isSyncing && "animate-spin")} />
+            {isSyncing ? "Syncing..." : "Sync Now"}
+          </Button>
+
+          <Button
+            variant="outline"
             onClick={onPause}
             disabled={isLoading}
             className="w-full h-12"

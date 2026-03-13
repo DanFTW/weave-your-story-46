@@ -100,7 +100,9 @@ export function DiscordAutomationFlow() {
         channelName={config?.channelName || "Unknown Channel"}
         onPause={deactivateMonitoring}
         onReset={resetConfig}
+        onSyncNow={syncNow}
         isLoading={isLoading}
+        isSyncing={isSyncing}
       />
     );
   }

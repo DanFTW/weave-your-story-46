@@ -476,6 +476,129 @@ serve(async (req) => {
         });
       }
 
+      case "poll": {
+        // Manual sync: fetch recent messages from the monitored channel
+        const { data: pollConfig } = await supabaseClient
+          .from("discord_automation_config")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+
+        if (!pollConfig || !pollConfig.channel_id) {
+          return new Response(JSON.stringify({ error: "No channel configured" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const pollBotToken = Deno.env.get("DISCORD_BOT_TOKEN");
+        if (!pollBotToken) {
+          return new Response(JSON.stringify({ error: "Bot token not configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const messagesUrl = `https://discord.com/api/v10/channels/${pollConfig.channel_id}/messages?limit=50`;
+        const pollCtrl = new AbortController();
+        const pollTimeout = setTimeout(() => pollCtrl.abort(), 15_000);
+
+        let messages: any[];
+        try {
+          const msgRes = await fetch(messagesUrl, {
+            headers: { Authorization: `Bot ${pollBotToken}` },
+            signal: pollCtrl.signal,
+          });
+          clearTimeout(pollTimeout);
+
+          if (!msgRes.ok) {
+            const errBody = await msgRes.text();
+            console.error(`[Discord Poll] Messages API ${msgRes.status}:`, errBody.substring(0, 300));
+            return new Response(JSON.stringify({ error: `Discord API error (${msgRes.status})` }), {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          messages = await msgRes.json();
+        } catch (e) {
+          clearTimeout(pollTimeout);
+          console.error("[Discord Poll] Fetch failed:", e);
+          return new Response(JSON.stringify({ error: "Failed to fetch messages" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (!Array.isArray(messages)) {
+          return new Response(JSON.stringify({ messagesImported: 0 }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        let imported = 0;
+        for (const msg of messages) {
+          // Skip bot messages and empty content
+          if (msg.author?.bot) continue;
+          if (!msg.content || msg.content.trim() === "") continue;
+
+          // Deduplicate
+          const { data: dup } = await supabaseClient
+            .from("discord_processed_messages")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("discord_message_id", msg.id)
+            .maybeSingle();
+          if (dup) continue;
+
+          // Format memory (same format as webhook)
+          const sentDate = new Date(msg.timestamp).toLocaleString("en-US", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          });
+          const authorDisplayName = msg.author?.global_name || msg.author?.username || "Unknown";
+          const authorUsername = msg.author?.username || "unknown";
+          const memContent = `💬 Discord Message in #${pollConfig.channel_name || "unknown"}\n\nFrom: ${authorDisplayName} (@${authorUsername})\nMessage: ${msg.content}\nSent: ${sentDate}`;
+
+          const memRes = await fetch(`${SUPABASE_URL}/functions/v1/liam-memory`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "x-supabase-user-id": user.id,
+            },
+            body: JSON.stringify({ action: "create", content: memContent, tag: "DISCORD" }),
+          });
+
+          if (!memRes.ok) {
+            console.error("[Discord Poll] Memory creation failed for msg:", msg.id);
+            continue;
+          }
+
+          await supabaseClient
+            .from("discord_processed_messages")
+            .insert({ user_id: user.id, discord_message_id: msg.id });
+
+          imported++;
+        }
+
+        // Update stats
+        if (imported > 0) {
+          await supabaseClient
+            .from("discord_automation_config")
+            .update({
+              messages_tracked: (pollConfig.messages_tracked || 0) + imported,
+              last_checked_at: new Date().toISOString(),
+            })
+            .eq("user_id", user.id);
+        }
+
+        console.log(`[Discord Poll] Imported ${imported} messages`);
+        return new Response(JSON.stringify({ messagesImported: imported }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
           status: 400,
