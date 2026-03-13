@@ -199,7 +199,7 @@ serve(async (req) => {
 
             const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
 
-            const liamResp = await fetch("https://api.askbuddy.ai/api/memories", {
+            const liamResp = await fetch("https://web.askbuddy.ai/api/memories", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
