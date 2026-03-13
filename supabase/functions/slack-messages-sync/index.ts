@@ -302,6 +302,19 @@ serve(async (req) => {
       let totalBackfilled = 0;
       const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
 
+      // Build userId → displayName map
+      let userMap: Record<string, string> = {};
+      try {
+        const usersResult = await slackApi("users.list", {});
+        if (usersResult.ok && usersResult.members) {
+          for (const member of usersResult.members) {
+            userMap[member.id] = member.real_name || member.profile?.display_name || member.name || member.id;
+          }
+        }
+      } catch (err) {
+        console.error("[poll] Failed to fetch users.list:", err);
+      }
+
       for (const channelId of channelIds) {
         try {
           const historyResult = await slackApi("conversations.history", {
@@ -328,7 +341,8 @@ serve(async (req) => {
 
               if (existing) continue;
 
-              const memoryContent = `Slack message from ${msg.user || "unknown"}: ${msg.text}`;
+              const authorName = userMap[msg.user] || msg.user || "unknown";
+              const memoryContent = `Slack message from ${authorName}: ${msg.text}`;
               const liamResult = await createSlackMemory(liamApiKey, liamPrivateKey, liamUserKey, memoryContent);
 
               if (liamResult.ok) {
@@ -336,7 +350,7 @@ serve(async (req) => {
                   user_id: user.id,
                   slack_message_id: messageId,
                   message_content: (msg.text || "").substring(0, 500),
-                  author_name: msg.user || "unknown",
+                  author_name: authorName,
                 });
                 totalImported++;
               }
