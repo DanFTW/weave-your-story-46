@@ -17,6 +17,9 @@ interface ActiveMonitoringProps {
   onReset: () => Promise<void>;
   isLoading: boolean;
   isPolling: boolean;
+  triggerWord: string;
+  triggerWordEnabled: boolean;
+  onUpdateTriggerWord: (word: string, enabled: boolean) => Promise<void>;
 }
 
 export function ActiveMonitoring({
