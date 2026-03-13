@@ -1,7 +1,10 @@
-import { ChevronLeft, Hash, MessageSquare, Pause, RefreshCw, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { ChevronLeft, ChevronDown, ChevronUp, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, Search, User, Filter } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { DiscordAutomationStats } from "@/types/discordAutomation";
+import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DiscordAutomationStats, DiscordRecentMessage } from "@/types/discordAutomation";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
@@ -9,28 +12,47 @@ interface ActiveMonitoringProps {
   stats: DiscordAutomationStats;
   serverName: string;
   channelName: string;
+  recentMessages: DiscordRecentMessage[];
   onPause: () => Promise<void>;
   onReset: () => Promise<void>;
   onSyncNow: () => Promise<void>;
+  onSearch: (query: string) => Promise<void>;
   isLoading: boolean;
   isSyncing: boolean;
+  triggerWord: string;
+  triggerWordEnabled: boolean;
+  onUpdateTriggerWord: (word: string, enabled: boolean) => Promise<void>;
 }
 
 export function ActiveMonitoring({
   stats,
   serverName,
   channelName,
+  recentMessages,
   onPause,
   onReset,
   onSyncNow,
+  onSearch,
   isLoading,
   isSyncing,
+  triggerWord,
+  triggerWordEnabled,
+  onUpdateTriggerWord,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [messagesOpen, setMessagesOpen] = useState(true);
+  const [localTriggerWord, setLocalTriggerWord] = useState(triggerWord);
 
   const lastCheckedText = stats.lastChecked
     ? formatDistanceToNow(new Date(stats.lastChecked), { addSuffix: true })
     : "Never";
+
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      onSearch(searchQuery.trim());
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-nav">
@@ -65,7 +87,7 @@ export function ActiveMonitoring({
       <div className="px-5 pt-5 space-y-6">
         {/* Channel Info */}
         <div className="p-4 rounded-xl bg-card border border-border">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[#5865F2] flex items-center justify-center">
               <Hash className="w-5 h-5 text-white" />
             </div>
@@ -96,17 +118,128 @@ export function ActiveMonitoring({
           </div>
         </div>
 
-        {/* How it works */}
-        <div className="p-4 rounded-xl bg-muted/50 border border-border">
-          <h3 className="font-medium text-foreground mb-2">How it works</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li className="flex items-start gap-2">
-              <MessageSquare className="w-4 h-4 text-[#5865F2] mt-0.5 flex-shrink-0" />
-              <span>
-                When a new message is posted in #{channelName}, it's automatically saved as a memory.
-              </span>
-            </li>
-          </ul>
+        {/* Recent Messages */}
+        <Collapsible open={messagesOpen} onOpenChange={setMessagesOpen}>
+          <div className="rounded-xl bg-card border border-border overflow-hidden">
+            <CollapsibleTrigger asChild>
+              <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-[#5865F2]" />
+                  <span className="font-medium text-foreground text-sm">Recent Messages</span>
+                  {recentMessages.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-[#5865F2]/10 text-[#5865F2] text-xs font-medium">
+                      {recentMessages.length}
+                    </span>
+                  )}
+                </div>
+                {messagesOpen ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="border-t border-border">
+                {recentMessages.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <p className="text-sm text-muted-foreground">No messages imported yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Tap "Sync Now" to import messages</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border max-h-80 overflow-y-auto">
+                    {recentMessages.map((msg) => (
+                      <div key={msg.id} className="px-4 py-3 flex gap-3">
+                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <User className="w-3.5 h-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm font-medium text-foreground truncate">
+                              {msg.authorName || "Unknown"}
+                            </span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                              {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
+                            {msg.messageContent || "No content"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+
+        {/* Trigger Word Filter */}
+        <div className="p-4 rounded-xl bg-card border border-border">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#5865F2]" />
+              <p className="font-medium text-foreground text-sm">Trigger Word</p>
+            </div>
+            <Switch
+              checked={triggerWordEnabled}
+              onCheckedChange={(checked) => onUpdateTriggerWord(localTriggerWord, checked)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={localTriggerWord}
+              onChange={(e) => setLocalTriggerWord(e.target.value)}
+              onBlur={() => {
+                if (localTriggerWord !== triggerWord) {
+                  onUpdateTriggerWord(localTriggerWord, triggerWordEnabled);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && localTriggerWord !== triggerWord) {
+                  onUpdateTriggerWord(localTriggerWord, triggerWordEnabled);
+                }
+              }}
+              placeholder="e.g. urgent, action-item..."
+              className="flex-1 h-10 px-3 rounded-lg bg-muted border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#5865F2]/30"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {triggerWordEnabled && triggerWord
+              ? `Only messages containing "${triggerWord}" will be saved`
+              : "When enabled, only messages with the trigger word are saved"}
+          </p>
+        </div>
+
+        {/* Search */}
+        <div className="p-4 rounded-xl bg-card border border-border">
+          <div className="flex items-center gap-2 mb-3">
+            <Search className="w-4 h-4 text-[#5865F2]" />
+            <p className="font-medium text-foreground text-sm">Search Channel</p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              placeholder="Search messages..."
+              className="flex-1 h-10 px-3 rounded-lg bg-muted border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#5865F2]/30"
+            />
+            <Button
+              size="sm"
+              onClick={handleSearch}
+              disabled={isSyncing || !searchQuery.trim()}
+              className="h-10 bg-[#5865F2] hover:bg-[#5865F2]/90"
+            >
+              {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Search across channel content and save matches as memories
+          </p>
         </div>
 
         {/* Actions */}
