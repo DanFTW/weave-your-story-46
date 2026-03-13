@@ -327,8 +327,18 @@ serve(async (req) => {
             const allMessages = historyResult.messages || [];
             console.log(`[poll] Channel ${channelId}: ${allMessages.length} messages`);
 
+            const triggerWordEnabled = configData.trigger_word_enabled === true;
+            const triggerWord = configData.trigger_word || "";
+
             for (const msg of allMessages) {
               if (msg.subtype) continue;
+
+              // Apply trigger word filter
+              if (triggerWordEnabled && triggerWord) {
+                if (!msg.text || !msg.text.toLowerCase().includes(triggerWord.toLowerCase())) {
+                  continue;
+                }
+              }
 
               const messageId = `${channelId}_${msg.ts}`;
 

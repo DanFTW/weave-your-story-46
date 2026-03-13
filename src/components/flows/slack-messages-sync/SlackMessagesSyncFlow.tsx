@@ -23,6 +23,7 @@ export function SlackMessagesSyncFlow() {
     activate, deactivate, manualSync, manualSearch,
     resetConfig, initializeAfterAuthCheck, workspaceError,
     recentMessages, fetchRecentMessages,
+    triggerWord, triggerWordEnabled, updateTriggerWord,
   } = useSlackMessagesSync();
 
   const [shouldActivate, setShouldActivate] = useState(false);
@@ -146,6 +147,9 @@ export function SlackMessagesSyncFlow() {
         onReset={resetConfig}
         isLoading={isLoading}
         isPolling={isPolling}
+        triggerWord={triggerWord}
+        triggerWordEnabled={triggerWordEnabled}
+        onUpdateTriggerWord={updateTriggerWord}
       />
     );
   }

@@ -19,6 +19,9 @@ interface UseSlackMessagesSyncReturn {
   isLoading: boolean;
   isPolling: boolean;
   stats: SlackMessagesSyncStats;
+  triggerWord: string;
+  triggerWordEnabled: boolean;
+  updateTriggerWord: (word: string, enabled: boolean) => Promise<void>;
   fetchChannels: (teamId?: string) => Promise<void>;
   fetchWorkspace: () => Promise<void>;
   selectWorkspace: (workspace: SlackWorkspace) => void;
@@ -50,6 +53,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
   const [isPolling, setIsPolling] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [recentMessages, setRecentMessages] = useState<SlackRecentMessage[]>([]);
+  const [triggerWord, setTriggerWord] = useState("");
+  const [triggerWordEnabled, setTriggerWordEnabled] = useState(false);
 
   const stats: SlackMessagesSyncStats = {
     messagesImported: config?.messagesImported ?? 0,
@@ -106,7 +111,11 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
         selectedChannelNames: channelNames,
         messagesImported: c.messages_imported ?? 0,
         lastPolledAt: c.last_polled_at,
+        triggerWord: c.trigger_word ?? null,
+        triggerWordEnabled: c.trigger_word_enabled ?? false,
       });
+      setTriggerWord(c.trigger_word ?? "");
+      setTriggerWordEnabled(c.trigger_word_enabled ?? false);
       setSelectedChannelIds(channelIds);
       setSelectedChannelNames(channelNames);
 
@@ -193,6 +202,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
             selectedChannelNames,
             messagesImported: 0,
             lastPolledAt: null,
+            triggerWord: null,
+            triggerWordEnabled: false,
           }
       );
 
@@ -302,6 +313,25 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     }
   }, [toast, fetchRecentMessages]);
 
+  const updateTriggerWord = useCallback(async (word: string, enabled: boolean) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from("slack_messages_config" as any)
+        .update({ trigger_word: word || null, trigger_word_enabled: enabled })
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setTriggerWord(word);
+      setTriggerWordEnabled(enabled);
+      setConfig(prev => prev ? { ...prev, triggerWord: word || null, triggerWordEnabled: enabled } : null);
+      toast({ title: "Trigger word updated", description: enabled && word ? `Filtering for "${word}"` : "All messages will be saved." });
+    } catch (error) {
+      console.error("Failed to update trigger word:", error);
+      toast({ title: "Update failed", description: "Could not save trigger word settings.", variant: "destructive" });
+    }
+  }, [toast]);
+
   const resetConfig = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -332,5 +362,6 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     activate, deactivate, manualSync, manualSearch,
     resetConfig, initializeAfterAuthCheck, workspaceError,
     recentMessages, fetchRecentMessages,
+    triggerWord, triggerWordEnabled, updateTriggerWord,
   };
 }
