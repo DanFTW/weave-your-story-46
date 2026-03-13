@@ -93,6 +93,13 @@ export function SlackMessagesSyncFlow() {
     }
   }, [selectedChannelId]);
 
+  // Fetch recent messages when phase becomes active
+  useEffect(() => {
+    if (phase === "active") {
+      fetchRecentMessages();
+    }
+  }, [phase, fetchRecentMessages]);
+
   if (isCheckingAuth) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
