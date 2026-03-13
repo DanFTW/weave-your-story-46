@@ -5,9 +5,10 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSlackMessagesSync } from "@/hooks/useSlackMessagesSync";
 import { ChannelPicker } from "./ChannelPicker";
+import { WorkspacePicker } from "./WorkspacePicker";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
-import { SlackChannel } from "@/types/slackMessagesSync";
+import { SlackChannel, SlackWorkspace } from "@/types/slackMessagesSync";
 
 export function SlackMessagesSyncFlow() {
   const navigate = useNavigate();
@@ -19,10 +20,13 @@ export function SlackMessagesSyncFlow() {
     setPhase,
     config,
     channels,
+    workspace,
     isLoading,
     isPolling,
     stats,
     fetchChannels,
+    fetchWorkspace,
+    selectWorkspace,
     selectChannel,
     selectedChannelId,
     activate,
@@ -31,6 +35,7 @@ export function SlackMessagesSyncFlow() {
     manualSearch,
     resetConfig,
     initializeAfterAuthCheck,
+    workspaceError,
   } = useSlackMessagesSync();
 
   useEffect(() => {
@@ -51,7 +56,6 @@ export function SlackMessagesSyncFlow() {
           .maybeSingle();
 
         const connected = Boolean(data);
-        console.log("SlackMessagesSyncFlow: auth check result", { connected });
         setIsSlackConnected(connected);
       } catch (err) {
         console.error("Slack auth check failed:", err);
@@ -72,6 +76,13 @@ export function SlackMessagesSyncFlow() {
       navigate("/integration/slack");
     }
   }, [isSlackConnected, isCheckingAuth, navigate, initializeAfterAuthCheck]);
+
+  // Fetch workspace when entering select-workspace phase
+  useEffect(() => {
+    if (phase === "select-workspace" && !workspace && !isLoading) {
+      fetchWorkspace();
+    }
+  }, [phase, workspace, isLoading, fetchWorkspace]);
 
   // Trigger activate after channel selection
   useEffect(() => {
@@ -104,7 +115,6 @@ export function SlackMessagesSyncFlow() {
 
   if (phase === "needs-reconnect") {
     const handleReconnect = async () => {
-      // Delete the stale integration row so the user can re-auth cleanly
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await supabase
@@ -163,16 +173,33 @@ export function SlackMessagesSyncFlow() {
     );
   }
 
+  const handleWorkspaceSelected = (ws: SlackWorkspace) => {
+    selectWorkspace(ws);
+    fetchChannels();
+  };
+
   const handleChannelSelected = (channel: SlackChannel) => {
     selectChannel(channel.id, channel.name);
   };
+
+  const handleBack = () => {
+    if (phase === "select-channels") {
+      setPhase("select-workspace");
+    } else {
+      navigate("/threads");
+    }
+  };
+
+  const headerSubtitle = phase === "select-workspace"
+    ? "Select a workspace"
+    : "Select a channel to monitor";
 
   return (
     <div className="min-h-screen bg-background pb-nav">
       <div className={cn("relative px-5 pt-status-bar pb-6 thread-gradient-purple")}>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate("/threads")}
+            onClick={handleBack}
             className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
           >
             <ChevronLeft className="w-6 h-6 text-white" />
@@ -183,13 +210,23 @@ export function SlackMessagesSyncFlow() {
               Slack Channel Monitor
             </h1>
             <p className="text-white/70 text-sm truncate">
-              Select a channel to monitor
+              {headerSubtitle}
             </p>
           </div>
         </div>
       </div>
 
       <div className="px-5 pt-5">
+        {phase === "select-workspace" && (
+          <WorkspacePicker
+            workspace={workspace}
+            isLoading={isLoading}
+            hasError={workspaceError}
+            onSelectWorkspace={handleWorkspaceSelected}
+            onRefresh={fetchWorkspace}
+          />
+        )}
+
         {phase === "select-channels" && (
           <ChannelPicker
             channels={channels}
