@@ -135,7 +135,7 @@ serve(async (req) => {
 
     async function slackApi(method: string, params: Record<string, any> = {}) {
       const url = new URL(`https://slack.com/api/${method}`);
-      const getParams = ["conversations.list", "conversations.history", "users.list"];
+      const getParams = ["conversations.list", "conversations.history", "users.list", "team.info"];
 
       let result;
       if (getParams.includes(method)) {
@@ -161,6 +161,27 @@ serve(async (req) => {
       }
 
       return result;
+    }
+
+    if (action === "list-workspace") {
+      const result = await slackApi("team.info");
+      if (!result.ok) {
+        return new Response(JSON.stringify({ error: result.error || "Failed to fetch workspace" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const team = result.team;
+      return new Response(JSON.stringify({
+        workspace: {
+          id: team.id,
+          name: team.name,
+          icon: team.icon?.image_132 || team.icon?.image_88 || null,
+        },
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (action === "list-channels") {

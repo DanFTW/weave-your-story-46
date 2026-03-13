@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   SlackMessagesSyncPhase,
   SlackChannel,
+  SlackWorkspace,
   SlackMessagesSyncConfig,
   SlackMessagesSyncStats,
 } from "@/types/slackMessagesSync";
@@ -13,10 +14,13 @@ interface UseSlackMessagesSyncReturn {
   setPhase: (phase: SlackMessagesSyncPhase) => void;
   config: SlackMessagesSyncConfig | null;
   channels: SlackChannel[];
+  workspace: SlackWorkspace | null;
   isLoading: boolean;
   isPolling: boolean;
   stats: SlackMessagesSyncStats;
   fetchChannels: () => Promise<void>;
+  fetchWorkspace: () => Promise<void>;
+  selectWorkspace: (workspace: SlackWorkspace) => void;
   selectChannel: (channelId: string, channelName: string) => void;
   selectedChannelId: string | null;
   selectedChannelName: string | null;
@@ -26,6 +30,7 @@ interface UseSlackMessagesSyncReturn {
   manualSearch: (query: string) => Promise<void>;
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
+  workspaceError: boolean;
 }
 
 export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
@@ -34,6 +39,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
   const [phase, setPhase] = useState<SlackMessagesSyncPhase>("auth-check");
   const [config, setConfig] = useState<SlackMessagesSyncConfig | null>(null);
   const [channels, setChannels] = useState<SlackChannel[]>([]);
+  const [workspace, setWorkspace] = useState<SlackWorkspace | null>(null);
+  const [workspaceError, setWorkspaceError] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedChannelName, setSelectedChannelName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +53,46 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     isActive: config?.isActive ?? false,
     channelName: config?.selectedChannelName ?? selectedChannelName,
   };
+
+  const fetchWorkspace = useCallback(async () => {
+    setIsLoading(true);
+    setWorkspaceError(false);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "slack-messages-sync",
+        { body: { action: "list-workspace" } }
+      );
+      if (error) throw error;
+      if (data.error) {
+        if (data.error === "Slack not connected" || data.needsReconnect) {
+          setPhase("needs-reconnect");
+          return;
+        }
+        setWorkspaceError(true);
+        toast({
+          title: "Failed to load workspace",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
+      }
+      setWorkspace(data.workspace || null);
+    } catch (error: any) {
+      console.error("Failed to fetch workspace:", error);
+      setWorkspaceError(true);
+      toast({
+        title: "Failed to fetch workspace",
+        description: "Could not load your Slack workspace. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  const selectWorkspace = useCallback((_workspace: SlackWorkspace) => {
+    setPhase("select-channels");
+  }, []);
 
   const loadConfig = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -65,7 +112,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
         userId: c.user_id,
         isActive: c.is_active ?? false,
         selectedChannelId: channelIds[0] ?? null,
-        selectedChannelName: c.selected_workspace_ids?.[0] ?? null, // reuse workspace_ids field for channel name
+        selectedChannelName: c.selected_workspace_ids?.[0] ?? null,
         messagesImported: c.messages_imported ?? 0,
         lastPolledAt: c.last_polled_at,
       });
@@ -75,10 +122,10 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       if (c.is_active) {
         setPhase("active");
       } else {
-        setPhase("select-channels");
+        setPhase("select-workspace");
       }
     } else {
-      setPhase("select-channels");
+      setPhase("select-workspace");
     }
   }, []);
 
@@ -99,7 +146,6 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       );
       if (error) throw error;
       if (data.error) {
-        // Detect token-missing scenario from edge function
         if (data.error === "Slack not connected" || data.needsReconnect) {
           setPhase("needs-reconnect");
           return;
@@ -159,7 +205,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
             is_active: true,
             search_mode: false,
             selected_channel_ids: [selectedChannelId],
-            selected_workspace_ids: [selectedChannelName], // store channel name here
+            selected_workspace_ids: [selectedChannelName],
           },
           { onConflict: "user_id" }
         );
@@ -316,7 +362,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
       setChannels([]);
       setSelectedChannelId(null);
       setSelectedChannelName(null);
-      setPhase("select-channels");
+      setPhase("select-workspace");
     } catch (error) {
       console.error("Failed to reset:", error);
       toast({
@@ -334,10 +380,13 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     setPhase,
     config,
     channels,
+    workspace,
     isLoading,
     isPolling,
     stats,
     fetchChannels,
+    fetchWorkspace,
+    selectWorkspace,
     selectChannel,
     selectedChannelId,
     selectedChannelName,
@@ -347,5 +396,6 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
     manualSearch,
     resetConfig,
     initializeAfterAuthCheck,
+    workspaceError,
   };
 }

@@ -1,9 +1,16 @@
 export type SlackMessagesSyncPhase =
   | 'auth-check'
+  | 'select-workspace'
   | 'select-channels'
   | 'activating'
   | 'active'
   | 'needs-reconnect';
+
+export interface SlackWorkspace {
+  id: string;
+  name: string;
+  icon?: string;
+}
 
 export interface SlackChannel {
   id: string;
