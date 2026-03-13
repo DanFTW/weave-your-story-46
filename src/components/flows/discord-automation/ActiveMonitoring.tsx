@@ -1,4 +1,4 @@
-import { ChevronLeft, Hash, MessageSquare, Pause, RotateCcw } from "lucide-react";
+import { ChevronLeft, Hash, MessageSquare, Pause, RefreshCw, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DiscordAutomationStats } from "@/types/discordAutomation";
