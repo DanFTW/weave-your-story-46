@@ -642,7 +642,7 @@ serve(async (req) => {
 
       case "search": {
         // Search channel messages by query string and import matches as memories
-        const { query: searchQuery } = await req.json().catch(() => ({ query: "" }));
+        const searchQuery = query || "";
 
         const { data: searchConfig } = await supabaseClient
           .from("discord_automation_config")
