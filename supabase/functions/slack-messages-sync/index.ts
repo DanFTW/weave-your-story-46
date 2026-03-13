@@ -360,11 +360,12 @@ serve(async (req) => {
             for (const msg of allMessages) {
               if (msg.subtype) continue;
               const messageId = `${channelId}_${msg.ts}`;
+              const authorName = userMap[msg.user] || msg.user || "unknown";
               const { data: updated } = await adminClient
                 .from("slack_processed_messages")
                 .update({
                   message_content: (msg.text || "").substring(0, 500),
-                  author_name: msg.user || "unknown",
+                  author_name: authorName,
                 })
                 .eq("user_id", user.id)
                 .eq("slack_message_id", messageId)
