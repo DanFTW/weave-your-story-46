@@ -364,12 +364,18 @@ export function useComposio(toolkit: string): UseComposioReturn {
       if (!session) return;
 
       if (toolkit.toLowerCase() === "slack") {
-        // Slack: just delete the DB record (no Composio connection to revoke)
+        // Slack: delete DB record and clear message monitor config
         await supabase
           .from("user_integrations")
           .delete()
           .eq("user_id", session.user.id)
           .eq("integration_id", "slack");
+
+        // Clear Slack Message Monitor config so reconnect starts fresh
+        await supabase
+          .from("slack_messages_config" as any)
+          .delete()
+          .eq("user_id", session.user.id);
       } else {
         // Call edge function to revoke Composio connection and delete DB record
         const { error } = await supabase.functions.invoke("composio-disconnect", {
