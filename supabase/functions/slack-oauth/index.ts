@@ -11,7 +11,7 @@ const SLACK_CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const SLACK_USER_SCOPES = "channels:read,channels:history,search:read,users:read,users:read.email";
+const SLACK_USER_SCOPES = "channels:read,channels:history,search:read,users:read,users:read.email,team:read";
 const REDIRECT_URI = "https://weave-your-story-46.lovable.app/oauth-complete";
 
 serve(async (req) => {
