@@ -124,6 +124,7 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
       if (c.is_active) {
         setPhase("active");
+        // Fetch recent messages on init when active - done outside loadConfig to avoid circular dep
       } else {
         setPhase("select-workspace");
       }
