@@ -33,6 +33,8 @@ export function DiscordAutomationFlow() {
     deactivateMonitoring,
     resetConfig,
     initializeAfterAuthCheck,
+    syncNow,
+    isSyncing,
   } = useDiscordAutomation();
 
   // Check Discord connection on mount
@@ -98,7 +100,9 @@ export function DiscordAutomationFlow() {
         channelName={config?.channelName || "Unknown Channel"}
         onPause={deactivateMonitoring}
         onReset={resetConfig}
+        onSyncNow={syncNow}
         isLoading={isLoading}
+        isSyncing={isSyncing}
       />
     );
   }

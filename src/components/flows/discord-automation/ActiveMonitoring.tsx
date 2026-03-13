@@ -1,4 +1,4 @@
-import { ChevronLeft, Hash, MessageSquare, Pause, RotateCcw } from "lucide-react";
+import { ChevronLeft, Hash, MessageSquare, Pause, RefreshCw, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DiscordAutomationStats } from "@/types/discordAutomation";
@@ -11,7 +11,9 @@ interface ActiveMonitoringProps {
   channelName: string;
   onPause: () => Promise<void>;
   onReset: () => Promise<void>;
+  onSyncNow: () => Promise<void>;
   isLoading: boolean;
+  isSyncing: boolean;
 }
 
 export function ActiveMonitoring({
@@ -20,7 +22,9 @@ export function ActiveMonitoring({
   channelName,
   onPause,
   onReset,
+  onSyncNow,
   isLoading,
+  isSyncing,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
 
@@ -107,6 +111,16 @@ export function ActiveMonitoring({
 
         {/* Actions */}
         <div className="space-y-3">
+          <Button
+            variant="outline"
+            onClick={onSyncNow}
+            disabled={isLoading || isSyncing}
+            className="w-full h-12"
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", isSyncing && "animate-spin")} />
+            {isSyncing ? "Syncing..." : "Sync Now"}
+          </Button>
+
           <Button
             variant="outline"
             onClick={onPause}

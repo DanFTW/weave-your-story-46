@@ -27,6 +27,8 @@ interface UseDiscordAutomationReturn {
   deactivateMonitoring: () => Promise<void>;
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
+  syncNow: () => Promise<void>;
+  isSyncing: boolean;
 }
 
 export function useDiscordAutomation(): UseDiscordAutomationReturn {
@@ -40,6 +42,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const [hasLoadError, setHasLoadError] = useState(false);
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const stats: DiscordAutomationStats = {
     messagesTracked: config?.messagesTracked ?? 0,
@@ -413,6 +416,43 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     }
   }, [config, toast]);
 
+  const syncNow = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "discord-automation-triggers",
+        { body: { action: "poll" } }
+      );
+      if (error) throw error;
+      if (data?.error) {
+        toast({
+          title: "Sync failed",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
+      }
+      const count = data?.messagesImported ?? 0;
+      toast({
+        title: "Sync complete",
+        description: count > 0
+          ? `Imported ${count} new message${count > 1 ? "s" : ""}.`
+          : "No new messages found.",
+      });
+      // Refresh config to update stats
+      await loadConfig();
+    } catch (error) {
+      console.error("Failed to sync:", error);
+      toast({
+        title: "Sync failed",
+        description: "Could not sync messages. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [toast, loadConfig]);
+
   return {
     phase,
     setPhase,
@@ -431,5 +471,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     deactivateMonitoring,
     resetConfig,
     initializeAfterAuthCheck,
+    syncNow,
+    isSyncing,
   };
 }
