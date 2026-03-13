@@ -135,7 +135,7 @@ serve(async (req) => {
 
     async function slackApi(method: string, params: Record<string, any> = {}) {
       const url = new URL(`https://slack.com/api/${method}`);
-      const getParams = ["conversations.list", "conversations.history", "users.list"];
+      const getParams = ["conversations.list", "conversations.history", "users.list", "team.info"];
 
       let result;
       if (getParams.includes(method)) {
