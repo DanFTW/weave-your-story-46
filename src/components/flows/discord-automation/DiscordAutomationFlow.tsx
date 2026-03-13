@@ -33,6 +33,8 @@ export function DiscordAutomationFlow() {
     deactivateMonitoring,
     resetConfig,
     initializeAfterAuthCheck,
+    syncNow,
+    isSyncing,
   } = useDiscordAutomation();
 
   // Check Discord connection on mount
