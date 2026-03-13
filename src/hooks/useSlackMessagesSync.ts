@@ -53,6 +53,8 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
   const [isPolling, setIsPolling] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [recentMessages, setRecentMessages] = useState<SlackRecentMessage[]>([]);
+  const [triggerWord, setTriggerWord] = useState("");
+  const [triggerWordEnabled, setTriggerWordEnabled] = useState(false);
 
   const stats: SlackMessagesSyncStats = {
     messagesImported: config?.messagesImported ?? 0,
