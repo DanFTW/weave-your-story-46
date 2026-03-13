@@ -373,15 +373,20 @@ serve(async (req) => {
 
         // All connections failed — differentiate 403 (permissions) from 401 (auth)
         const is403 = lastStatus === 403;
+        const hasBotConn = !!botIntegration?.composio_connection_id;
         return new Response(JSON.stringify({
           error: is403
             ? "Bot does not have access to this server. Please add the bot to the server or choose a different one."
-            : "Discord connection expired. Please reconnect Discord.",
+            : hasBotConn
+              ? "Discord bot authorization has expired. Please reconnect Discord."
+              : "No Discord bot connection found. Please connect the Discord bot integration.",
           details: is403
             ? "The bot lacks permissions for this server's channels."
-            : "All available Discord connections failed to list channels.",
+            : hasBotConn
+              ? "The bot token is no longer valid. Reconnecting will generate a fresh token."
+              : "Channel listing requires a bot connection.",
           channels: [],
-          requiresReconnect: !is403, // Only true for genuine auth failures, not permission issues
+          requiresReconnect: !is403,
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
