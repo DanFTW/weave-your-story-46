@@ -27,6 +27,8 @@ interface UseDiscordAutomationReturn {
   deactivateMonitoring: () => Promise<void>;
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
+  syncNow: () => Promise<void>;
+  isSyncing: boolean;
 }
 
 export function useDiscordAutomation(): UseDiscordAutomationReturn {
