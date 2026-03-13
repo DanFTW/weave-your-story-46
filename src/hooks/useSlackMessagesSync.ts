@@ -353,15 +353,19 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
 
     setIsLoading(true);
     try {
-      await supabase
+      const { error } = await supabase
         .from("slack_messages_config" as any)
         .delete()
         .eq("user_id", user.id);
 
+      if (error) throw error;
+
       setConfig(null);
       setChannels([]);
+      setWorkspace(null);
       setSelectedChannelId(null);
       setSelectedChannelName(null);
+      setHasInitialized(false);
       setPhase("select-workspace");
     } catch (error) {
       console.error("Failed to reset:", error);
