@@ -267,6 +267,7 @@ serve(async (req) => {
       }
 
       let totalImported = 0;
+      let totalBackfilled = 0;
       const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
 
       for (const channelId of channelIds) {
@@ -308,6 +309,23 @@ serve(async (req) => {
                 totalImported++;
               }
             }
+
+            // Backfill: update existing rows that have null content (from pre-migration imports)
+            for (const msg of allMessages) {
+              if (msg.subtype) continue;
+              const messageId = `${channelId}_${msg.ts}`;
+              const { data: updated } = await adminClient
+                .from("slack_processed_messages")
+                .update({
+                  message_content: (msg.text || "").substring(0, 500),
+                  author_name: msg.user || "unknown",
+                })
+                .eq("user_id", user.id)
+                .eq("slack_message_id", messageId)
+                .is("message_content", null)
+                .select("id");
+              if (updated && updated.length > 0) totalBackfilled += updated.length;
+            }
           }
         } catch (err) {
           console.error(`Failed to fetch history for channel ${channelId}:`, err);
@@ -322,7 +340,7 @@ serve(async (req) => {
         })
         .eq("user_id", user.id);
 
-      return new Response(JSON.stringify({ success: true, messagesImported: totalImported }), {
+      return new Response(JSON.stringify({ success: true, messagesImported: totalImported, backfilled: totalBackfilled }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

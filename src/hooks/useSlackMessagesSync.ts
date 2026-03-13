@@ -260,10 +260,14 @@ export function useSlackMessagesSync(): UseSlackMessagesSyncReturn {
           : null
         );
       }
-      toast({
-        title: "Sync complete",
-        description: data.messagesImported ? `Imported ${data.messagesImported} new messages.` : "No new messages found.",
-      });
+      const imported = data.messagesImported || 0;
+      const backfilled = data.backfilled || 0;
+      const description = imported > 0
+        ? `Imported ${imported} new messages.`
+        : backfilled > 0
+          ? `Updated ${backfilled} existing messages.`
+          : "No new messages found.";
+      toast({ title: "Sync complete", description });
     } catch (error) {
       console.error("Manual sync failed:", error);
       toast({ title: "Sync failed", description: "Could not complete sync. Please try again.", variant: "destructive" });
