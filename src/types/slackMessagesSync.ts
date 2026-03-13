@@ -36,3 +36,11 @@ export interface SlackMessagesSyncStats {
   isActive: boolean;
   channelName: string | null;
 }
+
+export interface SlackRecentMessage {
+  id: string;
+  slackMessageId: string;
+  messageContent: string | null;
+  authorName: string | null;
+  createdAt: string;
+}

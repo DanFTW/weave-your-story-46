@@ -404,6 +404,8 @@ serve(async (req) => {
             await adminClient.from("slack_processed_messages").insert({
               user_id: user.id,
               slack_message_id: messageId,
+              message_content: (msg.text || "").substring(0, 500),
+              author_name: msg.username || "unknown",
             });
             totalImported++;
           }
