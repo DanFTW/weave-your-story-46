@@ -238,7 +238,7 @@ serve(async (req) => {
       );
     }
 
-    const { toolkit, baseUrl, forceReauth = false } = await req.json();
+    const { toolkit, baseUrl, forceReauth = false, credentials } = await req.json();
     const toolkitLower = toolkit?.toLowerCase() || "";
     
     console.log(`Initiating OAuth for toolkit: ${toolkit}`);
