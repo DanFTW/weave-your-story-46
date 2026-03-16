@@ -54,6 +54,7 @@ export function TwitterSyncFlow() {
       loadConfig();
       fetchRecentTweets();
     } else {
+      sessionStorage.setItem('returnAfterTwitterConnect', '/flow/twitter-sync');
       navigate('/integration/twitter');
     }
   }, [twitter.isConnected, isCheckingAuth]);

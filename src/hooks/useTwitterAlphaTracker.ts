@@ -50,6 +50,7 @@ export function useTwitterAlphaTracker() {
           title: "Twitter not connected",
           description: "Please connect your Twitter account first.",
         });
+        sessionStorage.setItem('returnAfterTwitterConnect', '/flow/twitter-alpha-tracker');
         navigate("/integration/twitter");
         return;
       }
