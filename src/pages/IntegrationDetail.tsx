@@ -10,6 +10,7 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { OAuthConfirmDialog } from "@/components/integrations/OAuthConfirmDialog";
+import { ApiKeyCredentialForm, getApiKeyFields, getApiKeyHelpUrl } from "@/components/integrations/ApiKeyCredentialForm";
 import { useComposio } from "@/hooks/useComposio";
 import { useIOSContacts, isDespiaIOS } from "@/hooks/useIOSContacts";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +20,7 @@ export default function IntegrationDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [isSubmittingCredentials, setIsSubmittingCredentials] = useState(false);
   
   const isIOSContacts = integrationId === "ios-contacts";
   
@@ -109,6 +111,26 @@ export default function IntegrationDetail() {
         description: errorMsg,
         variant: "destructive",
       });
+    }
+  };
+
+  // API-key toolkit detection
+  const apiKeyFields = integrationId ? getApiKeyFields(integrationId) : null;
+  const apiKeyHelpUrl = integrationId ? getApiKeyHelpUrl(integrationId) : undefined;
+
+  const handleCredentialSubmit = async (credentials: Record<string, string>) => {
+    setIsSubmittingCredentials(true);
+    try {
+      await connect(`/integration/${integrationId}`, false, credentials);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Connection failed";
+      toast({
+        title: "Connection failed",
+        description: errorMsg,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingCredentials(false);
     }
   };
 
@@ -261,6 +283,14 @@ export default function IntegrationDetail() {
                         This integration is only available in the iOS app.
                       </p>
                     </div>
+                  ) : apiKeyFields ? (
+                    <ApiKeyCredentialForm
+                      integrationName={integration.name}
+                      fields={apiKeyFields}
+                      onSubmit={handleCredentialSubmit}
+                      isSubmitting={isSubmittingCredentials}
+                      helpUrl={apiKeyHelpUrl}
+                    />
                   ) : (
                     <IntegrationConnectButton onClick={handleConnect} />
                   )}

@@ -14,7 +14,7 @@ interface UseComposioReturn {
   connecting: boolean;
   checking: boolean;
   isConnected: boolean;
-  connect: (customRedirectPath?: string, forceReauth?: boolean) => Promise<void>;
+  connect: (customRedirectPath?: string, forceReauth?: boolean, credentials?: Record<string, string>) => Promise<void>;
   disconnect: () => Promise<void>;
   checkStatus: () => Promise<void>;
 }
@@ -120,7 +120,7 @@ export function useComposio(toolkit: string): UseComposioReturn {
   // Initiate OAuth connection
   // forceReauth: when true, forces Instagram to show login/account selection
   // Use false for initial connections, true for account switching
-  const connect = useCallback(async (customRedirectPath?: string, forceReauth: boolean = false) => {
+  const connect = useCallback(async (customRedirectPath?: string, forceReauth: boolean = false, credentials?: Record<string, string>) => {
     try {
       setConnecting(true);
       
@@ -246,6 +246,8 @@ export function useComposio(toolkit: string): UseComposioReturn {
           baseUrl,
           // Only force re-auth when switching accounts
           forceReauth,
+          // Pass user-provided credentials for API-key toolkits
+          ...(credentials && { credentials }),
         },
       });
 

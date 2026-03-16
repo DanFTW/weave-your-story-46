@@ -238,7 +238,7 @@ serve(async (req) => {
       );
     }
 
-    const { toolkit, baseUrl, forceReauth = false } = await req.json();
+    const { toolkit, baseUrl, forceReauth = false, credentials } = await req.json();
     const toolkitLower = toolkit?.toLowerCase() || "";
     
     console.log(`Initiating OAuth for toolkit: ${toolkit}`);
@@ -277,11 +277,17 @@ serve(async (req) => {
       console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);
       
       const callApiKeyConnect = async (configId: string) => {
-        const requestBody = {
+        const requestBody: Record<string, unknown> = {
           auth_config: { id: configId },
           connection: { user_id: user.id },
           ...(forceReauth && { force_reauth: true }),
         };
+
+        // Pass user-provided credentials for API-key toolkits (e.g. Coinbase)
+        if (credentials && typeof credentials === "object") {
+          requestBody.field_inputs = credentials;
+          console.log(`[${toolkitLower}] Including user-provided credentials (${Object.keys(credentials).length} fields)`);
+        }
         
         console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
         
