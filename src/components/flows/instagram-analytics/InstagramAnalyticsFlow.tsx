@@ -48,10 +48,16 @@ export function InstagramAnalyticsFlow() {
 
   const handleBack = () => navigate('/threads');
 
+  const handleReconnect = async () => {
+    await disconnect();
+    sessionStorage.setItem('returnAfterInstagramConnect', '/flow/instagram-analytics');
+    navigate('/integration/instagram');
+  };
+
   const handleActivate = async () => {
     setPhase('activating');
     const success = await activateMonitoring();
-    if (!success) setPhase('configure');
+    if (!success) setPhase((current) => current === 'needs-reconnect' ? current : 'configure');
   };
 
   if (isCheckingAuth || isLoading) {
