@@ -183,7 +183,7 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
                   </span>
                 </div>
                 {item.metrics.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 mt-2 ml-11">
+                  <div className="flex flex-col gap-1 mt-2 ml-11">
                     {item.metrics.map((m, i) => (
                       <div key={i} className="text-xs">
                         <span className="text-muted-foreground">{m.name}: </span>
