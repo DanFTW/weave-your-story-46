@@ -47,7 +47,7 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
 
         const { data, error } = await supabase
           .from("instagram_analytics_processed")
-          .select("id, dedupe_key, created_at")
+          .select("id, dedupe_key, created_at, insights_data")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(50);
@@ -57,6 +57,7 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
             id: r.id,
             dedupeKey: r.dedupe_key,
             createdAt: r.created_at,
+            metrics: parseInsightsData(r.insights_data),
           })));
         }
       } catch (err) {
