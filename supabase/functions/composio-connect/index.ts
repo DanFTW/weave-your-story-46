@@ -148,7 +148,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   instagram: "ac_N2MwqGEh7F7y",
   dropbox: "ac_u-LEALnVXap9",
   googlephotos: "ac_XQf5YL6yOEPG",
-  twitter: "ac_Fws-kT1Rb6Yn",
+  twitter: "ac_5uSLoTdeFuN6",
   youtube: "ac_LwcJYIIYufYK",
   whatsapp: "ac_XmoxkDSq-Uwu",
   outlook: "ac_lmdOfsms5fSG",
