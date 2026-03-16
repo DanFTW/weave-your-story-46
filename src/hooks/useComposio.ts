@@ -14,7 +14,7 @@ interface UseComposioReturn {
   connecting: boolean;
   checking: boolean;
   isConnected: boolean;
-  connect: (customRedirectPath?: string, forceReauth?: boolean) => Promise<void>;
+  connect: (customRedirectPath?: string, forceReauth?: boolean, credentials?: Record<string, string>) => Promise<void>;
   disconnect: () => Promise<void>;
   checkStatus: () => Promise<void>;
 }
