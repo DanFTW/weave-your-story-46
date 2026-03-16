@@ -311,6 +311,7 @@ export default function IntegrationDetail() {
                     </div>
                   ) : apiKeyFields ? (
                     <ApiKeyCredentialForm
+                      toolkitId={integrationId}
                       integrationName={integration.name}
                       fields={apiKeyFields}
                       onSubmit={handleCredentialSubmit}

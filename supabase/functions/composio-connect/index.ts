@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { z } from "https://esm.sh/zod@3.25.76";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -202,9 +203,34 @@ const VALID_TOOLKITS = [
   "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps", "coinbase", "apibible"
 ];
 
-const API_KEY_REQUIRED_FIELDS: Record<string, string[]> = {
-  coinbase: ["API Key Name", "api key private key"],
-  apibible: ["API Key"],
+const coinbaseCredentialsSchema = z.object({
+  "API Key Name": z
+    .string()
+    .trim()
+    .min(1, "API Key Name is required")
+    .max(255, "API Key Name is too long")
+    .regex(
+      /^organizations\/[^/]+\/apiKeys\/[^/]+$/,
+      "API Key Name must look like organizations/{org_id}/apiKeys/{key_id}"
+    ),
+  "api key private key": z
+    .string()
+    .trim()
+    .min(1, "Private Key is required")
+    .max(10000, "Private Key is too long")
+    .regex(
+      /-----BEGIN(?: EC)? PRIVATE KEY-----[\s\S]+-----END(?: EC)? PRIVATE KEY-----/,
+      "Private key must be the full Coinbase PEM block"
+    ),
+});
+
+const apiBibleCredentialsSchema = z.object({
+  "API Key": z.string().trim().min(1, "API Key is required").max(255, "API Key is too long"),
+});
+
+const API_KEY_CREDENTIAL_SCHEMAS: Record<string, z.ZodType<Record<string, string>>> = {
+  coinbase: coinbaseCredentialsSchema,
+  apibible: apiBibleCredentialsSchema,
 };
 
 serve(async (req) => {
@@ -281,31 +307,45 @@ serve(async (req) => {
     if (API_KEY_TOOLKITS.includes(toolkitLower)) {
       console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);
 
-      const requiredFields = API_KEY_REQUIRED_FIELDS[toolkitLower] ?? [];
-      const normalizedCredentials = credentials && typeof credentials === "object" ? credentials as Record<string, string> : {};
-      const missingFields = requiredFields.filter((field) => !String(normalizedCredentials[field] ?? "").trim());
+      const schema = API_KEY_CREDENTIAL_SCHEMAS[toolkitLower];
+      const rawCredentials = credentials && typeof credentials === "object"
+        ? Object.fromEntries(
+            Object.entries(credentials).map(([key, value]) => [key, typeof value === "string" ? value.trim() : ""])
+          )
+        : {};
 
-      if (missingFields.length > 0) {
-        console.warn(`[${toolkitLower}] Missing required credentials: ${missingFields.join(", ")}`);
+      const validationResult = schema?.safeParse(rawCredentials);
+      if (validationResult && !validationResult.success) {
+        const fieldErrors = validationResult.error.flatten().fieldErrors;
+        const firstFieldError = Object.values(fieldErrors)
+          .flat()
+          .find((value): value is string => typeof value === "string" && value.length > 0)
+          ?? "Invalid credentials";
+
+        console.warn(`[${toolkitLower}] Invalid credential payload`);
         return new Response(
           JSON.stringify({
-            error: `Missing required fields: ${missingFields.join(", ")}`,
+            error: firstFieldError,
             requiresCredentials: true,
-            missingFields,
+            fieldErrors,
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      const sanitizedCredentials = validationResult?.success ? validationResult.data : rawCredentials;
       
       const callApiKeyConnect = async (configId: string) => {
         const requestBody: Record<string, unknown> = {
           auth_config: { id: configId },
           connection: { user_id: user.id },
-          field_inputs: normalizedCredentials,
+          field_inputs: sanitizedCredentials,
           ...(forceReauth && { force_reauth: true }),
         };
         
-        console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
+        console.log(
+          `[${toolkitLower}] Creating connected account with auth config ${configId} and ${Object.keys(sanitizedCredentials).length} credential fields`
+        );
         
         const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
           method: "POST",
@@ -340,8 +380,7 @@ serve(async (req) => {
         if (response.status === 400) {
           return new Response(
             JSON.stringify({
-              error: `Composio API error: ${response.status}`,
-              details: responseText,
+              error: "Coinbase credentials were rejected. Use the full API Key Name and paste the full PEM private key from Coinbase CDP.",
             }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
