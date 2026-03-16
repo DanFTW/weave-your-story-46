@@ -148,6 +148,18 @@ export function useTwitterAlphaTracker() {
 
         if (error) throw error;
 
+        if (data?.needsReconnect) {
+          toast({
+            title: "Twitter connection expired",
+            description: data.error || "Please reconnect Twitter to continue.",
+            variant: "destructive",
+          });
+          await disconnectTwitter();
+          sessionStorage.setItem("returnAfterTwitterConnect", "/flow/twitter-alpha-tracker");
+          navigate("/integration/twitter");
+          return;
+        }
+
         if (data?.user) {
           setSearchResults([
             {
@@ -167,7 +179,7 @@ export function useTwitterAlphaTracker() {
         setIsSearching(false);
       }
     },
-    [user?.id]
+    [user?.id, toast, disconnectTwitter, navigate]
   );
 
   // Add account to selection
