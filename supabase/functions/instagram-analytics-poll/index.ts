@@ -188,14 +188,20 @@ async function pollInstagramInsights(
   // Check if already collected today
   const { data: existing } = await supabaseClient
     .from("instagram_analytics_processed")
-    .select("id")
+    .select("id, insights_data")
     .eq("user_id", userId)
     .eq("dedupe_key", dedupeKey)
     .maybeSingle();
 
-  if (existing) {
-    console.log("[Instagram Analytics] Already collected for today, skipping");
+  if (existing && existing.insights_data !== null) {
+    console.log("[Instagram Analytics] Already collected for today with data, skipping");
     return { newInsights: 0, totalCollected: currentConfig?.insights_collected ?? 0 };
+  }
+
+  // If existing row has NULL insights_data, we'll backfill it below
+  const needsBackfill = existing && existing.insights_data === null;
+  if (needsBackfill) {
+    console.log("[Instagram Analytics] Found existing row with NULL insights_data, backfilling...");
   }
 
   // Execute INSTAGRAM_GET_USER_INSIGHTS via Composio
@@ -207,7 +213,21 @@ async function pollInstagramInsights(
     insightsPayload
   );
 
-  // Record dedup
+  // Record dedup or backfill
+  if (needsBackfill) {
+    const { error: updateError } = await supabaseClient
+      .from("instagram_analytics_processed")
+      .update({ insights_data: insightsResult })
+      .eq("id", existing.id);
+    if (updateError) {
+      console.error("[Instagram Analytics] Backfill update error:", updateError);
+    } else {
+      console.log("[Instagram Analytics] Backfilled insights_data for existing row");
+    }
+    // No new memory — it was already sent on original insert
+    return { newInsights: 0, totalCollected: currentConfig?.insights_collected ?? 0 };
+  }
+
   const { error: insertError } = await supabaseClient
     .from("instagram_analytics_processed")
     .insert({ user_id: userId, dedupe_key: dedupeKey, insights_data: insightsResult });
