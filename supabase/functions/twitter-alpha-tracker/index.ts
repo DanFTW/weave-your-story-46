@@ -827,11 +827,33 @@ serve(async (req) => {
 
     // Manual poll
     if (action === 'manual-poll') {
-      const result = await processTrackedUsers(supabase, userId);
+      try {
+        const result = await processTrackedUsers(supabase, userId);
 
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+        // Check if the result contains tweet-fetch errors indicating expired connection
+        if (result && typeof result === 'object' && 'error' in result) {
+          const errStr = JSON.stringify(result);
+          const reconnectCheck = isReconnectError(errStr, 0);
+          if (reconnectCheck.needsReconnect) {
+            return new Response(JSON.stringify({ needsReconnect: true, error: reconnectCheck.reason }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (pollError) {
+        const errStr = String(pollError);
+        const reconnectCheck = isReconnectError(errStr, 0);
+        if (reconnectCheck.needsReconnect) {
+          return new Response(JSON.stringify({ needsReconnect: true, error: reconnectCheck.reason }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        throw pollError;
+      }
     }
 
     // List locally stored Twitter posts
