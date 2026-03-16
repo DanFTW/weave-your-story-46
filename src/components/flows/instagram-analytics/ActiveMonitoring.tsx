@@ -5,10 +5,16 @@ import { InstagramAnalyticsStats } from "@/types/instagramAnalytics";
 import { formatDistanceToNow, parse, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 
+interface InsightMetric {
+  name: string;
+  value: string | number;
+}
+
 interface HistoryItem {
   id: string;
   dedupeKey: string;
   createdAt: string;
+  metrics: InsightMetric[];
 }
 
 interface ActiveMonitoringProps {
