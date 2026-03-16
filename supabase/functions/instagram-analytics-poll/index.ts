@@ -213,7 +213,21 @@ async function pollInstagramInsights(
     insightsPayload
   );
 
-  // Record dedup
+  // Record dedup or backfill
+  if (needsBackfill) {
+    const { error: updateError } = await supabaseClient
+      .from("instagram_analytics_processed")
+      .update({ insights_data: insightsResult })
+      .eq("id", existing.id);
+    if (updateError) {
+      console.error("[Instagram Analytics] Backfill update error:", updateError);
+    } else {
+      console.log("[Instagram Analytics] Backfilled insights_data for existing row");
+    }
+    // No new memory — it was already sent on original insert
+    return { newInsights: 0, totalCollected: currentConfig?.insights_collected ?? 0 };
+  }
+
   const { error: insertError } = await supabaseClient
     .from("instagram_analytics_processed")
     .insert({ user_id: userId, dedupe_key: dedupeKey, insights_data: insightsResult });
