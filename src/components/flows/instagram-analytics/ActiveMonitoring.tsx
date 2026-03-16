@@ -38,10 +38,14 @@ function extractDateLabel(dedupeKey: string): string {
 function parseInsightsData(data: any): InsightMetric[] {
   if (!data) return [];
 
+  const orderedKeys = ["reach", "follower_count", "impressions", "views", "comments", "likes"];
   const allowedMetrics: Record<string, string> = {
     reach: "Reach",
-    follower_count: "Followers",
+    follower_count: "Follower Count",
     impressions: "Impressions",
+    views: "Views",
+    comments: "Comments",
+    likes: "Likes",
   };
 
   // Unwrap Instagram API wrapper: { data: [...], paging: ... }
