@@ -64,7 +64,12 @@ function parseInsightsData(data: any): InsightMetric[] {
     if (typeof value === "object") continue;
     metrics.push({ name: allowedMetrics[name], value: typeof value === "number" ? value : String(value) });
   }
-  return metrics;
+  // Sort by defined order
+  const keyToMetric = new Map(metrics.map(m => {
+    const rawKey = Object.entries(allowedMetrics).find(([, v]) => v === m.name)?.[0];
+    return [rawKey, m] as const;
+  }));
+  return orderedKeys.map(k => keyToMetric.get(k)).filter((m): m is InsightMetric => !!m);
 }
 
 export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: ActiveMonitoringProps) {
