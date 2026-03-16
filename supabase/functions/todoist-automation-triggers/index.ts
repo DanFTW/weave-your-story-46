@@ -146,21 +146,35 @@ async function pollTodoistTasks(
 
   // Extract tasks from response - Composio wraps results in various formats
   let tasks: any[] = [];
-  if (toolData.data?.tasks) {
+  const rd = toolData.data?.response_data;
+
+  // Diagnostic logging for response structure
+  console.log('[Todoist Poll] Composio response structure keys:', Object.keys(toolData.data || {}));
+  if (rd) console.log('[Todoist Poll] Composio response_data keys:', Object.keys(rd));
+
+  if (Array.isArray(rd?.data)) {
+    tasks = rd.data;
+  } else if (Array.isArray(rd)) {
+    tasks = rd;
+  } else if (rd?.tasks && Array.isArray(rd.tasks)) {
+    tasks = rd.tasks;
+  } else if (toolData.data?.tasks && Array.isArray(toolData.data.tasks)) {
     tasks = toolData.data.tasks;
-  } else if (toolData.data?.response_data?.tasks) {
-    tasks = toolData.data.response_data.tasks;
-  } else if (Array.isArray(toolData.data?.response_data)) {
-    tasks = toolData.data.response_data;
+  } else if (Array.isArray(toolData.data?.data)) {
+    tasks = toolData.data.data;
   } else if (Array.isArray(toolData.data)) {
     tasks = toolData.data;
-  } else if (toolData.response_data?.tasks) {
+  } else if (toolData.response_data?.tasks && Array.isArray(toolData.response_data.tasks)) {
     tasks = toolData.response_data.tasks;
   } else if (Array.isArray(toolData.response_data)) {
     tasks = toolData.response_data;
   }
 
-  console.log(`[Todoist Poll] Found ${tasks.length} total tasks`);
+  if (tasks.length === 0) {
+    console.warn('[Todoist Poll] Found 0 total tasks. Raw response snippet:', JSON.stringify(toolData).substring(0, 1000));
+  } else {
+    console.log(`[Todoist Poll] Found ${tasks.length} total tasks`);
+  }
 
   if (tasks.length === 0) {
     // Update last_polled_at even if no tasks
