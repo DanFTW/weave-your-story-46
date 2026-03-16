@@ -1,0 +1,1 @@
+ALTER TABLE instagram_analytics_processed ADD COLUMN insights_data jsonb DEFAULT NULL;
