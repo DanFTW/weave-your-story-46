@@ -124,6 +124,24 @@ async function executeComposioAction(actionName: string, connectionId: string, i
   }
 }
 
+function isExpiredConnectedAccountError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.message.includes("ActionExecute_ConnectedAccountExpired") ||
+    error.message.includes("is in EXPIRED state")
+  );
+}
+
+function createReconnectResponse(): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    needsReconnect: true,
+    code: "INSTAGRAM_CONNECTION_EXPIRED",
+    error: "Instagram connection expired. Please reconnect Instagram and try again.",
+  }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // === FORMAT INSIGHTS AS MEMORY ===
 
 // deno-lint-ignore no-explicit-any

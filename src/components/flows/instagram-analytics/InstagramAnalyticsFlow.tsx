@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useInstagramAnalytics } from "@/hooks/useInstagramAnalytics";
 import { AutomationConfig } from "./AutomationConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const gradientClasses: Record<string, string> = {

@@ -21,6 +21,21 @@ export function useInstagramAnalytics() {
     lastPolledAt: config?.lastPolledAt ?? null,
   };
 
+  const expiredConnectionMessage = 'Your Instagram connection expired. Please reconnect to continue.';
+
+  const isExpiredConnectionError = (message: string) =>
+    message.includes('ActionExecute_ConnectedAccountExpired') ||
+    message.includes('is in EXPIRED state');
+
+  const handleReconnectRequired = useCallback((message?: string) => {
+    setPhase('needs-reconnect');
+    toast({
+      title: 'Reconnect Instagram',
+      description: message || expiredConnectionMessage,
+      variant: 'destructive',
+    });
+  }, [toast]);
+
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
