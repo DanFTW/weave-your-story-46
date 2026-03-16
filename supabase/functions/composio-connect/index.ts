@@ -307,31 +307,45 @@ serve(async (req) => {
     if (API_KEY_TOOLKITS.includes(toolkitLower)) {
       console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);
 
-      const requiredFields = API_KEY_REQUIRED_FIELDS[toolkitLower] ?? [];
-      const normalizedCredentials = credentials && typeof credentials === "object" ? credentials as Record<string, string> : {};
-      const missingFields = requiredFields.filter((field) => !String(normalizedCredentials[field] ?? "").trim());
+      const schema = API_KEY_CREDENTIAL_SCHEMAS[toolkitLower];
+      const rawCredentials = credentials && typeof credentials === "object"
+        ? Object.fromEntries(
+            Object.entries(credentials).map(([key, value]) => [key, typeof value === "string" ? value.trim() : ""])
+          )
+        : {};
 
-      if (missingFields.length > 0) {
-        console.warn(`[${toolkitLower}] Missing required credentials: ${missingFields.join(", ")}`);
+      const validationResult = schema?.safeParse(rawCredentials);
+      if (validationResult && !validationResult.success) {
+        const fieldErrors = validationResult.error.flatten().fieldErrors;
+        const firstFieldError = Object.values(fieldErrors)
+          .flat()
+          .find((value): value is string => typeof value === "string" && value.length > 0)
+          ?? "Invalid credentials";
+
+        console.warn(`[${toolkitLower}] Invalid credential payload`);
         return new Response(
           JSON.stringify({
-            error: `Missing required fields: ${missingFields.join(", ")}`,
+            error: firstFieldError,
             requiresCredentials: true,
-            missingFields,
+            fieldErrors,
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      const sanitizedCredentials = validationResult?.success ? validationResult.data : rawCredentials;
       
       const callApiKeyConnect = async (configId: string) => {
         const requestBody: Record<string, unknown> = {
           auth_config: { id: configId },
           connection: { user_id: user.id },
-          field_inputs: normalizedCredentials,
+          field_inputs: sanitizedCredentials,
           ...(forceReauth && { force_reauth: true }),
         };
         
-        console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
+        console.log(
+          `[${toolkitLower}] Creating connected account with auth config ${configId} and ${Object.keys(sanitizedCredentials).length} credential fields`
+        );
         
         const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
           method: "POST",
@@ -366,8 +380,7 @@ serve(async (req) => {
         if (response.status === 400) {
           return new Response(
             JSON.stringify({
-              error: `Composio API error: ${response.status}`,
-              details: responseText,
+              error: "Coinbase credentials were rejected. Use the full API Key Name and paste the full PEM private key from Coinbase CDP.",
             }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );

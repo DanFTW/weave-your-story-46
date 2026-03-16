@@ -252,8 +252,32 @@ export function useComposio(toolkit: string): UseComposioReturn {
       });
 
       if (error) {
+        let errorMessage = "Failed to start connection";
+
+        if (typeof error === "object" && error !== null && "context" in error) {
+          const response = (error as { context?: Response }).context;
+          if (response instanceof Response) {
+            try {
+              const errorData = await response.clone().json();
+              if (typeof errorData?.error === "string") {
+                errorMessage = errorData.error;
+              }
+              if (errorData?.fieldErrors && typeof errorData.fieldErrors === "object") {
+                const firstFieldError = Object.values(errorData.fieldErrors)
+                  .flat()
+                  .find((value): value is string => typeof value === "string" && value.length > 0);
+                if (firstFieldError) {
+                  errorMessage = firstFieldError;
+                }
+              }
+            } catch {
+              // Ignore response parsing errors and fall back to default message.
+            }
+          }
+        }
+
         console.error("Connect error:", error);
-        toast.error("Failed to start connection");
+        toast.error(errorMessage);
         setConnecting(false);
         return;
       }
