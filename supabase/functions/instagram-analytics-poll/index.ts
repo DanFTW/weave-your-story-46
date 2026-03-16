@@ -336,6 +336,9 @@ Deno.serve(async (req) => {
         });
       } catch (activateErr) {
         console.error("[Instagram Analytics] Activate poll failed, leaving is_active=false:", activateErr);
+        if (isExpiredConnectedAccountError(activateErr)) {
+          return createReconnectResponse();
+        }
         return new Response(
           JSON.stringify({ error: activateErr instanceof Error ? activateErr.message : "Activation poll failed" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
