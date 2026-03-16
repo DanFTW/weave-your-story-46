@@ -202,6 +202,11 @@ const VALID_TOOLKITS = [
   "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps", "coinbase", "apibible"
 ];
 
+const API_KEY_REQUIRED_FIELDS: Record<string, string[]> = {
+  coinbase: ["API Key Name", "api key private key"],
+  apibible: ["API Key"],
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

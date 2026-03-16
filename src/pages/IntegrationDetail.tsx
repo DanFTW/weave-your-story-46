@@ -83,6 +83,11 @@ export default function IntegrationDetail() {
     );
   }
 
+  // API-key toolkit detection
+  const apiKeyFields = integrationId ? getApiKeyFields(integrationId) : null;
+  const apiKeyHelpUrl = integrationId ? getApiKeyHelpUrl(integrationId) : undefined;
+  const isApiKeyIntegration = Boolean(apiKeyFields);
+
   const handleConnect = async () => {
     if (isIOSContacts) {
       // Direct native bridge call — no OAuth dialog needed
@@ -98,10 +103,24 @@ export default function IntegrationDetail() {
       }
       return;
     }
+
+    if (isApiKeyIntegration) {
+      return;
+    }
+
     setShowConfirmDialog(true);
   };
 
   const handleConfirmConnect = async () => {
+    if (isApiKeyIntegration) {
+      toast({
+        title: "Credentials required",
+        description: `Enter your ${integration.name} API credentials to connect.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       await connect(`/integration/${integrationId}`, false);
     } catch (error) {
@@ -113,10 +132,6 @@ export default function IntegrationDetail() {
       });
     }
   };
-
-  // API-key toolkit detection
-  const apiKeyFields = integrationId ? getApiKeyFields(integrationId) : null;
-  const apiKeyHelpUrl = integrationId ? getApiKeyHelpUrl(integrationId) : undefined;
 
   const handleCredentialSubmit = async (credentials: Record<string, string>) => {
     setIsSubmittingCredentials(true);
@@ -135,6 +150,15 @@ export default function IntegrationDetail() {
   };
 
   const handleChangeAccount = async () => {
+    if (isApiKeyIntegration) {
+      await disconnect();
+      toast({
+        title: "Credentials cleared",
+        description: `Enter a new ${integration.name} API key to reconnect.`,
+      });
+      return;
+    }
+
     // Show toast about the switching process
     toast({
       title: "Switching accounts",
