@@ -43,17 +43,31 @@ function parseInsightsData(data: any): InsightMetric[] {
     profile_views: "Profile Views",
     follower_count: "Followers",
     accounts_engaged: "Engaged",
+    impressions: "Impressions",
   };
+
+  function toDisplayValue(val: unknown): string | number {
+    if (val === null || val === undefined) return "N/A";
+    if (typeof val === "string" || typeof val === "number") return val;
+    if (typeof val === "object") {
+      try { return JSON.stringify(val); } catch { return "N/A"; }
+    }
+    return String(val);
+  }
+
   if (Array.isArray(data)) {
     for (const m of data) {
       const name = m.name || m.title || "Unknown";
-      const value = m.values?.[0]?.value ?? m.value ?? m.total ?? "N/A";
+      const rawValue = m.values?.[0]?.value ?? m.value ?? m.total ?? "N/A";
+      const value = toDisplayValue(rawValue);
+      // Skip complex object values that aren't useful to display
+      if (typeof rawValue === "object" && rawValue !== null && !Array.isArray(rawValue)) continue;
       metrics.push({ name: labelMap[name] || name.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value });
     }
   } else if (typeof data === "object") {
     for (const [key, value] of Object.entries(data)) {
       if (key === "successful" || key === "error") continue;
-      metrics.push({ name: labelMap[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value: value as string | number });
+      metrics.push({ name: labelMap[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value: toDisplayValue(value) });
     }
   }
   return metrics;
