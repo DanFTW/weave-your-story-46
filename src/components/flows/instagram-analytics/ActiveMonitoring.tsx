@@ -34,6 +34,31 @@ function extractDateLabel(dedupeKey: string): string {
   }
 }
 
+// deno-lint-ignore no-explicit-any
+function parseInsightsData(data: any): InsightMetric[] {
+  if (!data) return [];
+  const metrics: InsightMetric[] = [];
+  const labelMap: Record<string, string> = {
+    reach: "Reach",
+    profile_views: "Profile Views",
+    follower_count: "Followers",
+    accounts_engaged: "Engaged",
+  };
+  if (Array.isArray(data)) {
+    for (const m of data) {
+      const name = m.name || m.title || "Unknown";
+      const value = m.values?.[0]?.value ?? m.value ?? m.total ?? "N/A";
+      metrics.push({ name: labelMap[name] || name.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value });
+    }
+  } else if (typeof data === "object") {
+    for (const [key, value] of Object.entries(data)) {
+      if (key === "successful" || key === "error") continue;
+      metrics.push({ name: labelMap[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value: value as string | number });
+    }
+  }
+  return metrics;
+}
+
 export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: ActiveMonitoringProps) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
