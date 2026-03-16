@@ -246,6 +246,8 @@ export function useComposio(toolkit: string): UseComposioReturn {
           baseUrl,
           // Only force re-auth when switching accounts
           forceReauth,
+          // Pass user-provided credentials for API-key toolkits
+          ...(credentials && { credentials }),
         },
       });
 
