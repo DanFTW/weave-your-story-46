@@ -33,15 +33,13 @@ const TOOLKIT_FIELDS: Record<string, CredentialField[]> = {
     {
       key: "API Key Name",
       label: "API Key Name",
-      placeholder: "organizations/{org_id}/apiKeys/{key_id}",
-      description: "Paste the full resource name from Coinbase CDP, not a nickname or label.",
+      placeholder: "Your Coinbase API key name",
     },
     {
       key: "api key private key",
       label: "Private Key",
-      placeholder: "-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----",
+      placeholder: "Your Coinbase API private key",
       multiline: true,
-      description: "Paste the full PEM private key exactly as Coinbase provides it.",
     },
   ],
   apibible: [
