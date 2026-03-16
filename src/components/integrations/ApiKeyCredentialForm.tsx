@@ -20,24 +20,8 @@ interface ApiKeyCredentialFormProps {
 }
 
 const coinbaseCredentialsSchema = z.object({
-  "API Key Name": z
-    .string()
-    .trim()
-    .min(1, "API Key Name is required")
-    .max(255, "API Key Name is too long")
-    .regex(
-      /^organizations\/[^/]+\/apiKeys\/[^/]+$/,
-      "Use the full Coinbase API Key Name: organizations/{org_id}/apiKeys/{key_id}"
-    ),
-  "api key private key": z
-    .string()
-    .trim()
-    .min(1, "Private Key is required")
-    .max(10000, "Private Key is too long")
-    .regex(
-      /-----BEGIN(?: EC)? PRIVATE KEY-----[\s\S]+-----END(?: EC)? PRIVATE KEY-----/,
-      "Paste the full Coinbase PEM private key, including BEGIN/END lines"
-    ),
+  "API Key Name": z.string().trim().min(1, "API Key Name is required").max(255, "API Key Name is too long"),
+  "api key private key": z.string().trim().min(1, "Private Key is required").max(10000, "Private Key is too long"),
 });
 
 const apiBibleCredentialsSchema = z.object({
@@ -49,15 +33,13 @@ const TOOLKIT_FIELDS: Record<string, CredentialField[]> = {
     {
       key: "API Key Name",
       label: "API Key Name",
-      placeholder: "organizations/{org_id}/apiKeys/{key_id}",
-      description: "Paste the full resource name from Coinbase CDP, not a nickname or label.",
+      placeholder: "Your Coinbase API key name",
     },
     {
       key: "api key private key",
       label: "Private Key",
-      placeholder: "-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----",
+      placeholder: "Your Coinbase API private key",
       multiline: true,
-      description: "Paste the full PEM private key exactly as Coinbase provides it.",
     },
   ],
   apibible: [

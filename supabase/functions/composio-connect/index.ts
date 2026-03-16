@@ -204,24 +204,8 @@ const VALID_TOOLKITS = [
 ];
 
 const coinbaseCredentialsSchema = z.object({
-  "API Key Name": z
-    .string()
-    .trim()
-    .min(1, "API Key Name is required")
-    .max(255, "API Key Name is too long")
-    .regex(
-      /^organizations\/[^/]+\/apiKeys\/[^/]+$/,
-      "API Key Name must look like organizations/{org_id}/apiKeys/{key_id}"
-    ),
-  "api key private key": z
-    .string()
-    .trim()
-    .min(1, "Private Key is required")
-    .max(10000, "Private Key is too long")
-    .regex(
-      /-----BEGIN(?: EC)? PRIVATE KEY-----[\s\S]+-----END(?: EC)? PRIVATE KEY-----/,
-      "Private key must be the full Coinbase PEM block"
-    ),
+  "API Key Name": z.string().trim().min(1, "API Key Name is required").max(255, "API Key Name is too long"),
+  "api key private key": z.string().trim().min(1, "Private Key is required").max(10000, "Private Key is too long"),
 });
 
 const apiBibleCredentialsSchema = z.object({
