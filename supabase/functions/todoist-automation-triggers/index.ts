@@ -106,7 +106,62 @@ function safeJsonParse(text: string): any {
   }
 }
 
-// === POLL TODOIST VIA COMPOSIO TOOL ===
+async function getTodoistAccessToken(connectionId: string): Promise<string> {
+  const response = await fetch(`https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`, {
+    method: "GET",
+    headers: {
+      "x-api-key": COMPOSIO_API_KEY,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const responseText = await response.text();
+  const responseData = safeJsonParse(responseText);
+
+  if (!response.ok) {
+    console.error("[Todoist Poll] Failed to fetch connected account:", response.status, responseText.slice(0, 500));
+    throw new Error(`Failed to fetch Todoist connected account: ${response.status}`);
+  }
+
+  const data = responseData?.data ?? responseData;
+  const accessToken =
+    data?.access_token ||
+    data?.params?.access_token ||
+    data?.connectionParams?.access_token ||
+    data?.connection_params?.access_token;
+
+  if (!accessToken) {
+    console.error("[Todoist Poll] Access token missing in connected account payload:", JSON.stringify(responseData).slice(0, 1000));
+    throw new Error("Todoist access token not found in Composio connected account");
+  }
+
+  return accessToken;
+}
+
+async function fetchTodoistTasks(accessToken: string): Promise<any[]> {
+  const response = await fetch("https://api.todoist.com/rest/v2/tasks", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    console.error("[Todoist Poll] Todoist API error:", response.status, responseText.slice(0, 500));
+    throw new Error(`Todoist tasks fetch failed: ${response.status}`);
+  }
+
+  const tasks = safeJsonParse(responseText);
+  if (!Array.isArray(tasks)) {
+    console.error("[Todoist Poll] Unexpected Todoist tasks response:", responseText.slice(0, 500));
+    throw new Error("Unexpected Todoist tasks response format");
+  }
+
+  return tasks;
+}
+
+// === POLL TODOIST VIA DIRECT TODOIST API ===
 
 async function pollTodoistTasks(
   supabaseClient: any,
@@ -115,75 +170,19 @@ async function pollTodoistTasks(
 ): Promise<{ newTasks: number; totalTracked: number }> {
   console.log(`[Todoist Poll] Fetching tasks for user ${userId}`);
 
-  // Execute Composio tool to get all tasks
-  const toolResponse = await fetch(
-    "https://backend.composio.dev/api/v3/tools/execute/TODOIST_GET_ALL_TASKS",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": COMPOSIO_API_KEY,
-      },
-      body: JSON.stringify({
-        connected_account_id: connectionId,
-        arguments: {},
-      }),
-    }
-  );
-
-  const toolText = await toolResponse.text();
-  console.log(`[Todoist Poll] Composio response status: ${toolResponse.status}`);
-
-  if (!toolResponse.ok) {
-    console.error("[Todoist Poll] Composio tool error:", toolText.slice(0, 500));
-    throw new Error(`Composio tool execution failed: ${toolResponse.status}`);
-  }
-
-  const toolData = safeJsonParse(toolText);
-  if (!toolData) {
-    throw new Error("Failed to parse Composio tool response");
-  }
-
-  // Extract tasks from response - Composio wraps results in various formats
-  let tasks: any[] = [];
-  const rd = toolData.data?.response_data;
-
-  // Diagnostic logging for response structure
-  console.log('[Todoist Poll] Composio response structure keys:', Object.keys(toolData.data || {}));
-  if (rd) console.log('[Todoist Poll] Composio response_data keys:', Object.keys(rd));
-
-  if (Array.isArray(rd?.data)) {
-    tasks = rd.data;
-  } else if (Array.isArray(rd)) {
-    tasks = rd;
-  } else if (rd?.tasks && Array.isArray(rd.tasks)) {
-    tasks = rd.tasks;
-  } else if (toolData.data?.tasks && Array.isArray(toolData.data.tasks)) {
-    tasks = toolData.data.tasks;
-  } else if (Array.isArray(toolData.data?.data)) {
-    tasks = toolData.data.data;
-  } else if (Array.isArray(toolData.data)) {
-    tasks = toolData.data;
-  } else if (toolData.response_data?.tasks && Array.isArray(toolData.response_data.tasks)) {
-    tasks = toolData.response_data.tasks;
-  } else if (Array.isArray(toolData.response_data)) {
-    tasks = toolData.response_data;
-  }
+  const accessToken = await getTodoistAccessToken(connectionId);
+  const tasks = await fetchTodoistTasks(accessToken);
 
   if (tasks.length === 0) {
-    console.warn('[Todoist Poll] Found 0 total tasks. Raw response snippet:', JSON.stringify(toolData).substring(0, 1000));
-  } else {
-    console.log(`[Todoist Poll] Found ${tasks.length} total tasks`);
-  }
-
-  if (tasks.length === 0) {
-    // Update last_polled_at even if no tasks
+    console.log("[Todoist Poll] Found 0 total tasks");
     await supabaseClient
       .from("todoist_automation_config")
       .update({ last_polled_at: new Date().toISOString() })
       .eq("user_id", userId);
     return { newTasks: 0, totalTracked: 0 };
   }
+
+  console.log(`[Todoist Poll] Found ${tasks.length} total tasks`);
 
   // Check which tasks are already processed
   const taskIds = tasks.map((t: any) => String(t.id));
@@ -222,7 +221,7 @@ async function pollTodoistTasks(
       const memoryContent = formatTaskAsMemory(task);
       const success = await createMemory(apiKeys, memoryContent);
       if (success) processed++;
-      console.log(`[Todoist Poll] Memory ${success ? 'created' : 'failed'} for task ${taskId}`);
+      console.log(`[Todoist Poll] Memory ${success ? "created" : "failed"} for task ${taskId}`);
     }
 
     // Rate limit: 500ms between memory creations
