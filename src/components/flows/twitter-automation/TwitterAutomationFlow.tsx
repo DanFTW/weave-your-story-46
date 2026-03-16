@@ -53,6 +53,7 @@ export function TwitterAutomationFlow() {
       loadConfig();
     } else {
       // User is not connected, redirect to Twitter integration
+      sessionStorage.setItem('returnAfterTwitterConnect', '/flow/twitter-live');
       navigate('/integration/twitter');
     }
   }, [twitter.isConnected, isCheckingAuth]);
