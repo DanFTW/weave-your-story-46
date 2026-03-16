@@ -102,10 +102,24 @@ export function useInstagramAnalytics() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
+      if (data?.needsReconnect) {
+        handleReconnectRequired(data.error);
+        return false;
+      }
+
+      if (data?.success === false) {
+        toast({ title: "Poll failed", description: data.error ?? 'Unknown error', variant: "destructive" });
+        return false;
+      }
+
       if (error) {
         const errMsg = typeof error === 'object' && error !== null && 'message' in error
           ? (error as { message: string }).message
           : 'Unknown error';
+        if (isExpiredConnectionError(errMsg)) {
+          handleReconnectRequired();
+          return false;
+        }
         toast({ title: "Poll failed", description: errMsg, variant: "destructive" });
         return false;
       }
