@@ -143,7 +143,7 @@ export function useInstagramAnalytics() {
     } finally {
       setIsPolling(false);
     }
-  }, [toast]);
+  }, [handleReconnectRequired, toast]);
 
   const activateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
