@@ -425,7 +425,7 @@ export function useTwitterAlphaTracker() {
         variant: "destructive",
       });
     }
-  }, [user?.id, toast]);
+  }, [user?.id, toast, disconnectTwitter, navigate]);
 
   // Reset sync - clears processed posts to allow re-sync
   const resetSync = useCallback(async () => {
