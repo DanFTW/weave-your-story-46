@@ -114,6 +114,26 @@ export default function IntegrationDetail() {
     }
   };
 
+  // API-key toolkit detection
+  const apiKeyFields = integrationId ? getApiKeyFields(integrationId) : null;
+  const apiKeyHelpUrl = integrationId ? getApiKeyHelpUrl(integrationId) : undefined;
+
+  const handleCredentialSubmit = async (credentials: Record<string, string>) => {
+    setIsSubmittingCredentials(true);
+    try {
+      await connect(`/integration/${integrationId}`, false, credentials);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Connection failed";
+      toast({
+        title: "Connection failed",
+        description: errorMsg,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingCredentials(false);
+    }
+  };
+
   const handleChangeAccount = async () => {
     // Show toast about the switching process
     toast({
