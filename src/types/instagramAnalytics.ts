@@ -2,7 +2,8 @@ export type InstagramAnalyticsPhase =
   | 'auth-check'
   | 'configure'
   | 'activating'
-  | 'active';
+  | 'active'
+  | 'needs-reconnect';
 
 export interface InstagramAnalyticsConfig {
   id: string;

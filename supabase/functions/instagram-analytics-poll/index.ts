@@ -358,10 +358,21 @@ Deno.serve(async (req) => {
     }
 
     if (action === "manual-poll") {
-      const result = await pollInstagramInsights(supabaseClient, userId, connectionId);
-      return new Response(JSON.stringify({ success: true, ...result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      try {
+        const result = await pollInstagramInsights(supabaseClient, userId, connectionId);
+        return new Response(JSON.stringify({ success: true, ...result }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (pollErr) {
+        console.error("[Instagram Analytics] Manual poll failed:", pollErr);
+        if (isExpiredConnectedAccountError(pollErr)) {
+          return createReconnectResponse();
+        }
+        return new Response(
+          JSON.stringify({ error: pollErr instanceof Error ? pollErr.message : "Manual poll failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {

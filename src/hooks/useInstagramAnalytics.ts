@@ -195,7 +195,7 @@ export function useInstagramAnalytics() {
     } finally {
       setIsActivating(false);
     }
-  }, [config, toast]);
+  }, [config, handleReconnectRequired, toast]);
 
   const deactivateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;

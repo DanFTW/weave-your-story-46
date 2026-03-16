@@ -68,6 +68,33 @@ export function InstagramAnalyticsFlow() {
     );
   }
 
+  if (phase === 'needs-reconnect') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="flex max-w-sm flex-col items-center gap-5 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-bold text-foreground">Reconnect Instagram</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Your Instagram session expired, so analytics can’t be fetched until you reconnect.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-3">
+            <Button onClick={handleReconnect} className="w-full">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Reconnect Instagram
+            </Button>
+            <Button variant="ghost" onClick={handleBack} className="w-full">
+              Go back
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === 'activating') {
     return <ActivatingScreen />;
   }
