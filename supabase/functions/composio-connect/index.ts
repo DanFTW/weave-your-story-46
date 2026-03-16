@@ -202,6 +202,11 @@ const VALID_TOOLKITS = [
   "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps", "coinbase", "apibible"
 ];
 
+const API_KEY_REQUIRED_FIELDS: Record<string, string[]> = {
+  coinbase: ["API Key Name", "api key private key"],
+  apibible: ["API Key"],
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -275,19 +280,30 @@ serve(async (req) => {
     
     if (API_KEY_TOOLKITS.includes(toolkitLower)) {
       console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);
+
+      const requiredFields = API_KEY_REQUIRED_FIELDS[toolkitLower] ?? [];
+      const normalizedCredentials = credentials && typeof credentials === "object" ? credentials as Record<string, string> : {};
+      const missingFields = requiredFields.filter((field) => !String(normalizedCredentials[field] ?? "").trim());
+
+      if (missingFields.length > 0) {
+        console.warn(`[${toolkitLower}] Missing required credentials: ${missingFields.join(", ")}`);
+        return new Response(
+          JSON.stringify({
+            error: `Missing required fields: ${missingFields.join(", ")}`,
+            requiresCredentials: true,
+            missingFields,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       
       const callApiKeyConnect = async (configId: string) => {
         const requestBody: Record<string, unknown> = {
           auth_config: { id: configId },
           connection: { user_id: user.id },
+          field_inputs: normalizedCredentials,
           ...(forceReauth && { force_reauth: true }),
         };
-
-        // Pass user-provided credentials for API-key toolkits (e.g. Coinbase)
-        if (credentials && typeof credentials === "object") {
-          requestBody.field_inputs = credentials;
-          console.log(`[${toolkitLower}] Including user-provided credentials (${Object.keys(credentials).length} fields)`);
-        }
         
         console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
         
@@ -320,6 +336,17 @@ serve(async (req) => {
 
       if (!response.ok) {
         console.error(`[${toolkitLower}] API Key connection failed:`, response.status, responseText);
+
+        if (response.status === 400) {
+          return new Response(
+            JSON.stringify({
+              error: `Composio API error: ${response.status}`,
+              details: responseText,
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         throw new Error(`Composio API error: ${response.status}`);
       }
       
