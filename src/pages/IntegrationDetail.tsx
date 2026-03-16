@@ -189,14 +189,16 @@ export default function IntegrationDetail() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* OAuth Confirmation Dialog */}
-      <OAuthConfirmDialog
-        open={showConfirmDialog}
-        onOpenChange={setShowConfirmDialog}
-        integrationName={integration.name}
-        integrationIcon={integration.icon}
-        onConfirm={handleConfirmConnect}
-        returnUrl={returnUrl}
-      />
+      {!isApiKeyIntegration && (
+        <OAuthConfirmDialog
+          open={showConfirmDialog}
+          onOpenChange={setShowConfirmDialog}
+          integrationName={integration.name}
+          integrationIcon={integration.icon}
+          onConfirm={handleConfirmConnect}
+          returnUrl={returnUrl}
+        />
+      )}
       {/* Gradient Header Section */}
       <div className="relative h-64 flex-shrink-0">
         <IntegrationGradientBackground colors={integration.gradientColors} />
