@@ -21,7 +21,7 @@ export function InstagramAnalyticsFlow() {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const { isConnected, checkStatus } = useComposio('INSTAGRAM');
+  const { isConnected, checkStatus, disconnect } = useComposio('INSTAGRAM');
 
   const {
     phase, setPhase, config, stats, isLoading, isActivating, isPolling,
