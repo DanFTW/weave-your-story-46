@@ -38,10 +38,14 @@ function extractDateLabel(dedupeKey: string): string {
 function parseInsightsData(data: any): InsightMetric[] {
   if (!data) return [];
 
+  const orderedKeys = ["reach", "follower_count", "impressions", "views", "comments", "likes"];
   const allowedMetrics: Record<string, string> = {
     reach: "Reach",
-    follower_count: "Followers",
+    follower_count: "Follower Count",
     impressions: "Impressions",
+    views: "Views",
+    comments: "Comments",
+    likes: "Likes",
   };
 
   // Unwrap Instagram API wrapper: { data: [...], paging: ... }
@@ -60,7 +64,12 @@ function parseInsightsData(data: any): InsightMetric[] {
     if (typeof value === "object") continue;
     metrics.push({ name: allowedMetrics[name], value: typeof value === "number" ? value : String(value) });
   }
-  return metrics;
+  // Sort by defined order
+  const keyToMetric = new Map(metrics.map(m => {
+    const rawKey = Object.entries(allowedMetrics).find(([, v]) => v === m.name)?.[0];
+    return [rawKey, m] as const;
+  }));
+  return orderedKeys.map(k => keyToMetric.get(k)).filter((m): m is InsightMetric => !!m);
 }
 
 export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: ActiveMonitoringProps) {
@@ -174,7 +183,7 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
                   </span>
                 </div>
                 {item.metrics.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 mt-2 ml-11">
+                  <div className="flex flex-col gap-1 mt-2 ml-11">
                     {item.metrics.map((m, i) => (
                       <div key={i} className="text-xs">
                         <span className="text-muted-foreground">{m.name}: </span>
