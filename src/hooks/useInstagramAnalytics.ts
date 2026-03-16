@@ -160,7 +160,21 @@ export function useInstagramAnalytics() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
+      if (data?.needsReconnect) {
+        handleReconnectRequired(data.error);
+        return false;
+      }
+
+      if (data?.success === false) {
+        toast({ title: "Activation failed", description: data.error ?? 'Unknown error', variant: "destructive" });
+        return false;
+      }
+
       if (error) {
+        if (isExpiredConnectionError(error.message)) {
+          handleReconnectRequired();
+          return false;
+        }
         toast({ title: "Activation failed", description: error.message, variant: "destructive" });
         return false;
       }
