@@ -140,39 +140,42 @@ async function searchTwitterUser(connectionId: string, username: string): Promis
       }),
     });
 
+    const responseText = await response.text();
+    console.log('Search user response status:', response.status);
+    console.log('Search user response (first 1000 chars):', responseText.substring(0, 1000));
+
     if (!response.ok) {
-      console.error('Failed to search user:', await response.text());
+      console.error('Failed to search user, status:', response.status);
       return null;
     }
 
-    const data = await response.json();
-    const responseData = data?.data || data;
-    
-    // Extract user from various response formats
-    const possiblePaths = [
-      responseData?.response_data?.data,
-      responseData?.response_data,
-      responseData?.data,
-      responseData,
-    ];
+    const result = JSON.parse(responseText);
 
-    let user: any = null;
-    for (const path of possiblePaths) {
-      if (path && (path.username || path.id)) {
-        user = path;
-        break;
-      }
+    // Check for error in response body (Composio can return 200 with error)
+    if (result.error) {
+      console.error('Composio returned error in body:', JSON.stringify(result.error));
+      return null;
     }
+
+    // Align with proven parsing pattern from composio-callback
+    const data = result.data || result.response_data || result;
+    if (data.error) {
+      console.error('Composio returned error in data:', JSON.stringify(data.error));
+      return null;
+    }
+
+    const userData = data.response_data?.data || data.data || data;
     
-    if (user) {
+    if (userData && (userData.username || userData.id)) {
       return {
-        username: user.username || username,
-        userId: user.id,
-        displayName: user.name,
-        avatarUrl: user.profile_image_url,
+        username: userData.username || username,
+        userId: userData.id,
+        displayName: userData.name,
+        avatarUrl: userData.profile_image_url,
       };
     }
-    
+
+    console.warn('No valid user data found in response');
     return null;
   } catch (error) {
     console.error('Error searching Twitter user:', error);
