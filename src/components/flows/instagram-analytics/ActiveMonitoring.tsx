@@ -5,10 +5,16 @@ import { InstagramAnalyticsStats } from "@/types/instagramAnalytics";
 import { formatDistanceToNow, parse, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 
+interface InsightMetric {
+  name: string;
+  value: string | number;
+}
+
 interface HistoryItem {
   id: string;
   dedupeKey: string;
   createdAt: string;
+  metrics: InsightMetric[];
 }
 
 interface ActiveMonitoringProps {
@@ -28,6 +34,31 @@ function extractDateLabel(dedupeKey: string): string {
   }
 }
 
+// deno-lint-ignore no-explicit-any
+function parseInsightsData(data: any): InsightMetric[] {
+  if (!data) return [];
+  const metrics: InsightMetric[] = [];
+  const labelMap: Record<string, string> = {
+    reach: "Reach",
+    profile_views: "Profile Views",
+    follower_count: "Followers",
+    accounts_engaged: "Engaged",
+  };
+  if (Array.isArray(data)) {
+    for (const m of data) {
+      const name = m.name || m.title || "Unknown";
+      const value = m.values?.[0]?.value ?? m.value ?? m.total ?? "N/A";
+      metrics.push({ name: labelMap[name] || name.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value });
+    }
+  } else if (typeof data === "object") {
+    for (const [key, value] of Object.entries(data)) {
+      if (key === "successful" || key === "error") continue;
+      metrics.push({ name: labelMap[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value: value as string | number });
+    }
+  }
+  return metrics;
+}
+
 export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: ActiveMonitoringProps) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -41,7 +72,7 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
 
         const { data, error } = await supabase
           .from("instagram_analytics_processed")
-          .select("id, dedupe_key, created_at")
+          .select("id, dedupe_key, created_at, insights_data")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(50);
@@ -51,6 +82,7 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
             id: r.id,
             dedupeKey: r.dedupe_key,
             createdAt: r.created_at,
+            metrics: parseInsightsData(r.insights_data),
           })));
         }
       } catch (err) {
@@ -120,22 +152,33 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
             No insights collected yet
           </p>
         ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto">
+          <div className="space-y-2 max-h-96 overflow-y-auto">
             {history.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2.5"
+                className="rounded-lg bg-muted/50 px-3 py-2.5"
               >
-                <div className="w-8 h-8 rounded-lg bg-[#E1306C]/10 flex items-center justify-center shrink-0">
-                  <Activity className="w-4 h-4 text-[#E1306C]" />
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[#E1306C]/10 flex items-center justify-center shrink-0">
+                    <Activity className="w-4 h-4 text-[#E1306C]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground">{extractDateLabel(item.dedupeKey)}</div>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground">Instagram Insights</div>
-                  <div className="text-xs text-muted-foreground">{extractDateLabel(item.dedupeKey)}</div>
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
-                </span>
+                {item.metrics.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mt-2 ml-11">
+                    {item.metrics.map((m, i) => (
+                      <div key={i} className="text-xs">
+                        <span className="text-muted-foreground">{m.name}: </span>
+                        <span className="font-medium text-foreground">{typeof m.value === "number" ? m.value.toLocaleString() : m.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

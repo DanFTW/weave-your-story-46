@@ -210,7 +210,7 @@ async function pollInstagramInsights(
   // Record dedup
   const { error: insertError } = await supabaseClient
     .from("instagram_analytics_processed")
-    .insert({ user_id: userId, dedupe_key: dedupeKey });
+    .insert({ user_id: userId, dedupe_key: dedupeKey, insights_data: insightsResult });
 
   if (insertError && insertError.code !== "23505") {
     console.error("[Instagram Analytics] Dedup insert error:", insertError);
