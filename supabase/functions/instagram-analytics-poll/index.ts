@@ -124,6 +124,24 @@ async function executeComposioAction(actionName: string, connectionId: string, i
   }
 }
 
+function isExpiredConnectedAccountError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.message.includes("ActionExecute_ConnectedAccountExpired") ||
+    error.message.includes("is in EXPIRED state")
+  );
+}
+
+function createReconnectResponse(): Response {
+  return new Response(JSON.stringify({
+    success: false,
+    needsReconnect: true,
+    code: "INSTAGRAM_CONNECTION_EXPIRED",
+    error: "Instagram connection expired. Please reconnect Instagram and try again.",
+  }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // === FORMAT INSIGHTS AS MEMORY ===
 
 // deno-lint-ignore no-explicit-any
@@ -318,6 +336,9 @@ Deno.serve(async (req) => {
         });
       } catch (activateErr) {
         console.error("[Instagram Analytics] Activate poll failed, leaving is_active=false:", activateErr);
+        if (isExpiredConnectedAccountError(activateErr)) {
+          return createReconnectResponse();
+        }
         return new Response(
           JSON.stringify({ error: activateErr instanceof Error ? activateErr.message : "Activation poll failed" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -337,10 +358,21 @@ Deno.serve(async (req) => {
     }
 
     if (action === "manual-poll") {
-      const result = await pollInstagramInsights(supabaseClient, userId, connectionId);
-      return new Response(JSON.stringify({ success: true, ...result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      try {
+        const result = await pollInstagramInsights(supabaseClient, userId, connectionId);
+        return new Response(JSON.stringify({ success: true, ...result }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (pollErr) {
+        console.error("[Instagram Analytics] Manual poll failed:", pollErr);
+        if (isExpiredConnectedAccountError(pollErr)) {
+          return createReconnectResponse();
+        }
+        return new Response(
+          JSON.stringify({ error: pollErr instanceof Error ? pollErr.message : "Manual poll failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {

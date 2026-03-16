@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useInstagramAnalytics } from "@/hooks/useInstagramAnalytics";
 import { AutomationConfig } from "./AutomationConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const gradientClasses: Record<string, string> = {
@@ -20,7 +21,7 @@ export function InstagramAnalyticsFlow() {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const { isConnected, checkStatus } = useComposio('INSTAGRAM');
+  const { isConnected, checkStatus, disconnect } = useComposio('INSTAGRAM');
 
   const {
     phase, setPhase, config, stats, isLoading, isActivating, isPolling,
@@ -47,16 +48,49 @@ export function InstagramAnalyticsFlow() {
 
   const handleBack = () => navigate('/threads');
 
+  const handleReconnect = async () => {
+    await disconnect();
+    sessionStorage.setItem('returnAfterInstagramConnect', '/flow/instagram-analytics');
+    navigate('/integration/instagram');
+  };
+
   const handleActivate = async () => {
     setPhase('activating');
     const success = await activateMonitoring();
-    if (!success) setPhase('configure');
+    if (!success) setPhase((current) => current === 'needs-reconnect' ? current : 'configure');
   };
 
   if (isCheckingAuth || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-[#E1306C] animate-spin" />
+      </div>
+    );
+  }
+
+  if (phase === 'needs-reconnect') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="flex max-w-sm flex-col items-center gap-5 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-bold text-foreground">Reconnect Instagram</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Your Instagram session expired, so analytics can’t be fetched until you reconnect.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-3">
+            <Button onClick={handleReconnect} className="w-full">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Reconnect Instagram
+            </Button>
+            <Button variant="ghost" onClick={handleBack} className="w-full">
+              Go back
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

@@ -21,6 +21,21 @@ export function useInstagramAnalytics() {
     lastPolledAt: config?.lastPolledAt ?? null,
   };
 
+  const expiredConnectionMessage = 'Your Instagram connection expired. Please reconnect to continue.';
+
+  const isExpiredConnectionError = (message: string) =>
+    message.includes('ActionExecute_ConnectedAccountExpired') ||
+    message.includes('is in EXPIRED state');
+
+  const handleReconnectRequired = useCallback((message?: string) => {
+    setPhase('needs-reconnect');
+    toast({
+      title: 'Reconnect Instagram',
+      description: message || expiredConnectionMessage,
+      variant: 'destructive',
+    });
+  }, [toast]);
+
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -87,10 +102,24 @@ export function useInstagramAnalytics() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
+      if (data?.needsReconnect) {
+        handleReconnectRequired(data.error);
+        return false;
+      }
+
+      if (data?.success === false) {
+        toast({ title: "Poll failed", description: data.error ?? 'Unknown error', variant: "destructive" });
+        return false;
+      }
+
       if (error) {
         const errMsg = typeof error === 'object' && error !== null && 'message' in error
           ? (error as { message: string }).message
           : 'Unknown error';
+        if (isExpiredConnectionError(errMsg)) {
+          handleReconnectRequired();
+          return false;
+        }
         toast({ title: "Poll failed", description: errMsg, variant: "destructive" });
         return false;
       }
@@ -114,7 +143,7 @@ export function useInstagramAnalytics() {
     } finally {
       setIsPolling(false);
     }
-  }, [toast]);
+  }, [handleReconnectRequired, toast]);
 
   const activateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
@@ -131,7 +160,21 @@ export function useInstagramAnalytics() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
+      if (data?.needsReconnect) {
+        handleReconnectRequired(data.error);
+        return false;
+      }
+
+      if (data?.success === false) {
+        toast({ title: "Activation failed", description: data.error ?? 'Unknown error', variant: "destructive" });
+        return false;
+      }
+
       if (error) {
+        if (isExpiredConnectionError(error.message)) {
+          handleReconnectRequired();
+          return false;
+        }
         toast({ title: "Activation failed", description: error.message, variant: "destructive" });
         return false;
       }
@@ -152,7 +195,7 @@ export function useInstagramAnalytics() {
     } finally {
       setIsActivating(false);
     }
-  }, [config, toast]);
+  }, [config, handleReconnectRequired, toast]);
 
   const deactivateMonitoring = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
