@@ -37,38 +37,28 @@ function extractDateLabel(dedupeKey: string): string {
 // deno-lint-ignore no-explicit-any
 function parseInsightsData(data: any): InsightMetric[] {
   if (!data) return [];
-  const metrics: InsightMetric[] = [];
-  const labelMap: Record<string, string> = {
+
+  const allowedMetrics: Record<string, string> = {
     reach: "Reach",
-    profile_views: "Profile Views",
     follower_count: "Followers",
-    accounts_engaged: "Engaged",
     impressions: "Impressions",
   };
 
-  function toDisplayValue(val: unknown): string | number {
-    if (val === null || val === undefined) return "N/A";
-    if (typeof val === "string" || typeof val === "number") return val;
-    if (typeof val === "object") {
-      try { return JSON.stringify(val); } catch { return "N/A"; }
-    }
-    return String(val);
+  // Unwrap Instagram API wrapper: { data: [...], paging: ... }
+  let metricsArray = data;
+  if (!Array.isArray(data) && typeof data === "object" && Array.isArray(data.data)) {
+    metricsArray = data.data;
   }
 
-  if (Array.isArray(data)) {
-    for (const m of data) {
-      const name = m.name || m.title || "Unknown";
-      const rawValue = m.values?.[0]?.value ?? m.value ?? m.total ?? "N/A";
-      const value = toDisplayValue(rawValue);
-      // Skip complex object values that aren't useful to display
-      if (typeof rawValue === "object" && rawValue !== null && !Array.isArray(rawValue)) continue;
-      metrics.push({ name: labelMap[name] || name.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value });
-    }
-  } else if (typeof data === "object") {
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "successful" || key === "error") continue;
-      metrics.push({ name: labelMap[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), value: toDisplayValue(value) });
-    }
+  if (!Array.isArray(metricsArray)) return [];
+
+  const metrics: InsightMetric[] = [];
+  for (const m of metricsArray) {
+    const name = m.name;
+    if (!name || !allowedMetrics[name]) continue;
+    const value = m.values?.[0]?.value ?? m.value ?? "N/A";
+    if (typeof value === "object") continue;
+    metrics.push({ name: allowedMetrics[name], value: typeof value === "number" ? value : String(value) });
   }
   return metrics;
 }
