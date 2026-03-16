@@ -1,7 +1,15 @@
-import { BarChart3, Pause, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BarChart3, Pause, RefreshCw, Activity, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InstagramAnalyticsStats } from "@/types/instagramAnalytics";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, parse, format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+
+interface HistoryItem {
+  id: string;
+  dedupeKey: string;
+  createdAt: string;
+}
 
 interface ActiveMonitoringProps {
   stats: InstagramAnalyticsStats;
@@ -10,7 +18,50 @@ interface ActiveMonitoringProps {
   isPolling?: boolean;
 }
 
+function extractDateLabel(dedupeKey: string): string {
+  try {
+    const datePart = dedupeKey.replace("insights_", "");
+    const parsed = parse(datePart, "yyyy-MM-dd", new Date());
+    return format(parsed, "MMMM d, yyyy");
+  } catch {
+    return dedupeKey;
+  }
+}
+
 export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: ActiveMonitoringProps) {
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchHistory() {
+      setHistoryLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from("instagram_analytics_processed")
+          .select("id, dedupe_key, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        if (!error && data) {
+          setHistory(data.map((r: any) => ({
+            id: r.id,
+            dedupeKey: r.dedupe_key,
+            createdAt: r.created_at,
+          })));
+        }
+      } catch (err) {
+        console.error("Error fetching analytics history:", err);
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+    fetchHistory();
+  }, [stats.insightsCollected]);
+
   return (
     <div className="space-y-6">
       <div className="bg-card rounded-xl p-5 border border-border">
@@ -47,6 +98,48 @@ export function ActiveMonitoring({ stats, onPause, onCheckNow, isPolling }: Acti
             Active
           </span>
         </div>
+      </div>
+
+      {/* Collection History */}
+      <div className="bg-card rounded-xl border border-border p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-foreground">Collection History</h4>
+          {history.length > 0 && (
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+              {history.length}
+            </span>
+          )}
+        </div>
+
+        {historyLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : history.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No insights collected yet
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {history.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2.5"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[#E1306C]/10 flex items-center justify-center shrink-0">
+                  <Activity className="w-4 h-4 text-[#E1306C]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground">Instagram Insights</div>
+                  <div className="text-xs text-muted-foreground">{extractDateLabel(item.dedupeKey)}</div>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3">
