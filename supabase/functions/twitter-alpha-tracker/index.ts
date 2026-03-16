@@ -657,9 +657,9 @@ serve(async (req) => {
         });
       }
 
-      const user = await searchTwitterUser(connectionId, username);
+      const searchResult = await searchTwitterUser(connectionId, username);
       
-      return new Response(JSON.stringify({ user }), {
+      return new Response(JSON.stringify(searchResult), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
