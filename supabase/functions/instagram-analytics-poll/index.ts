@@ -188,14 +188,20 @@ async function pollInstagramInsights(
   // Check if already collected today
   const { data: existing } = await supabaseClient
     .from("instagram_analytics_processed")
-    .select("id")
+    .select("id, insights_data")
     .eq("user_id", userId)
     .eq("dedupe_key", dedupeKey)
     .maybeSingle();
 
-  if (existing) {
-    console.log("[Instagram Analytics] Already collected for today, skipping");
+  if (existing && existing.insights_data !== null) {
+    console.log("[Instagram Analytics] Already collected for today with data, skipping");
     return { newInsights: 0, totalCollected: currentConfig?.insights_collected ?? 0 };
+  }
+
+  // If existing row has NULL insights_data, we'll backfill it below
+  const needsBackfill = existing && existing.insights_data === null;
+  if (needsBackfill) {
+    console.log("[Instagram Analytics] Found existing row with NULL insights_data, backfilling...");
   }
 
   // Execute INSTAGRAM_GET_USER_INSIGHTS via Composio
