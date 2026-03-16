@@ -121,26 +121,8 @@ async function getConnectedAccountId(supabase: any, userId: string): Promise<str
   return integration?.composio_connection_id || null;
 }
 
-// Detect if an error response indicates the connection needs re-authentication
-function isReconnectError(responseText: string, status: number): { needsReconnect: boolean; reason: string } {
-  const text = responseText.toLowerCase();
-  if (status === 410 || text.includes('connectedaccountexpired') || text.includes('expired state')) {
-    return { needsReconnect: true, reason: 'Your Twitter connection has expired. Please reconnect Twitter to continue.' };
-  }
-  if (status === 403 || text.includes('client-not-enrolled')) {
-    return { needsReconnect: true, reason: 'Twitter app access is not configured correctly. Please reconnect Twitter.' };
-  }
-  return { needsReconnect: false, reason: '' };
-}
-
-interface SearchResult {
-  user: TrackedAccount | null;
-  needsReconnect?: boolean;
-  error?: string;
-}
-
 // Search Twitter user by username
-async function searchTwitterUser(connectionId: string, username: string): Promise<SearchResult> {
+async function searchTwitterUser(connectionId: string, username: string): Promise<TrackedAccount | null> {
   try {
     console.log('Searching for Twitter user:', username);
     
@@ -162,16 +144,9 @@ async function searchTwitterUser(connectionId: string, username: string): Promis
     console.log('Search user response status:', response.status);
     console.log('Search user response (first 1000 chars):', responseText.substring(0, 1000));
 
-    // Check for reconnect-worthy errors
-    const reconnectCheck = isReconnectError(responseText, response.status);
-    if (reconnectCheck.needsReconnect) {
-      console.error('Twitter connection needs reconnect:', reconnectCheck.reason);
-      return { user: null, needsReconnect: true, error: reconnectCheck.reason };
-    }
-
     if (!response.ok) {
       console.error('Failed to search user, status:', response.status);
-      return { user: null };
+      return null;
     }
 
     const result = JSON.parse(responseText);
@@ -179,42 +154,32 @@ async function searchTwitterUser(connectionId: string, username: string): Promis
     // Check for error in response body (Composio can return 200 with error)
     if (result.error) {
       console.error('Composio returned error in body:', JSON.stringify(result.error));
-      const bodyReconnect = isReconnectError(JSON.stringify(result.error), result.error?.status || 0);
-      if (bodyReconnect.needsReconnect) {
-        return { user: null, needsReconnect: true, error: bodyReconnect.reason };
-      }
-      return { user: null };
+      return null;
     }
 
     // Align with proven parsing pattern from composio-callback
     const data = result.data || result.response_data || result;
     if (data.error) {
       console.error('Composio returned error in data:', JSON.stringify(data.error));
-      const dataReconnect = isReconnectError(JSON.stringify(data.error), data.error?.status || 0);
-      if (dataReconnect.needsReconnect) {
-        return { user: null, needsReconnect: true, error: dataReconnect.reason };
-      }
-      return { user: null };
+      return null;
     }
 
     const userData = data.response_data?.data || data.data || data;
     
     if (userData && (userData.username || userData.id)) {
       return {
-        user: {
-          username: userData.username || username,
-          userId: userData.id,
-          displayName: userData.name,
-          avatarUrl: userData.profile_image_url,
-        },
+        username: userData.username || username,
+        userId: userData.id,
+        displayName: userData.name,
+        avatarUrl: userData.profile_image_url,
       };
     }
 
     console.warn('No valid user data found in response');
-    return { user: null };
+    return null;
   } catch (error) {
     console.error('Error searching Twitter user:', error);
-    return { user: null };
+    return null;
   }
 }
 
@@ -657,9 +622,9 @@ serve(async (req) => {
         });
       }
 
-      const searchResult = await searchTwitterUser(connectionId, username);
+      const user = await searchTwitterUser(connectionId, username);
       
-      return new Response(JSON.stringify(searchResult), {
+      return new Response(JSON.stringify({ user }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -827,33 +792,11 @@ serve(async (req) => {
 
     // Manual poll
     if (action === 'manual-poll') {
-      try {
-        const result = await processTrackedUsers(supabase, userId);
+      const result = await processTrackedUsers(supabase, userId);
 
-        // Check if the result contains tweet-fetch errors indicating expired connection
-        if (result && typeof result === 'object' && 'error' in result) {
-          const errStr = JSON.stringify(result);
-          const reconnectCheck = isReconnectError(errStr, 0);
-          if (reconnectCheck.needsReconnect) {
-            return new Response(JSON.stringify({ needsReconnect: true, error: reconnectCheck.reason }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-        }
-
-        return new Response(JSON.stringify(result), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } catch (pollError) {
-        const errStr = String(pollError);
-        const reconnectCheck = isReconnectError(errStr, 0);
-        if (reconnectCheck.needsReconnect) {
-          return new Response(JSON.stringify({ needsReconnect: true, error: reconnectCheck.reason }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        throw pollError;
-      }
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // List locally stored Twitter posts
