@@ -15,6 +15,7 @@ export function useTwitterAlphaTracker() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { disconnect: disconnectTwitter } = useComposio("twitter");
 
   const [phase, setPhase] = useState<TwitterAlphaTrackerPhase>("auth-check");
   const [isLoading, setIsLoading] = useState(true);
