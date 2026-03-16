@@ -152,7 +152,9 @@ async function fetchTodoistTasks(accessToken: string): Promise<any[]> {
     throw new Error(`Todoist tasks fetch failed: ${response.status}`);
   }
 
-  const tasks = safeJsonParse(responseText);
+  const parsed = safeJsonParse(responseText);
+  // v1 API wraps tasks in { results: [...] }
+  const tasks = Array.isArray(parsed) ? parsed : parsed?.results;
   if (!Array.isArray(tasks)) {
     console.error("[Todoist Poll] Unexpected Todoist tasks response:", responseText.slice(0, 500));
     throw new Error("Unexpected Todoist tasks response format");
