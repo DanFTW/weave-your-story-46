@@ -20,6 +20,7 @@ export default function IntegrationDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [isSubmittingCredentials, setIsSubmittingCredentials] = useState(false);
   
   const isIOSContacts = integrationId === "ios-contacts";
   
