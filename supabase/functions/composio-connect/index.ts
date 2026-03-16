@@ -276,29 +276,42 @@ serve(async (req) => {
     if (API_KEY_TOOLKITS.includes(toolkitLower)) {
       console.log(`[${toolkitLower}] API Key auth toolkit detected — using /connected_accounts POST instead of /link`);
       
-      // For API Key toolkits, we create a connected account directly
-      // The user's API credentials are already configured in the Composio auth config
-      const requestBody = {
-        auth_config: { id: authConfigId },
-        connection: { user_id: user.id },
-        ...(forceReauth && { force_reauth: true }),
+      const callApiKeyConnect = async (configId: string) => {
+        const requestBody = {
+          auth_config: { id: configId },
+          connection: { user_id: user.id },
+          ...(forceReauth && { force_reauth: true }),
+        };
+        
+        console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
+        
+        const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
+          method: "POST",
+          headers: {
+            "x-api-key": COMPOSIO_API_KEY!,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+        
+        const text = await response.text();
+        console.log(`[${toolkitLower}] Connected accounts response status: ${response.status}`);
+        console.log(`[${toolkitLower}] Connected accounts response: ${text}`);
+        return { response, text };
       };
-      
-      console.log(`[${toolkitLower}] Creating connected account with body:`, JSON.stringify(requestBody));
-      
-      const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
-        method: "POST",
-        headers: {
-          "x-api-key": COMPOSIO_API_KEY!,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-      
-      const responseText = await response.text();
-      console.log(`[${toolkitLower}] Connected accounts response status: ${response.status}`);
-      console.log(`[${toolkitLower}] Connected accounts response: ${responseText}`);
-      
+
+      let { response, text: responseText } = await callApiKeyConnect(authConfigId!);
+
+      // Fallback if auth config not found
+      if (!response.ok && response.status === 400 && responseText.includes("Auth_Config_NotFound")) {
+        console.warn(`[${toolkitLower}] Auth config ${authConfigId} not found, attempting dynamic fallback...`);
+        const fallbackId = await getDefaultAuthConfigId(toolkitLower);
+        if (fallbackId && fallbackId !== authConfigId) {
+          console.log(`[${toolkitLower}] Retrying with fallback auth config: ${fallbackId}`);
+          ({ response, text: responseText } = await callApiKeyConnect(fallbackId));
+        }
+      }
+
       if (!response.ok) {
         console.error(`[${toolkitLower}] API Key connection failed:`, response.status, responseText);
         throw new Error(`Composio API error: ${response.status}`);
