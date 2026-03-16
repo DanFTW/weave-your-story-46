@@ -283,6 +283,14 @@ export default function IntegrationDetail() {
                         This integration is only available in the iOS app.
                       </p>
                     </div>
+                  ) : apiKeyFields ? (
+                    <ApiKeyCredentialForm
+                      integrationName={integration.name}
+                      fields={apiKeyFields}
+                      onSubmit={handleCredentialSubmit}
+                      isSubmitting={isSubmittingCredentials}
+                      helpUrl={apiKeyHelpUrl}
+                    />
                   ) : (
                     <IntegrationConnectButton onClick={handleConnect} />
                   )}
