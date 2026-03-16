@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useComposio } from "@/hooks/useComposio";
 import {
   TwitterAlphaTrackerPhase,
   TrackedTwitterAccount,
@@ -14,6 +15,7 @@ export function useTwitterAlphaTracker() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { disconnect: disconnectTwitter } = useComposio("twitter");
 
   const [phase, setPhase] = useState<TwitterAlphaTrackerPhase>("auth-check");
   const [isLoading, setIsLoading] = useState(true);
@@ -146,6 +148,18 @@ export function useTwitterAlphaTracker() {
 
         if (error) throw error;
 
+        if (data?.needsReconnect) {
+          toast({
+            title: "Twitter connection expired",
+            description: data.error || "Please reconnect Twitter to continue.",
+            variant: "destructive",
+          });
+          await disconnectTwitter();
+          sessionStorage.setItem("returnAfterTwitterConnect", "/flow/twitter-alpha-tracker");
+          navigate("/integration/twitter");
+          return;
+        }
+
         if (data?.user) {
           setSearchResults([
             {
@@ -165,7 +179,7 @@ export function useTwitterAlphaTracker() {
         setIsSearching(false);
       }
     },
-    [user?.id]
+    [user?.id, toast, disconnectTwitter, navigate]
   );
 
   // Add account to selection
@@ -363,6 +377,18 @@ export function useTwitterAlphaTracker() {
 
       if (error) throw error;
 
+      if (data?.needsReconnect) {
+        toast({
+          title: "Twitter connection expired",
+          description: data.error || "Please reconnect Twitter to continue.",
+          variant: "destructive",
+        });
+        await disconnectTwitter();
+        sessionStorage.setItem("returnAfterTwitterConnect", "/flow/twitter-alpha-tracker");
+        navigate("/integration/twitter");
+        return;
+      }
+
       // Refresh tracked accounts to get updated stats
       const { data: trackedAccounts } = await supabase
         .from("twitter_alpha_tracked_accounts")
@@ -399,7 +425,7 @@ export function useTwitterAlphaTracker() {
         variant: "destructive",
       });
     }
-  }, [user?.id, toast]);
+  }, [user?.id, toast, disconnectTwitter, navigate]);
 
   // Reset sync - clears processed posts to allow re-sync
   const resetSync = useCallback(async () => {
