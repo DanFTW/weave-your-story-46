@@ -10,6 +10,7 @@ import { IntegrationCapabilityTag } from "@/components/integrations/IntegrationC
 import { IntegrationConnectedAccount } from "@/components/integrations/IntegrationConnectedAccount";
 import { IntegrationDoneButton } from "@/components/integrations/IntegrationDoneButton";
 import { OAuthConfirmDialog } from "@/components/integrations/OAuthConfirmDialog";
+import { ApiKeyCredentialForm, getApiKeyFields, getApiKeyHelpUrl } from "@/components/integrations/ApiKeyCredentialForm";
 import { useComposio } from "@/hooks/useComposio";
 import { useIOSContacts, isDespiaIOS } from "@/hooks/useIOSContacts";
 import { useToast } from "@/hooks/use-toast";
