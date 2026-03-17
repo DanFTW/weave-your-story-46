@@ -78,15 +78,9 @@ export function YouTubeSyncActive({
         <p className="text-sm font-medium mb-3">Syncing</p>
         <div className="flex flex-wrap gap-2">
           {syncConfig.syncLikedVideos && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-600 rounded-full text-xs font-medium">
-              <ThumbsUp className="w-3 h-3" />
-              Liked Videos
-            </div>
-          )}
-          {syncConfig.syncWatchHistory && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 text-orange-600 rounded-full text-xs font-medium">
-              <History className="w-3 h-3" />
-              Watch History
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-600 rounded-full text-xs font-medium">
+              <Play className="w-3 h-3" />
+              Playlists
             </div>
           )}
           {syncConfig.syncSubscriptions && (
