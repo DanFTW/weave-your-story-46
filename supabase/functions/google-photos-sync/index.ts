@@ -166,6 +166,16 @@ async function listAlbums(connectionId: string) {
     }
 
     const data = JSON.parse(responseText);
+
+    // Check Composio-level success (outer HTTP may be 200 even on failure)
+    if (data.successful === false) {
+      const statusCode = data.data?.status_code;
+      console.error(`listAlbums: Composio tool failed, nested status=${statusCode}`);
+      if (statusCode === 401) {
+        throw new Error('NEEDS_RECONNECT');
+      }
+      throw new Error(data.error || 'Composio tool execution failed');
+    }
     
     // Handle v3 response format
     const responseData = data.data || data;
