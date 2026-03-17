@@ -464,6 +464,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       setServers([]);
       setChannels([]);
       setRecentMessages([]);
+      setMessageCount(0);
       setTriggerWord("");
       setTriggerWordEnabled(false);
       setPhase("select-server");
