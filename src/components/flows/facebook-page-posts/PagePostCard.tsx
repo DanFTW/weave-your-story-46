@@ -13,8 +13,8 @@ export function PagePostCard({ post }: PagePostCardProps) {
     <div className="bg-card rounded-xl border border-border p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-foreground line-clamp-2">
-            Post ID: {post.facebookPostId}
+          <p className="text-sm text-foreground line-clamp-3">
+            {post.postMessage || `Post ID: ${post.facebookPostId}`}
           </p>
           {post.syncedAt && (
             <p className="text-xs text-muted-foreground mt-1">
