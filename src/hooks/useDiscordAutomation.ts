@@ -517,7 +517,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } finally {
       setIsSyncing(false);
     }
-  }, [toast, loadConfig, loadRecentMessages]);
+  }, [toast, loadConfig, loadRecentMessages, loadMessageCount]);
 
   const updateTriggerWord = useCallback(async (word: string, enabled: boolean) => {
     const {
