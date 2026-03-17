@@ -572,8 +572,9 @@ function formatVideoAsMemory(video: YouTubeVideo): string {
   });
 
   const isSubscription = video.id.startsWith('sub_');
-  const label = isSubscription ? 'YouTube Subscription' : 'YouTube Liked Video';
-  const action = isSubscription ? 'Subscribed on' : 'Liked on';
+  const isPlaylist = video.id.startsWith('pl_');
+  const label = isSubscription ? 'YouTube Subscription' : isPlaylist ? 'YouTube Playlist Item' : 'YouTube Video';
+  const action = isSubscription ? 'Subscribed on' : isPlaylist ? 'Added on' : 'Saved on';
 
   let memory = `${label}\n${action} ${date}`;
   
