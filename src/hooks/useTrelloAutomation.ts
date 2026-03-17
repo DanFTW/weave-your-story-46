@@ -81,13 +81,10 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
         completedTracked: existingConfig.completed_tracked ?? 0,
       });
 
-      // Determine phase based on config state
       if (existingConfig.is_active) {
         setPhase('active');
-      } else if (existingConfig.done_list_id) {
-        setPhase('configure');
       } else if (existingConfig.board_id) {
-        setPhase('select-done-list');
+        setPhase('board-overview');
       } else {
         setPhase('select-board');
       }
