@@ -70,7 +70,7 @@ serve(async (req) => {
 
     switch (action) {
       case 'list-videos': {
-        const videos = await fetchLikedVideos(integration.composio_connection_id, limit);
+        const videos = await fetchPlaylistItems(integration.composio_connection_id, limit);
         return new Response(JSON.stringify({ videos }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
