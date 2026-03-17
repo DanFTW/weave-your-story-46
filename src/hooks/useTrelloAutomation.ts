@@ -30,6 +30,8 @@ interface UseTrelloAutomationReturn {
   deactivateMonitoring: () => Promise<void>;
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
+  fetchBoardData: (boardId: string) => Promise<void>;
+  syncBoard: () => Promise<void>;
 }
 
 export function useTrelloAutomation(): UseTrelloAutomationReturn {
