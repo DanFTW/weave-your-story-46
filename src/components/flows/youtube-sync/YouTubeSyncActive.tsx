@@ -33,6 +33,18 @@ export function YouTubeSyncActive({
   onResetSync,
 }: YouTubeSyncActiveProps) {
   const [historyOpen, setHistoryOpen] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
+
+  const filterOptions = [
+    { label: "All", colorClass: "bg-muted text-foreground" },
+    { label: "Liked Video", colorClass: "bg-red-500/10 text-red-600" },
+    { label: "Watch History", colorClass: "bg-orange-500/10 text-orange-600" },
+    { label: "Subscription", colorClass: "bg-purple-500/10 text-purple-600" },
+  ];
+
+  const filteredHistory = categoryFilter === "All"
+    ? syncHistory
+    : syncHistory.filter((item) => item.videoCategory === categoryFilter);
 
   const lastSyncText = syncConfig.lastSyncAt
     ? `Last synced ${formatDistanceToNow(new Date(syncConfig.lastSyncAt), { addSuffix: true })}`
@@ -92,35 +104,63 @@ export function YouTubeSyncActive({
       {syncHistory.length > 0 && (
         <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
           <CollapsibleTrigger className="flex items-center justify-between w-full text-sm font-medium mb-2">
-            <span>Sync History ({syncHistory.length})</span>
+            <span>
+              Sync History
+              {categoryFilter === "All"
+                ? ` (${syncHistory.length})`
+                : ` (${filteredHistory.length} / ${syncHistory.length})`}
+            </span>
             {historyOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
           </CollapsibleTrigger>
           <CollapsibleContent>
+            {/* Filter Tabs */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {filterOptions.map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => setCategoryFilter(opt.label)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    categoryFilter === opt.label
+                      ? `${opt.colorClass} ring-1 ring-current`
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {opt.label === "Liked Video" ? "Liked Videos" : opt.label === "Subscription" ? "Subscriptions" : opt.label}
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {syncHistory.map((item) => {
-                const cat = categoryConfig[item.videoCategory || "Liked Video"] || categoryConfig["Liked Video"];
-                const CatIcon = cat.icon;
-                return (
-                  <div key={item.id} className="bg-card rounded-xl border p-3 flex items-start gap-3">
-                    <div className={`mt-0.5 flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${cat.colorClass}`}>
-                      <CatIcon className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {item.videoTitle || item.youtubeVideoId}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cat.colorClass}`}>
-                          {item.videoCategory || "Liked Video"}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(item.syncedAt), { addSuffix: true })}
-                        </span>
+              {filteredHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No {categoryFilter === "All" ? "" : categoryFilter.toLowerCase()} entries yet
+                </p>
+              ) : (
+                filteredHistory.map((item) => {
+                  const cat = categoryConfig[item.videoCategory || "Liked Video"] || categoryConfig["Liked Video"];
+                  const CatIcon = cat.icon;
+                  return (
+                    <div key={item.id} className="bg-card rounded-xl border p-3 flex items-start gap-3">
+                      <div className={`mt-0.5 flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${cat.colorClass}`}>
+                        <CatIcon className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {item.videoTitle || item.youtubeVideoId}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cat.colorClass}`}>
+                            {item.videoCategory || "Liked Video"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(item.syncedAt), { addSuffix: true })}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </CollapsibleContent>
         </Collapsible>
