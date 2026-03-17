@@ -17,10 +17,9 @@ interface YouTubeSyncActiveProps {
   onResetSync?: () => void;
 }
 
-const categoryConfig: Record<string, { icon: typeof ThumbsUp; colorClass: string }> = {
-  "Liked Video": { icon: ThumbsUp, colorClass: "bg-red-500/10 text-red-600" },
-  "Watch History": { icon: History, colorClass: "bg-orange-500/10 text-orange-600" },
+const categoryConfig: Record<string, { icon: typeof Users; colorClass: string }> = {
   "Subscription": { icon: Users, colorClass: "bg-purple-500/10 text-purple-600" },
+  "Playlist": { icon: Play, colorClass: "bg-blue-500/10 text-blue-600" },
 };
 
 export function YouTubeSyncActive({
