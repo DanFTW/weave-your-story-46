@@ -1,115 +1,34 @@
 
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+## Problem
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+Liked Videos never sync because `fetchLikedVideos` uses `YOUTUBE_GET_CHANNEL_ACTIVITIES`, which doesn't expose likes. The YouTube Data API exposes liked videos through a special playlist with ID `"LL"` (the user's "Liked videos" playlist). We need to fetch items from that playlist instead.
 
-### 1. Database Tables (2 new tables via migration)
+## Plan — 1 file: `supabase/functions/youtube-sync/index.ts`
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+### Replace `fetchLikedVideos` implementation
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+Instead of using `YOUTUBE_GET_CHANNEL_ACTIVITIES` → channel activities, use a two-step approach:
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+1. **Fetch the "LL" playlist items** via `YOUTUBE_LIST_PLAYLIST_ITEMS` (Composio tool) with `playlistId: "LL"` and `part: "snippet,contentDetails"`. This returns the user's liked videos directly.
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+2. **Parse the response** into `YouTubeVideo[]` objects, extracting `contentDetails.videoId`, `snippet.title`, `snippet.channelTitle`, etc.
 
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+### Specific changes
 
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
+- **Replace `fetchLikedVideos` function** (~lines 183-225): Remove the channel ID lookup + activities fetch. Replace with a single call to `YOUTUBE_LIST_PLAYLIST_ITEMS` using `playlistId: "LL"`.
 
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
+- **Replace `parseChannelActivitiesResponse`** (~lines 228-312): Replace with a simpler `parsePlaylistItemsResponse` that extracts video data from playlist item structure (`snippet.resourceId.videoId`, `snippet.title`, etc.).
 
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
+- **`list-videos` action** (line 73): Will automatically use the new `fetchLikedVideos` — no change needed.
 
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
+- **`formatVideoAsMemory`** (line 521): Update the label from hardcoded "Liked on" to be category-aware (subscription vs liked video).
 
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
+- **Keep `getYouTubeChannelId` function** as-is (may be useful for other features, but won't be called for liked videos anymore).
 
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
+- **No changes** to subscription logic, watch history, or any other files.
 
-### 6. Registration (data + routing)
+### Category mapping
 
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
-```
-
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
-
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
-
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
-
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
-
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
-
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
-
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
-
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
+Videos fetched from the LL playlist get `video_category = 'Liked Video'` (already handled by the existing `video.id.startsWith('sub_')` check in the insert logic — liked video IDs are plain video IDs, not prefixed with `sub_`).
 
