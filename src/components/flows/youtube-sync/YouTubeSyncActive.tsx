@@ -36,9 +36,8 @@ export function YouTubeSyncActive({
 
   const filterOptions = [
     { label: "All", colorClass: "bg-muted text-foreground" },
-    { label: "Liked Video", colorClass: "bg-red-500/10 text-red-600" },
-    { label: "Watch History", colorClass: "bg-orange-500/10 text-orange-600" },
     { label: "Subscription", colorClass: "bg-purple-500/10 text-purple-600" },
+    { label: "Playlist", colorClass: "bg-blue-500/10 text-blue-600" },
   ];
 
   const filteredHistory = categoryFilter === "All"
