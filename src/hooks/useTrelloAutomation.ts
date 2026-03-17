@@ -105,6 +105,52 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
   // Note: Initialization is now triggered by the component via initializeAfterAuthCheck
   // This removes the old init useEffect that caused the race condition
 
+  // Fetch board data (lists + cards grouped)
+  const fetchBoardData = useCallback(async (bid: string) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('trello-automation-triggers', {
+        body: { action: 'get-board-data', boardId: bid },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast({ title: "Failed to load board data", description: data.error, variant: "destructive" });
+        setListsWithCards([]);
+        return;
+      }
+      setListsWithCards(data.lists || []);
+    } catch (error) {
+      console.error('Failed to fetch board data:', error);
+      toast({ title: "Failed to load board data", description: "Please try again.", variant: "destructive" });
+      setListsWithCards([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  // Sync current board
+  const syncBoard = useCallback(async () => {
+    if (!config?.boardId) return;
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('trello-automation-triggers', {
+        body: { action: 'get-board-data', boardId: config.boardId },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast({ title: "Sync failed", description: data.error, variant: "destructive" });
+        return;
+      }
+      setListsWithCards(data.lists || []);
+      toast({ title: "Synced", description: "Board data updated." });
+    } catch (error) {
+      console.error('Sync failed:', error);
+      toast({ title: "Sync failed", description: "Could not refresh board data.", variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [config?.boardId, toast]);
+
   // Fetch user's Trello boards
   const fetchBoards = useCallback(async () => {
     setIsLoading(true);
