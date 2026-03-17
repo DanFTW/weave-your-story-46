@@ -349,6 +349,26 @@ serve(async (req) => {
       const webhookUrl = `${SUPABASE_URL}/functions/v1/email-automation-webhook`;
       console.log("Webhook URL:", webhookUrl);
 
+      // Set global Composio project callback URL so trigger events are delivered
+      try {
+        console.log("Setting global Composio callback URL...");
+        const cbResponse = await fetch(
+          `https://backend.composio.dev/api/v1/triggers/set_callback_url`,
+          {
+            method: "POST",
+            headers: {
+              "x-api-key": COMPOSIO_API_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ callbackURL: webhookUrl }),
+          }
+        );
+        const cbText = await cbResponse.text();
+        console.log("Set callback URL response:", cbResponse.status, cbText);
+      } catch (cbErr) {
+        console.error("Failed to set callback URL (non-fatal):", cbErr);
+      }
+
       for (const contact of contacts) {
         let incomingTriggerId: string | undefined;
         let outgoingTriggerId: string | undefined;
@@ -375,7 +395,6 @@ serve(async (req) => {
                     labelIds: "INBOX",
                     userId: "me",
                   },
-                  webhook_url: webhookUrl,
                 }),
               }
             );
@@ -413,7 +432,6 @@ serve(async (req) => {
                     query: `to:${contact.email}`,
                     userId: "me",
                   },
-                  webhook_url: webhookUrl,
                 }),
               }
             );
@@ -478,6 +496,146 @@ serve(async (req) => {
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // ==================== BACKFILL ACTION ====================
+    // Fetch recent emails from Gmail for monitored contacts and populate history
+    if (action === "backfill") {
+      try {
+        console.log("Starting email backfill for user:", user.id);
+
+        // Get all active monitored contacts
+        const { data: activeContacts, error: contactsError } = await adminClient
+          .from("email_automation_contacts")
+          .select("email_address, monitor_incoming, monitor_outgoing")
+          .eq("user_id", user.id)
+          .eq("is_active", true);
+
+        if (contactsError || !activeContacts || activeContacts.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, message: "No active contacts", inserted: 0 }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Get existing email_message_ids to dedupe
+        const { data: existingEmails } = await adminClient
+          .from("email_automation_processed_emails")
+          .select("email_message_id")
+          .eq("user_id", user.id)
+          .not("email_message_id", "is", null);
+
+        const existingIds = new Set((existingEmails || []).map(e => e.email_message_id));
+        console.log(`Existing processed emails: ${existingIds.size}`);
+
+        let totalInserted = 0;
+
+        for (const contact of activeContacts) {
+          const emailAddr = contact.email_address;
+          console.log(`Backfilling emails for: ${emailAddr}`);
+
+          // Fetch emails from/to this contact via Composio GMAIL_FETCH_EMAILS
+          const query = `from:${emailAddr} OR to:${emailAddr}`;
+          
+          try {
+            const searchResponse = await fetch(
+              "https://backend.composio.dev/api/v3/tools/execute/GMAIL_FETCH_EMAILS",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-api-key": COMPOSIO_API_KEY,
+                },
+                body: JSON.stringify({
+                  connected_account_id: connectedAccountId,
+                  arguments: {
+                    query,
+                    max_results: 30,
+                  },
+                }),
+              }
+            );
+
+            if (!searchResponse.ok) {
+              const errText = await searchResponse.text();
+              console.error(`Gmail fetch failed for ${emailAddr}:`, errText);
+              continue;
+            }
+
+            const searchData = await searchResponse.json();
+            const responseData = searchData.data || searchData;
+            const messages = responseData?.messages || responseData?.results || responseData?.threadsList || responseData?.emails || [];
+            console.log(`Found ${messages.length} messages for ${emailAddr}`);
+
+            for (const message of messages) {
+              const messageId = message.id || message.messageId || message.message_id;
+              if (!messageId || existingIds.has(messageId)) continue;
+
+              // Determine direction
+              const from = message.from || message.From || message.sender || "";
+              const to = message.to || message.To || message.recipient || "";
+              const fromLower = from.toLowerCase();
+              const isIncoming = fromLower.includes(emailAddr.toLowerCase());
+              const direction = isIncoming ? "incoming" : "outgoing";
+
+              // Extract subject
+              let subject = message.subject || message.Subject || "(No subject)";
+              if (typeof message.snippet === "object" && message.snippet?.subject) {
+                subject = message.snippet.subject;
+              }
+
+              // Extract snippet text
+              let snippetText = "";
+              if (typeof message.snippet === "object" && message.snippet?.body) {
+                snippetText = message.snippet.body;
+              } else if (typeof message.snippet === "string") {
+                snippetText = message.snippet;
+              } else if (message.messageText) {
+                snippetText = message.messageText;
+              } else if (message.preview) {
+                snippetText = message.preview;
+              }
+
+              const dateStr = message.date || message.Date || message.internalDate || null;
+
+              const { error: insertErr } = await adminClient
+                .from("email_automation_processed_emails")
+                .insert({
+                  user_id: user.id,
+                  contact_email: emailAddr,
+                  sender: from || null,
+                  subject: subject || null,
+                  snippet: snippetText ? snippetText.substring(0, 200) : null,
+                  direction,
+                  email_message_id: messageId,
+                  processed_at: dateStr ? new Date(dateStr).toISOString() : new Date().toISOString(),
+                });
+
+              if (!insertErr) {
+                existingIds.add(messageId);
+                totalInserted++;
+              }
+            }
+          } catch (fetchErr) {
+            console.error(`Error fetching emails for ${emailAddr}:`, fetchErr);
+          }
+        }
+
+        console.log(`Backfill complete: inserted ${totalInserted} new records`);
+        return new Response(
+          JSON.stringify({ success: true, inserted: totalInserted }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (error) {
+        console.error("Backfill error:", error);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: error instanceof Error ? error.message : "Backfill failed",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ==================== DELETE ACTION ====================

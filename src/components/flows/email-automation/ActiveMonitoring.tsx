@@ -55,12 +55,32 @@ export function ActiveMonitoring({
   const [history, setHistory] = useState<ProcessedEmail[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
+  // Trigger backfill then fetch history
   useEffect(() => {
-    const fetchHistory = async () => {
+    const runBackfillAndFetch = async () => {
       setHistoryLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setHistoryLoading(false); return; }
 
+      // Fire backfill in background to populate any missing records
+      try {
+        supabase.functions.invoke("email-automation-triggers", {
+          body: { action: "backfill" },
+        }).then(async () => {
+          // Re-fetch history after backfill completes
+          const { data } = await supabase
+            .from("email_automation_processed_emails")
+            .select("id, contact_email, sender, subject, direction, processed_at")
+            .eq("user_id", user.id)
+            .order("processed_at", { ascending: false })
+            .limit(50);
+          setHistory(data || []);
+        }).catch(err => console.error("Backfill error:", err));
+      } catch (e) {
+        console.error("Backfill invoke error:", e);
+      }
+
+      // Immediately show whatever we have
       const { data } = await supabase
         .from("email_automation_processed_emails")
         .select("id, contact_email, sender, subject, direction, processed_at")
@@ -71,7 +91,7 @@ export function ActiveMonitoring({
       setHistory(data || []);
       setHistoryLoading(false);
     };
-    fetchHistory();
+    runBackfillAndFetch();
   }, [contacts.length]);
 
   const handleRemove = async (contactId: string) => {
