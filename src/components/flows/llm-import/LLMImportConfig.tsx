@@ -131,7 +131,13 @@ export function LLMImportConfig({ category, onBack, onProcess, isProcessing }: L
                     key={llm.name}
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(llm.url, "_blank")}
+                    onClick={() => {
+                      if (isMedian()) {
+                        median.window.open(llm.url, 'external');
+                      } else {
+                        window.open(llm.url, "_blank");
+                      }
+                    }}
                     className="gap-2"
                   >
                     {llm.name}
