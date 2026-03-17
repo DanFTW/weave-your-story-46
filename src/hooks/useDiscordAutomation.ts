@@ -52,12 +52,27 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const [recentMessages, setRecentMessages] = useState<DiscordRecentMessage[]>([]);
   const [triggerWord, setTriggerWord] = useState("");
   const [triggerWordEnabled, setTriggerWordEnabled] = useState(false);
+  const [messageCount, setMessageCount] = useState(0);
 
   const stats: DiscordAutomationStats = {
-    messagesTracked: config?.messagesTracked ?? 0,
+    messagesTracked: messageCount,
     lastChecked: config?.lastCheckedAt ?? null,
     isActive: config?.isActive ?? false,
   };
+
+  const loadMessageCount = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { count } = await supabase
+      .from("discord_processed_messages" as any)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    setMessageCount(count ?? 0);
+  }, []);
 
   const loadRecentMessages = useCallback(async () => {
     const {
@@ -120,8 +135,9 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
 
       if (c.is_active) {
         setPhase("active");
-        // Load recent messages when active
+        // Load recent messages and true count when active
         await loadRecentMessages();
+        await loadMessageCount();
       } else if (c.channel_id) {
         setPhase("configure");
       } else if (c.server_id) {
@@ -132,7 +148,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } else {
       setPhase("select-server");
     }
-  }, [loadRecentMessages]);
+  }, [loadRecentMessages, loadMessageCount]);
 
   const initializeAfterAuthCheck = useCallback(async () => {
     if (hasInitialized) return;
@@ -448,6 +464,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       setServers([]);
       setChannels([]);
       setRecentMessages([]);
+      setMessageCount(0);
       setTriggerWord("");
       setTriggerWordEnabled(false);
       setPhase("select-server");
@@ -486,9 +503,10 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
           ? `Imported ${count} new message${count > 1 ? "s" : ""}.`
           : "No new messages found.",
       });
-      // Refresh config and recent messages
+      // Refresh config, count, and recent messages
       await loadConfig();
       await loadRecentMessages();
+      await loadMessageCount();
     } catch (error) {
       console.error("Failed to sync:", error);
       toast({
@@ -499,7 +517,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } finally {
       setIsSyncing(false);
     }
-  }, [toast, loadConfig, loadRecentMessages]);
+  }, [toast, loadConfig, loadRecentMessages, loadMessageCount]);
 
   const updateTriggerWord = useCallback(async (word: string, enabled: boolean) => {
     const {
@@ -558,6 +576,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       });
       await loadConfig();
       await loadRecentMessages();
+      await loadMessageCount();
     } catch (error) {
       console.error("Failed to search:", error);
       toast({
@@ -568,7 +587,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } finally {
       setIsSyncing(false);
     }
-  }, [toast, loadConfig, loadRecentMessages]);
+  }, [toast, loadConfig, loadRecentMessages, loadMessageCount]);
 
   return {
     phase,
