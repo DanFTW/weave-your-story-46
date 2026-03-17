@@ -136,7 +136,7 @@ serve(async (req) => {
         const data = await safeJsonParse(response);
         console.log("[Trello] Get boards response:", JSON.stringify(data));
 
-        const boards = data?.data?.response_data || data?.data || [];
+        const boards = data?.data?.response_data || data?.data?.details || (Array.isArray(data?.data) ? data.data : []);
         
         return new Response(JSON.stringify({ 
           boards: Array.isArray(boards) ? boards.map((b: any) => ({
@@ -200,7 +200,7 @@ serve(async (req) => {
         const data = await safeJsonParse(response);
         console.log("[Trello] Get lists response:", JSON.stringify(data));
 
-        const lists = data?.data?.response_data || data?.data || [];
+        const lists = data?.data?.response_data || data?.data?.details || (Array.isArray(data?.data) ? data.data : []);
         
         return new Response(JSON.stringify({ 
           lists: Array.isArray(lists) ? lists.map((l: any) => ({
