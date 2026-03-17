@@ -189,6 +189,7 @@ async function listAlbumPhotos(connectionId: string, albumId: string, limit: num
       },
       body: JSON.stringify({
         connected_account_id: connectionId,
+        auth_config_id: 'ac_SQbZGWVauUwV',
         arguments: {
           albumId: albumId,
           pageSize: limit,
