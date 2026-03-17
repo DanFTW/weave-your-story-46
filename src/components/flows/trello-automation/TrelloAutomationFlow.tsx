@@ -141,21 +141,13 @@ export function TrelloAutomationFlow() {
           />
         )}
 
-        {phase === 'select-done-list' && (
-          <ListPicker
-            lists={lists}
+        {phase === 'board-overview' && (
+          <BoardOverview
+            lists={listsWithCards}
             isLoading={isLoading}
+            isSyncing={isSyncing}
             boardName={config?.boardName || ''}
-            onSelectList={selectDoneList}
-          />
-        )}
-
-        {phase === 'configure' && config && (
-          <AutomationConfig
-            config={config}
-            onUpdateOptions={updateMonitoringOptions}
-            onActivate={activateMonitoring}
-            isLoading={isLoading}
+            onSync={syncBoard}
           />
         )}
       </div>
