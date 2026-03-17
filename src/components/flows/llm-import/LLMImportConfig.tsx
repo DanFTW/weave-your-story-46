@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, Copy, Check, ExternalLink } from "lucide-react";
+import { median, isMedian } from "@/utils/median";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { LLMImportCategory } from "@/types/llmImport";
