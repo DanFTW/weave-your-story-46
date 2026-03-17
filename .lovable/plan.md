@@ -1,115 +1,78 @@
 
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+## Plan: Replace List Picker with Board Overview + Sync
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+### Summary
+After selecting a board, instead of picking a single "done" list, the user sees **all lists** from the board with expandable dropdowns showing cards per list. A "Sync Now" button fetches the latest data. The `select-done-list` phase is replaced with a `board-overview` phase.
 
-### 1. Database Tables (2 new tables via migration)
+### Files to modify (constraint: only these files)
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+**1. `src/types/trelloAutomation.ts`**
+- Add `'board-overview'` to `TrelloAutomationPhase`
+- Add `TrelloListWithCards` type: extends `TrelloList` with a `cards: TrelloCard[]` field
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+**2. `src/components/flows/trello-automation/ListPicker.tsx`** — full rewrite → `BoardOverview`
+- Rename/rewrite as the board overview component
+- Props: `lists: TrelloListWithCards[]`, `isLoading`, `isSyncing`, `boardName`, `onSync`
+- Renders all lists as accordion items using `Accordion` from `@/components/ui/accordion`
+- Each accordion trigger shows list name + `Badge` with card count
+- Each accordion content shows card names (simple list with card title, optional labels/due)
+- Bottom: full-width "Sync Now" `Button` (h-14, rounded-2xl per style standards) that calls `onSync`
+- Loading skeleton while initial load; spinner on Sync button while syncing
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+**3. `supabase/functions/trello-automation-triggers/index.ts`**
+- Add new action `get-cards` that calls `TRELLO_GET_BOARDS_CARDS_BY_ID_BOARD` with the board ID
+- Returns `{ cards: TrelloCard[] }` with same `details` extraction pattern
+- Add new action `get-board-data` (convenience) that fetches lists AND cards in parallel, then groups cards by `idList` and returns `{ lists: TrelloListWithCards[] }`
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
+**4. `src/hooks/useTrelloAutomation.ts`**
+- Add `listsWithCards` state (`TrelloListWithCards[]`)
+- Add `isSyncing` state for the sync button
+- Add `fetchBoardData(boardId)` — calls `get-board-data` action, sets `listsWithCards`
+- Add `syncBoard()` — re-fetches board data for current board, updates state
+- Update `selectBoard` to transition to `'board-overview'` instead of `'select-done-list'`, and call `fetchBoardData`
+- Remove `selectDoneList` from the flow (keep function for backward compat but it's unused)
+- Update `loadConfig`: if board is selected but not active, go to `'board-overview'` instead of `'select-done-list'`
+- Export new state/functions
 
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
+**5. `src/components/flows/trello-automation/TrelloAutomationFlow.tsx`**
+- Import the rewritten ListPicker/BoardOverview
+- Replace the `select-done-list` phase rendering with `board-overview` phase rendering the new component
+- Update header subtitle for `board-overview`: "Board overview"
+- Update `handleBack`: `board-overview` goes back to `select-board`
+- Remove `configure` phase from the main flow (or keep it accessible from board overview if needed — but per the request, the board overview IS the new post-board-select screen)
 
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
+### Edge function: `get-board-data` action detail
 
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
-
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
-
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
-
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
+```text
+1. Fetch lists via TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD
+2. Fetch cards via TRELLO_GET_BOARDS_CARDS_BY_ID_BOARD  
+3. Group cards by idList
+4. Return { lists: [{ id, name, closed, cards: [...] }] }
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+### UI structure (BoardOverview)
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+```text
+┌─────────────────────────────┐
+│ Board: "My Project"         │
+│                             │
+│ ▸ To Do                [3]  │
+│ ▾ In Progress          [2]  │
+│   ├ Card: Fix login bug     │
+│   └ Card: Update docs       │
+│ ▸ Done                 [5]  │
+│ ▸ Backlog              [1]  │
+│                             │
+│ ┌─────────────────────────┐ │
+│ │     🔄  Sync Now        │ │
+│ └─────────────────────────┘ │
+└─────────────────────────────┘
+```
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
-
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
-
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
-
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
-
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
-
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
+### What stays unchanged
+- `BoardPicker.tsx` — untouched
+- `ActiveMonitoring.tsx` — untouched  
+- `AutomationConfig.tsx` — untouched (though no longer reached in the default flow)
+- `ActivatingScreen.tsx` — untouched
 
