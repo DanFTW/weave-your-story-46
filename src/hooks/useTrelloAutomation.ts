@@ -16,6 +16,8 @@ interface UseTrelloAutomationReturn {
   config: TrelloAutomationConfig | null;
   boards: TrelloBoard[];
   lists: TrelloList[];
+  listsWithCards: TrelloListWithCards[];
+  isSyncing: boolean;
   isLoading: boolean;
   hasLoadError: boolean;
   stats: TrelloAutomationStats;
