@@ -179,19 +179,12 @@ async function getYouTubeChannelId(connectionId: string): Promise<string | null>
   }
 }
 
-// Step 2: Fetch liked videos using YOUTUBE_GET_CHANNEL_ACTIVITIES
+// Step 2: Fetch liked videos using the "LL" (Liked Videos) playlist
 async function fetchLikedVideos(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
   try {
-    // First get the user's channel ID
-    const channelId = await getYouTubeChannelId(connectionId);
-    if (!channelId) {
-      console.error('Could not get YouTube channel ID - cannot fetch activities');
-      return [];
-    }
+    console.log('Fetching liked videos via YOUTUBE_LIST_PLAYLIST_ITEMS with playlistId: LL...');
     
-    console.log('Fetching channel activities with YOUTUBE_GET_CHANNEL_ACTIVITIES for channel:', channelId);
-    
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_GET_CHANNEL_ACTIVITIES', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_PLAYLIST_ITEMS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -200,7 +193,7 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
       body: JSON.stringify({
         connected_account_id: connectionId,
         arguments: {
-          channelId: channelId,
+          playlistId: 'LL',
           part: 'snippet,contentDetails',
           maxResults: Math.min(limit, 50),
         },
@@ -208,31 +201,30 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
     });
 
     const responseText = await response.text();
-    console.log('Channel activities response status:', response.status);
-    console.log('Channel activities response (first 3000 chars):', responseText.slice(0, 3000));
+    console.log('Playlist items response status:', response.status);
+    console.log('Playlist items response (first 3000 chars):', responseText.slice(0, 3000));
 
     if (!response.ok) {
-      console.error('Failed to fetch channel activities:', responseText);
+      console.error('Failed to fetch liked videos playlist:', responseText);
       return [];
     }
 
     const data = JSON.parse(responseText);
-    return parseChannelActivitiesResponse(data);
+    return parsePlaylistItemsResponse(data);
   } catch (error) {
     console.error('Error fetching liked videos:', error);
     return [];
   }
 }
 
-// Parse channel activities to extract videos (likes, uploads, etc.)
-function parseChannelActivitiesResponse(data: any): YouTubeVideo[] {
+// Parse playlist items response to extract videos
+function parsePlaylistItemsResponse(data: any): YouTubeVideo[] {
   const videos: YouTubeVideo[] = [];
   
-  console.log('Parsing channel activities response, top-level keys:', Object.keys(data || {}));
+  console.log('Parsing playlist items response, top-level keys:', Object.keys(data || {}));
   
   const responseData = data?.data || data;
   
-  // Find items array in response
   let items: any[] = [];
   const possiblePaths = [
     responseData?.response_data?.items,
@@ -245,69 +237,42 @@ function parseChannelActivitiesResponse(data: any): YouTubeVideo[] {
   for (const path of possiblePaths) {
     if (Array.isArray(path) && path.length > 0) {
       items = path;
-      console.log('Found activities items array, count:', items.length);
+      console.log('Found playlist items array, count:', items.length);
       break;
     }
   }
 
   if (items.length === 0) {
-    console.log('No activity items found in response');
+    console.log('No playlist items found in response');
     return [];
   }
 
-  console.log('First activity item sample:', JSON.stringify(items[0])?.slice(0, 800));
+  console.log('First playlist item sample:', JSON.stringify(items[0])?.slice(0, 800));
 
   for (const item of items) {
     const snippet = item.snippet || {};
     const contentDetails = item.contentDetails || {};
-    const activityType = snippet.type;
     
-    console.log('Processing activity type:', activityType);
-    
-    // We're interested in: like, upload, recommendation, favorite, playlistItem
-    let videoId: string | null = null;
-    let videoTitle = snippet.title || 'Untitled Video';
-    
-    switch (activityType) {
-      case 'like':
-        videoId = contentDetails?.like?.resourceId?.videoId;
-        break;
-      case 'upload':
-        videoId = contentDetails?.upload?.videoId;
-        break;
-      case 'recommendation':
-        videoId = contentDetails?.recommendation?.resourceId?.videoId;
-        break;
-      case 'favorite':
-        videoId = contentDetails?.favorite?.resourceId?.videoId;
-        break;
-      case 'playlistItem':
-        videoId = contentDetails?.playlistItem?.resourceId?.videoId;
-        break;
-      default:
-        // Try generic extraction for unknown types
-        videoId = contentDetails?.resourceId?.videoId || 
-                  contentDetails?.videoId ||
-                  item.id?.videoId;
-    }
+    // Extract video ID from resourceId or contentDetails
+    const videoId = snippet?.resourceId?.videoId || contentDetails?.videoId;
     
     if (!videoId) {
-      console.log('Activity without video ID, type:', activityType, 'contentDetails keys:', Object.keys(contentDetails));
+      console.log('Playlist item without video ID, snippet keys:', Object.keys(snippet));
       continue;
     }
 
     videos.push({
       id: videoId,
-      title: videoTitle,
-      channelTitle: snippet.channelTitle,
+      title: snippet.title || 'Untitled Video',
+      channelTitle: snippet.videoOwnerChannelTitle || snippet.channelTitle,
       description: snippet.description,
-      publishedAt: snippet.publishedAt || new Date().toISOString(),
+      publishedAt: snippet.publishedAt || contentDetails?.videoPublishedAt || new Date().toISOString(),
       thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
       videoUrl: `https://youtube.com/watch?v=${videoId}`,
     });
   }
 
-  console.log('Parsed videos from activities count:', videos.length);
+  console.log('Parsed videos from playlist items count:', videos.length);
   return videos;
 }
 
@@ -518,7 +483,11 @@ function formatVideoAsMemory(video: YouTubeVideo): string {
     day: 'numeric',
   });
 
-  let memory = `YouTube Video\nLiked on ${date}`;
+  const isSubscription = video.id.startsWith('sub_');
+  const label = isSubscription ? 'YouTube Subscription' : 'YouTube Liked Video';
+  const action = isSubscription ? 'Subscribed on' : 'Liked on';
+
+  let memory = `${label}\n${action} ${date}`;
   
   memory += `\n\n${video.title}`;
   
