@@ -67,52 +67,64 @@ serve(async (req) => {
     console.log('Using Composio connection:', connectionId);
 
     // Handle different actions
-    switch (action) {
-      case 'list-albums': {
-        const albums = await listAlbums(connectionId);
-        return new Response(
-          JSON.stringify({ albums }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      case 'list-album-photos': {
-        const { albumId, limit = 20 } = body;
-        if (!albumId) {
+    try {
+      switch (action) {
+        case 'list-albums': {
+          const albums = await listAlbums(connectionId);
           return new Response(
-            JSON.stringify({ error: 'albumId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ albums }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const photos = await listAlbumPhotos(connectionId, albumId, limit);
+
+        case 'list-album-photos': {
+          const { albumId, limit = 20 } = body;
+          if (!albumId) {
+            return new Response(
+              JSON.stringify({ error: 'albumId is required' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          const photos = await listAlbumPhotos(connectionId, albumId, limit);
+          return new Response(
+            JSON.stringify({ photos }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        case 'list-photos': {
+          const limit = body.limit || 20;
+          const photos = await listPhotos(connectionId, limit);
+          return new Response(
+            JSON.stringify({ photos }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        case 'sync': {
+          const result = await syncPhotos(supabase, user.id, connectionId);
+          return new Response(
+            JSON.stringify(result),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        default:
+          return new Response(
+            JSON.stringify({ error: 'Invalid action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+      }
+    } catch (actionError: unknown) {
+      const msg = actionError instanceof Error ? actionError.message : 'Unknown error';
+      if (msg === 'NEEDS_RECONNECT') {
+        console.error('Google Photos token expired — user needs to reconnect');
         return new Response(
-          JSON.stringify({ photos }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Google Photos token expired. Please reconnect.', needsReconnect: true }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-      case 'list-photos': {
-        const limit = body.limit || 20;
-        const photos = await listPhotos(connectionId, limit);
-        return new Response(
-          JSON.stringify({ photos }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      case 'sync': {
-        const result = await syncPhotos(supabase, user.id, connectionId);
-        return new Response(
-          JSON.stringify(result),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      default:
-        return new Response(
-          JSON.stringify({ error: 'Invalid action' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      throw actionError;
     }
   } catch (error: unknown) {
     console.error('Google Photos Sync error:', error);
@@ -154,6 +166,16 @@ async function listAlbums(connectionId: string) {
     }
 
     const data = JSON.parse(responseText);
+
+    // Check Composio-level success (outer HTTP may be 200 even on failure)
+    if (data.successful === false) {
+      const statusCode = data.data?.status_code;
+      console.error(`listAlbums: Composio tool failed, nested status=${statusCode}`);
+      if (statusCode === 401) {
+        throw new Error('NEEDS_RECONNECT');
+      }
+      throw new Error(data.error || 'Composio tool execution failed');
+    }
     
     // Handle v3 response format
     const responseData = data.data || data;
@@ -207,6 +229,16 @@ async function listAlbumPhotos(connectionId: string, albumId: string, limit: num
     }
 
     const data = JSON.parse(responseText);
+
+    // Check Composio-level success
+    if (data.successful === false) {
+      const statusCode = data.data?.status_code;
+      console.error(`listAlbumPhotos: Composio tool failed, nested status=${statusCode}`);
+      if (statusCode === 401) {
+        throw new Error('NEEDS_RECONNECT');
+      }
+      throw new Error(data.error || 'Composio tool execution failed');
+    }
     
     // Handle v3 response format
     const responseData = data.data || data;
@@ -261,6 +293,16 @@ async function listPhotos(connectionId: string, limit: number) {
     }
 
     const data = JSON.parse(responseText);
+
+    // Check Composio-level success
+    if (data.successful === false) {
+      const statusCode = data.data?.status_code;
+      console.error(`listPhotos: Composio tool failed, nested status=${statusCode}`);
+      if (statusCode === 401) {
+        throw new Error('NEEDS_RECONNECT');
+      }
+      throw new Error(data.error || 'Composio tool execution failed');
+    }
     
     // Handle v3 response format - check multiple possible paths
     const responseData = data.data || data;
