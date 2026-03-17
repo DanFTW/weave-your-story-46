@@ -274,7 +274,7 @@ serve(async (req) => {
         });
       }
 
-      if (parsed.isComplete && parsed.name && parsed.address) {
+      if (parsed.name && parsed.address) {
         // Get Google Maps connection
         const { data: integration } = await sb
           .from("user_integrations")
@@ -588,7 +588,7 @@ serve(async (req) => {
 
             if (!parsed.isRestaurant) return r;
 
-            if (parsed.isComplete && parsed.name && parsed.address && integration?.composio_connection_id) {
+            if (parsed.name && parsed.address && integration?.composio_connection_id) {
               const placeResult = await findOnGoogleMaps(
                 integration.composio_connection_id,
                 parsed.name,
