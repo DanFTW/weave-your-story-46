@@ -179,12 +179,12 @@ async function getYouTubeChannelId(connectionId: string): Promise<string | null>
   }
 }
 
-// Step 2: Fetch liked videos using the "LL" (Liked Videos) playlist
+// Step 2: Fetch liked videos using channel activities
 async function fetchLikedVideos(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
   try {
-    console.log('Fetching liked videos via YOUTUBE_LIST_PLAYLIST_ITEMS with playlistId: LL...');
+    console.log('Fetching liked videos via YOUTUBE_GET_CHANNEL_ACTIVITIES...');
     
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_PLAYLIST_ITEMS', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_GET_CHANNEL_ACTIVITIES', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -193,7 +193,7 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
       body: JSON.stringify({
         connected_account_id: connectionId,
         arguments: {
-          playlistId: 'LL',
+          mine: true,
           part: 'snippet,contentDetails',
           maxResults: Math.min(limit, 50),
         },
@@ -201,27 +201,27 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
     });
 
     const responseText = await response.text();
-    console.log('Playlist items response status:', response.status);
-    console.log('Playlist items response (first 3000 chars):', responseText.slice(0, 3000));
+    console.log('Channel activities response status:', response.status);
+    console.log('Channel activities response (first 3000 chars):', responseText.slice(0, 3000));
 
     if (!response.ok) {
-      console.error('Failed to fetch liked videos playlist:', responseText);
+      console.error('Failed to fetch channel activities:', responseText);
       return [];
     }
 
     const data = JSON.parse(responseText);
-    return parsePlaylistItemsResponse(data);
+    return parseChannelActivitiesResponse(data);
   } catch (error) {
     console.error('Error fetching liked videos:', error);
     return [];
   }
 }
 
-// Parse playlist items response to extract videos
-function parsePlaylistItemsResponse(data: any): YouTubeVideo[] {
+// Parse channel activities response to extract videos
+function parseChannelActivitiesResponse(data: any): YouTubeVideo[] {
   const videos: YouTubeVideo[] = [];
   
-  console.log('Parsing playlist items response, top-level keys:', Object.keys(data || {}));
+  console.log('Parsing channel activities response, top-level keys:', Object.keys(data || {}));
   
   const responseData = data?.data || data;
   
@@ -237,42 +237,53 @@ function parsePlaylistItemsResponse(data: any): YouTubeVideo[] {
   for (const path of possiblePaths) {
     if (Array.isArray(path) && path.length > 0) {
       items = path;
-      console.log('Found playlist items array, count:', items.length);
+      console.log('Found activity items array, count:', items.length);
       break;
     }
   }
 
   if (items.length === 0) {
-    console.log('No playlist items found in response');
+    console.log('No activity items found in response');
     return [];
   }
 
-  console.log('First playlist item sample:', JSON.stringify(items[0])?.slice(0, 800));
+  console.log('First activity item sample:', JSON.stringify(items[0])?.slice(0, 800));
 
   for (const item of items) {
     const snippet = item.snippet || {};
     const contentDetails = item.contentDetails || {};
+    const activityType = snippet.type;
     
-    // Extract video ID from resourceId or contentDetails
-    const videoId = snippet?.resourceId?.videoId || contentDetails?.videoId;
+    // Extract video ID from different activity types
+    let videoId: string | null = null;
+    
+    if (contentDetails?.upload?.videoId) {
+      videoId = contentDetails.upload.videoId;
+    } else if (contentDetails?.like?.resourceId?.videoId) {
+      videoId = contentDetails.like.resourceId.videoId;
+    } else if (contentDetails?.recommendation?.resourceId?.videoId) {
+      videoId = contentDetails.recommendation.resourceId.videoId;
+    } else if (contentDetails?.favorite?.resourceId?.videoId) {
+      videoId = contentDetails.favorite.resourceId.videoId;
+    }
     
     if (!videoId) {
-      console.log('Playlist item without video ID, snippet keys:', Object.keys(snippet));
+      console.log('Activity item without video ID, type:', activityType, 'contentDetails keys:', Object.keys(contentDetails));
       continue;
     }
 
     videos.push({
       id: videoId,
       title: snippet.title || 'Untitled Video',
-      channelTitle: snippet.videoOwnerChannelTitle || snippet.channelTitle,
+      channelTitle: snippet.channelTitle,
       description: snippet.description,
-      publishedAt: snippet.publishedAt || contentDetails?.videoPublishedAt || new Date().toISOString(),
+      publishedAt: snippet.publishedAt || new Date().toISOString(),
       thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
       videoUrl: `https://youtube.com/watch?v=${videoId}`,
     });
   }
 
-  console.log('Parsed videos from playlist items count:', videos.length);
+  console.log('Parsed videos from channel activities count:', videos.length);
   return videos;
 }
 
@@ -421,48 +432,66 @@ async function syncYouTubeContent(
     const videosToSync = allVideos.filter(video => !syncedIds.has(video.id));
     console.log('Videos to sync after filtering:', videosToSync.length);
 
+    let recordsInserted = 0;
     let memoriesCreated = 0;
 
     for (const video of videosToSync.slice(0, 20)) { // Limit to 20 per sync
+      // Step 1: Insert record FIRST via upsert — ensures dedup and history even if memory creation fails
+      const videoCategory = video.id.startsWith('sub_') ? 'Subscription' : 'Liked Video';
+      const { error: upsertError, count } = await supabase
+        .from('youtube_synced_posts')
+        .upsert({
+          user_id: userId,
+          youtube_video_id: video.id,
+          video_title: video.title || null,
+          video_category: videoCategory,
+          synced_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,youtube_video_id', ignoreDuplicates: true, count: 'exact' });
+
+      if (upsertError) {
+        console.error('Failed to upsert record for video:', video.id, upsertError);
+        continue;
+      }
+
+      recordsInserted++;
+      console.log('Record upserted for video:', video.id);
+
+      // Step 2: Attempt memory creation (non-blocking for record)
       const memory = formatVideoAsMemory(video);
       console.log('Creating memory for video:', video.id, 'content preview:', memory.slice(0, 100));
       
       const success = await createMemory(apiKeys, memory);
       
       if (success) {
-        // Record synced video
-        await supabase
-          .from('youtube_synced_posts')
-          .insert({
-            user_id: userId,
-            youtube_video_id: video.id,
-            video_title: video.title || null,
-            video_category: video.id.startsWith('sub_') ? 'Subscription' : 'Liked Video',
-          });
         memoriesCreated++;
         console.log('Memory created successfully for video:', video.id);
       } else {
         console.error('Failed to create memory for video:', video.id);
       }
+
+      // Small delay between LIAM API calls to avoid overwhelming the API
+      if (videosToSync.indexOf(video) < videosToSync.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
     }
 
-    // Update sync config
+    // Update sync config with ACTUAL counts
     await supabase
       .from('youtube_sync_config')
       .upsert({
         user_id: userId,
         last_sync_at: new Date().toISOString(),
         last_synced_video_id: videosToSync[0]?.id,
-        videos_synced_count: (config?.videos_synced_count || 0) + videosToSync.length,
+        videos_synced_count: (config?.videos_synced_count || 0) + recordsInserted,
         memories_created_count: (config?.memories_created_count || 0) + memoriesCreated,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
-    console.log('Sync complete. Videos synced:', videosToSync.length, 'Memories created:', memoriesCreated);
+    console.log('Sync complete. Records inserted:', recordsInserted, 'Memories created:', memoriesCreated);
 
     return {
       success: true,
-      videosSynced: videosToSync.length,
+      videosSynced: recordsInserted,
       memoriesCreated,
     };
   } catch (error) {
