@@ -576,6 +576,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
       });
       await loadConfig();
       await loadRecentMessages();
+      await loadMessageCount();
     } catch (error) {
       console.error("Failed to search:", error);
       toast({
