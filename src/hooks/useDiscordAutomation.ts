@@ -587,7 +587,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } finally {
       setIsSyncing(false);
     }
-  }, [toast, loadConfig, loadRecentMessages]);
+  }, [toast, loadConfig, loadRecentMessages, loadMessageCount]);
 
   return {
     phase,
