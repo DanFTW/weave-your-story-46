@@ -293,18 +293,21 @@ async function pollHubSpotContacts(
         continue; // Already processed
       }
 
-      // Mark as processed
+      const fullName = [contact.properties?.firstname, contact.properties?.lastname]
+        .filter(Boolean)
+        .join(" ") || contact.properties?.email || null;
+      const company = contact.properties?.company || null;
+
+      // Mark as processed with metadata
       await supabaseClient.from("hubspot_processed_contacts").insert({
         user_id: userId,
         hubspot_contact_id: hubspotContactId,
+        contact_name: fullName,
+        company: company,
       });
 
       newContactsCount++;
-
-      const fullName = [contact.properties?.firstname, contact.properties?.lastname]
-        .filter(Boolean)
-        .join(" ") || contact.properties?.email || hubspotContactId;
-      console.log(`[HubSpot Poll] New contact: ${fullName}`);
+      console.log(`[HubSpot Poll] New contact: ${fullName || hubspotContactId}`);
 
       // Create memory via LIAM API if API keys are configured
       if (apiKeys) {
