@@ -1,115 +1,134 @@
 
+What I found after tracing the full email-automation flow:
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+## Root cause
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+The monitoring page is not the main problem.
 
-### 1. Database Tables (2 new tables via migration)
+The UI is already doing the right thing:
+- `ActiveMonitoring.tsx` fetches from `email_automation_processed_emails`
+- the request succeeds
+- the response is `[]`
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+So the empty history is caused upstream: no processed email rows are ever being created.
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+## Evidence
 
-### 2. Edge Function: `restaurant-bookmark-sync`
-
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
-
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
-
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
-
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
-
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
-
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
-
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
+### 1. The history table is empty
+The app is querying:
+```text
+email_automation_processed_emails
+where user_id = 326f79e7... 
+order by processed_at desc
+limit 50
 ```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
-}
+and the response is empty.
+
+### 2. The webhook function is never being invoked
+I checked:
+- `email-automation-webhook` edge logs
+- edge analytics for requests hitting that function
+
+Result: no webhook invocations at all.
+
+That means the insert logic inside `supabase/functions/email-automation-webhook/index.ts` is not even getting a chance to run.
+
+### 3. Triggers are active, but only status is being checked
+The `email-automation-triggers` logs show:
+- triggers are created successfully
+- incoming trigger `ti_Ouwm8OaEJ1iS`
+- outgoing trigger `ti_Ssw4rTxE6ZzR`
+- status calls show them as active
+- incoming trigger’s `lastPolled` is updating
+
+So Composio is polling, but it is not delivering events to our webhook endpoint.
+
+## Likely failure point
+
+The likely break is in trigger registration / webhook delivery, not in rendering.
+
+In `supabase/functions/email-automation-triggers/index.ts`, triggers are created with:
+```ts
+const webhookUrl = `${SUPABASE_URL}/functions/v1/email-automation-webhook`;
+...
+body: JSON.stringify({
+  connected_account_id: connectedAccountId,
+  trigger_config: { ... },
+  webhook_url: webhookUrl,
+})
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+Possible issues from this investigation:
+1. Composio may expect a different callback field shape for these Gmail triggers
+2. The webhook URL may be accepted but not actually attached to the trigger
+3. Composio may be polling Gmail successfully but not forwarding matched events
+4. There is no fallback path in this feature if webhook delivery fails
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+## Secondary issue I found
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+`email_automation_contacts.contact_name` is still null for the monitored contact, even though Gmail search later returned:
+```json
+{"email":"dfigu057@gmail.com","name":"\"Daniel F. Figueroa\""}
+```
+That is separate from the missing history, but it suggests contact metadata persistence is also incomplete or stale.
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+## Initial solution I recommend
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+I would fix this in two layers so the page becomes reliable even if webhook delivery is flaky:
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
+### Layer 1: Fix webhook delivery path
+Investigate and update `supabase/functions/email-automation-triggers/index.ts` so created Composio triggers are definitely configured with the correct callback registration format for v3 Gmail triggers.
 
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
+Focus:
+- confirm correct request body shape for callback/webhook registration
+- log full trigger creation response and any callback-related fields
+- store enough metadata to verify callback registration succeeded
 
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
+### Layer 2: Add a backfill/poll-based safety net
+Even if webhook delivery is unavailable, the monitoring page should still populate history.
 
-### 8. Wire trigger into memory save
+Best approach:
+- enhance the email trigger workflow to fetch recent Gmail messages for monitored contacts using the existing Gmail connection
+- compare against `email_automation_processed_emails` by `email_message_id`
+- insert missing rows for matched incoming/outgoing messages
+- use this as a backfill when status is checked or when the active page refreshes
 
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
+This is especially practical because the project already has:
+- `gmail-fetch-emails` edge function
+- stored trigger/contact mappings
+- `email_automation_processed_emails` table ready for display
 
-### Summary of files to create/modify
+## Files I would inspect/change next
 
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
+Only after approval, I would focus on these files:
 
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
+1. `supabase/functions/email-automation-triggers/index.ts`
+   - verify/fix callback registration
+   - optionally trigger a Gmail backfill sync
 
-**Database migration:** 2 tables + RLS policies
+2. `supabase/functions/gmail-fetch-emails/index.ts`
+   - reuse or extend for backfill logic if needed
 
+3. `supabase/functions/email-automation-webhook/index.ts`
+   - likely keep most of it, but add stronger logging/guardrails once deliveries begin
+
+No UI change is needed first; the UI is already correctly reading the history table.
+
+## Concise diagnosis
+
+Do I know what the issue is?
+
+Yes.
+
+The problem is:
+- the monitoring page is empty because `email_automation_processed_emails` has no rows
+- it has no rows because `email-automation-webhook` is never being called
+- the triggers appear active, so the failure is most likely in Composio webhook callback registration or delivery
+- the most robust fix is to correct webhook registration and add Gmail-based backfill so processed emails still appear even if webhook delivery is unreliable
+
+## Recommended next implementation plan
+
+1. Update `email-automation-triggers` to verify and correct webhook callback registration
+2. Add explicit logging of callback registration details from Composio responses
+3. Add a server-side backfill sync using Gmail message fetch + dedupe by `email_message_id`
+4. Keep the existing `ActiveMonitoring` history UI unchanged, since it already works once rows exist
