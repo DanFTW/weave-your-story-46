@@ -70,7 +70,7 @@ serve(async (req) => {
 
     switch (action) {
       case 'list-videos': {
-        const videos = await fetchLikedVideos(integration.composio_connection_id, limit);
+        const videos = await fetchPlaylistItems(integration.composio_connection_id, limit);
         return new Response(JSON.stringify({ videos }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -179,12 +179,13 @@ async function getYouTubeChannelId(connectionId: string): Promise<string | null>
   }
 }
 
-// Step 2: Fetch liked videos using channel activities
-async function fetchLikedVideos(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
+// Step 2: Fetch playlist items using YOUTUBE_LIST_PLAYLISTS + YOUTUBE_GET_PLAYLIST_ITEMS
+async function fetchPlaylistItems(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
   try {
-    console.log('Fetching liked videos via YOUTUBE_GET_CHANNEL_ACTIVITIES...');
+    console.log('Fetching user playlists via YOUTUBE_LIST_PLAYLISTS...');
     
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_GET_CHANNEL_ACTIVITIES', {
+    // First, get user's playlists
+    const playlistsResponse = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_PLAYLISTS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -195,33 +196,80 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
         arguments: {
           mine: true,
           part: 'snippet,contentDetails',
-          maxResults: Math.min(limit, 50),
+          maxResults: 5,
         },
       }),
     });
 
-    const responseText = await response.text();
-    console.log('Channel activities response status:', response.status);
-    console.log('Channel activities response (first 3000 chars):', responseText.slice(0, 3000));
+    const playlistsText = await playlistsResponse.text();
+    console.log('Playlists response status:', playlistsResponse.status);
+    console.log('Playlists response (first 3000 chars):', playlistsText.slice(0, 3000));
 
-    if (!response.ok) {
-      console.error('Failed to fetch channel activities:', responseText);
+    if (!playlistsResponse.ok) {
+      console.error('Failed to fetch playlists:', playlistsText);
       return [];
     }
 
-    const data = JSON.parse(responseText);
-    return parseChannelActivitiesResponse(data);
+    const playlistsData = JSON.parse(playlistsText);
+    const playlists = parsePlaylistsResponse(playlistsData);
+    console.log('Found playlists:', playlists.length);
+
+    if (playlists.length === 0) {
+      return [];
+    }
+
+    // For each playlist, fetch its items
+    const allVideos: YouTubeVideo[] = [];
+    const itemsPerPlaylist = Math.max(5, Math.floor(limit / playlists.length));
+
+    for (const playlist of playlists.slice(0, 5)) {
+      console.log(`Fetching items for playlist: ${playlist.title} (${playlist.id})`);
+      
+      const itemsResponse = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_GET_PLAYLIST_ITEMS', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': COMPOSIO_API_KEY!,
+        },
+        body: JSON.stringify({
+          connected_account_id: connectionId,
+          arguments: {
+            playlistId: playlist.id,
+            part: 'snippet,contentDetails',
+            maxResults: Math.min(itemsPerPlaylist, 50),
+          },
+        }),
+      });
+
+      const itemsText = await itemsResponse.text();
+      console.log(`Playlist items response for ${playlist.id} status:`, itemsResponse.status);
+      console.log(`Playlist items (first 2000 chars):`, itemsText.slice(0, 2000));
+
+      if (!itemsResponse.ok) {
+        console.error(`Failed to fetch items for playlist ${playlist.id}:`, itemsText);
+        continue;
+      }
+
+      const itemsData = JSON.parse(itemsText);
+      const videos = parsePlaylistItemsResponse(itemsData, playlist.title);
+      console.log(`Parsed ${videos.length} items from playlist: ${playlist.title}`);
+      allVideos.push(...videos);
+
+      // Small delay between playlist fetches
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    console.log('Total playlist items fetched:', allVideos.length);
+    return allVideos;
   } catch (error) {
-    console.error('Error fetching liked videos:', error);
+    console.error('Error fetching playlist items:', error);
     return [];
   }
 }
 
-// Parse channel activities response to extract videos
-function parseChannelActivitiesResponse(data: any): YouTubeVideo[] {
-  const videos: YouTubeVideo[] = [];
-  
-  console.log('Parsing channel activities response, top-level keys:', Object.keys(data || {}));
+// Parse playlists list response
+function parsePlaylistsResponse(data: any): { id: string; title: string }[] {
+  const playlists: { id: string; title: string }[] = [];
   
   const responseData = data?.data || data;
   
@@ -237,53 +285,64 @@ function parseChannelActivitiesResponse(data: any): YouTubeVideo[] {
   for (const path of possiblePaths) {
     if (Array.isArray(path) && path.length > 0) {
       items = path;
-      console.log('Found activity items array, count:', items.length);
       break;
     }
   }
 
-  if (items.length === 0) {
-    console.log('No activity items found in response');
-    return [];
+  for (const item of items) {
+    const id = item.id;
+    const title = item.snippet?.title || 'Untitled Playlist';
+    if (id) {
+      playlists.push({ id, title });
+    }
   }
 
-  console.log('First activity item sample:', JSON.stringify(items[0])?.slice(0, 800));
+  return playlists;
+}
+
+// Parse playlist items response to extract videos
+function parsePlaylistItemsResponse(data: any, playlistTitle: string): YouTubeVideo[] {
+  const videos: YouTubeVideo[] = [];
+  
+  const responseData = data?.data || data;
+  
+  let items: any[] = [];
+  const possiblePaths = [
+    responseData?.response_data?.items,
+    responseData?.response_data?.data?.items,
+    responseData?.items,
+    responseData?.data?.items,
+    responseData?.result?.items,
+  ];
+
+  for (const path of possiblePaths) {
+    if (Array.isArray(path) && path.length > 0) {
+      items = path;
+      break;
+    }
+  }
 
   for (const item of items) {
     const snippet = item.snippet || {};
     const contentDetails = item.contentDetails || {};
-    const activityType = snippet.type;
-    
-    // Extract video ID from different activity types
-    let videoId: string | null = null;
-    
-    if (contentDetails?.upload?.videoId) {
-      videoId = contentDetails.upload.videoId;
-    } else if (contentDetails?.like?.resourceId?.videoId) {
-      videoId = contentDetails.like.resourceId.videoId;
-    } else if (contentDetails?.recommendation?.resourceId?.videoId) {
-      videoId = contentDetails.recommendation.resourceId.videoId;
-    } else if (contentDetails?.favorite?.resourceId?.videoId) {
-      videoId = contentDetails.favorite.resourceId.videoId;
-    }
+    const videoId = snippet.resourceId?.videoId || contentDetails.videoId;
     
     if (!videoId) {
-      console.log('Activity item without video ID, type:', activityType, 'contentDetails keys:', Object.keys(contentDetails));
+      console.log('Playlist item without videoId, keys:', Object.keys(snippet));
       continue;
     }
 
     videos.push({
-      id: videoId,
+      id: `pl_${videoId}`,
       title: snippet.title || 'Untitled Video',
-      channelTitle: snippet.channelTitle,
+      channelTitle: snippet.videoOwnerChannelTitle || playlistTitle,
       description: snippet.description,
-      publishedAt: snippet.publishedAt || new Date().toISOString(),
+      publishedAt: snippet.publishedAt || contentDetails.videoPublishedAt || new Date().toISOString(),
       thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
       videoUrl: `https://youtube.com/watch?v=${videoId}`,
     });
   }
 
-  console.log('Parsed videos from channel activities count:', videos.length);
   return videos;
 }
 
@@ -386,12 +445,12 @@ async function syncYouTubeContent(
     // Fetch content based on config
     let allVideos: YouTubeVideo[] = [];
 
-    // Default to syncing liked videos if no config or sync_liked_videos is true
+    // Fetch playlist items if no config or sync_liked_videos is true
     if (!config || config.sync_liked_videos !== false) {
-      console.log('Fetching liked videos via channel activities...');
-      const likedVideos = await fetchLikedVideos(connectionId, 25);
-      console.log('Fetched videos from activities count:', likedVideos.length);
-      allVideos = [...allVideos, ...likedVideos];
+      console.log('Fetching playlist items...');
+      const playlistVideos = await fetchPlaylistItems(connectionId, 25);
+      console.log('Fetched playlist items count:', playlistVideos.length);
+      allVideos = [...allVideos, ...playlistVideos];
     }
 
     // Fetch subscriptions if enabled
@@ -437,7 +496,7 @@ async function syncYouTubeContent(
 
     for (const video of videosToSync.slice(0, 20)) { // Limit to 20 per sync
       // Step 1: Insert record FIRST via upsert — ensures dedup and history even if memory creation fails
-      const videoCategory = video.id.startsWith('sub_') ? 'Subscription' : 'Liked Video';
+      const videoCategory = video.id.startsWith('sub_') ? 'Subscription' : video.id.startsWith('pl_') ? 'Playlist' : 'Playlist';
       const { error: upsertError, count } = await supabase
         .from('youtube_synced_posts')
         .upsert({
@@ -513,8 +572,9 @@ function formatVideoAsMemory(video: YouTubeVideo): string {
   });
 
   const isSubscription = video.id.startsWith('sub_');
-  const label = isSubscription ? 'YouTube Subscription' : 'YouTube Liked Video';
-  const action = isSubscription ? 'Subscribed on' : 'Liked on';
+  const isPlaylist = video.id.startsWith('pl_');
+  const label = isSubscription ? 'YouTube Subscription' : isPlaylist ? 'YouTube Playlist Item' : 'YouTube Video';
+  const action = isSubscription ? 'Subscribed on' : isPlaylist ? 'Added on' : 'Saved on';
 
   let memory = `${label}\n${action} ${date}`;
   

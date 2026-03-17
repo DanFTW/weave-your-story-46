@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { RefreshCw, Loader2, ThumbsUp, History, Users, RotateCcw, ChevronDown, ChevronUp, Play } from "lucide-react";
+import { RefreshCw, Loader2, Users, RotateCcw, ChevronDown, ChevronUp, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { VideoPreviewCard } from "./VideoPreviewCard";
@@ -17,10 +17,9 @@ interface YouTubeSyncActiveProps {
   onResetSync?: () => void;
 }
 
-const categoryConfig: Record<string, { icon: typeof ThumbsUp; colorClass: string }> = {
-  "Liked Video": { icon: ThumbsUp, colorClass: "bg-red-500/10 text-red-600" },
-  "Watch History": { icon: History, colorClass: "bg-orange-500/10 text-orange-600" },
+const categoryConfig: Record<string, { icon: typeof Users; colorClass: string }> = {
   "Subscription": { icon: Users, colorClass: "bg-purple-500/10 text-purple-600" },
+  "Playlist": { icon: Play, colorClass: "bg-blue-500/10 text-blue-600" },
 };
 
 export function YouTubeSyncActive({
@@ -37,9 +36,8 @@ export function YouTubeSyncActive({
 
   const filterOptions = [
     { label: "All", colorClass: "bg-muted text-foreground" },
-    { label: "Liked Video", colorClass: "bg-red-500/10 text-red-600" },
-    { label: "Watch History", colorClass: "bg-orange-500/10 text-orange-600" },
     { label: "Subscription", colorClass: "bg-purple-500/10 text-purple-600" },
+    { label: "Playlist", colorClass: "bg-blue-500/10 text-blue-600" },
   ];
 
   const filteredHistory = categoryFilter === "All"
@@ -56,7 +54,7 @@ export function YouTubeSyncActive({
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-card rounded-xl border p-4 text-center">
           <p className="text-3xl font-bold text-red-500">{syncConfig.videosSyncedCount}</p>
-          <p className="text-sm text-muted-foreground">Videos Synced</p>
+          <p className="text-sm text-muted-foreground">Items Synced</p>
         </div>
         <div className="bg-card rounded-xl border p-4 text-center">
           <p className="text-3xl font-bold text-primary">{syncConfig.memoriesCreatedCount}</p>
@@ -80,15 +78,9 @@ export function YouTubeSyncActive({
         <p className="text-sm font-medium mb-3">Syncing</p>
         <div className="flex flex-wrap gap-2">
           {syncConfig.syncLikedVideos && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-600 rounded-full text-xs font-medium">
-              <ThumbsUp className="w-3 h-3" />
-              Liked Videos
-            </div>
-          )}
-          {syncConfig.syncWatchHistory && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 text-orange-600 rounded-full text-xs font-medium">
-              <History className="w-3 h-3" />
-              Watch History
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-600 rounded-full text-xs font-medium">
+              <Play className="w-3 h-3" />
+              Playlists
             </div>
           )}
           {syncConfig.syncSubscriptions && (
@@ -125,7 +117,7 @@ export function YouTubeSyncActive({
                       : "bg-muted/50 text-muted-foreground hover:bg-muted"
                   }`}
                 >
-                  {opt.label === "Liked Video" ? "Liked Videos" : opt.label === "Subscription" ? "Subscriptions" : opt.label}
+                  {opt.label === "Subscription" ? "Subscriptions" : opt.label === "Playlist" ? "Playlists" : opt.label}
                 </button>
               ))}
             </div>
@@ -137,7 +129,7 @@ export function YouTubeSyncActive({
                 </p>
               ) : (
                 filteredHistory.map((item) => {
-                  const cat = categoryConfig[item.videoCategory || "Liked Video"] || categoryConfig["Liked Video"];
+                  const cat = categoryConfig[item.videoCategory || "Subscription"] || categoryConfig["Subscription"];
                   const CatIcon = cat.icon;
                   return (
                     <div key={item.id} className="bg-card rounded-xl border p-3 flex items-start gap-3">
