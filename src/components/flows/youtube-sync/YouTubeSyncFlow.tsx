@@ -160,6 +160,7 @@ export function YouTubeSyncFlow() {
           <YouTubeSyncActive
             syncConfig={syncConfig}
             recentVideos={recentVideos}
+            syncHistory={syncHistory}
             isSyncing={isSyncing}
             onSyncNow={syncNow}
             onConfigure={() => setPhase('configure')}
