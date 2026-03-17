@@ -30,6 +30,7 @@ export function TrelloAutomationFlow() {
     syncBoard,
     deactivateMonitoring,
     resetConfig,
+    initializeAfterAuthCheck,
   } = useTrelloAutomation();
 
   // Check Trello connection on mount
