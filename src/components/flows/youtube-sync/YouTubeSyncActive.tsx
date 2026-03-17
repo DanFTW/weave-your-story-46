@@ -33,6 +33,18 @@ export function YouTubeSyncActive({
   onResetSync,
 }: YouTubeSyncActiveProps) {
   const [historyOpen, setHistoryOpen] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
+
+  const filterOptions = [
+    { label: "All", colorClass: "bg-muted text-foreground" },
+    { label: "Liked Video", colorClass: "bg-red-500/10 text-red-600" },
+    { label: "Watch History", colorClass: "bg-orange-500/10 text-orange-600" },
+    { label: "Subscription", colorClass: "bg-purple-500/10 text-purple-600" },
+  ];
+
+  const filteredHistory = categoryFilter === "All"
+    ? syncHistory
+    : syncHistory.filter((item) => item.videoCategory === categoryFilter);
 
   const lastSyncText = syncConfig.lastSyncAt
     ? `Last synced ${formatDistanceToNow(new Date(syncConfig.lastSyncAt), { addSuffix: true })}`
