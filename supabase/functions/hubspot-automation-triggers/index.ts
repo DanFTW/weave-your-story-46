@@ -293,18 +293,21 @@ async function pollHubSpotContacts(
         continue; // Already processed
       }
 
-      // Mark as processed
+      const fullName = [contact.properties?.firstname, contact.properties?.lastname]
+        .filter(Boolean)
+        .join(" ") || contact.properties?.email || null;
+      const company = contact.properties?.company || null;
+
+      // Mark as processed with metadata
       await supabaseClient.from("hubspot_processed_contacts").insert({
         user_id: userId,
         hubspot_contact_id: hubspotContactId,
+        contact_name: fullName,
+        company: company,
       });
 
       newContactsCount++;
-
-      const fullName = [contact.properties?.firstname, contact.properties?.lastname]
-        .filter(Boolean)
-        .join(" ") || contact.properties?.email || hubspotContactId;
-      console.log(`[HubSpot Poll] New contact: ${fullName}`);
+      console.log(`[HubSpot Poll] New contact: ${fullName || hubspotContactId}`);
 
       // Create memory via LIAM API if API keys are configured
       if (apiKeys) {
@@ -316,6 +319,29 @@ async function pollHubSpotContacts(
           console.error(`[HubSpot Poll] Failed to create memory for: ${fullName}`);
         }
       }
+    }
+
+    // Backfill existing rows missing contact_name
+    const { data: nullRows } = await supabaseClient
+      .from("hubspot_processed_contacts")
+      .select("id, hubspot_contact_id")
+      .eq("user_id", userId)
+      .is("contact_name", null);
+
+    if (nullRows && nullRows.length > 0) {
+      const contactMap = new Map(contacts.map((c: any) => [c.id, c]));
+      for (const row of nullRows) {
+        const match = contactMap.get(row.hubspot_contact_id);
+        if (match) {
+          const name = [match.properties?.firstname, match.properties?.lastname]
+            .filter(Boolean).join(" ") || match.properties?.email || null;
+          await supabaseClient
+            .from("hubspot_processed_contacts")
+            .update({ contact_name: name, company: match.properties?.company || null })
+            .eq("id", row.id);
+        }
+      }
+      console.log(`[HubSpot Poll] Backfilled ${nullRows.length} contacts with metadata`);
     }
 
     // Update config with accumulated count
