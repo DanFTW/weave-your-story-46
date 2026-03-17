@@ -432,44 +432,62 @@ async function syncYouTubeContent(
     const videosToSync = allVideos.filter(video => !syncedIds.has(video.id));
     console.log('Videos to sync after filtering:', videosToSync.length);
 
+    let recordsInserted = 0;
     let memoriesCreated = 0;
 
     for (const video of videosToSync.slice(0, 20)) { // Limit to 20 per sync
+      // Step 1: Insert record FIRST via upsert — ensures dedup and history even if memory creation fails
+      const videoCategory = video.id.startsWith('sub_') ? 'Subscription' : 'Liked Video';
+      const { error: upsertError, count } = await supabase
+        .from('youtube_synced_posts')
+        .upsert({
+          user_id: userId,
+          youtube_video_id: video.id,
+          video_title: video.title || null,
+          video_category: videoCategory,
+          synced_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,youtube_video_id', ignoreDuplicates: true, count: 'exact' });
+
+      if (upsertError) {
+        console.error('Failed to upsert record for video:', video.id, upsertError);
+        continue;
+      }
+
+      recordsInserted++;
+      console.log('Record upserted for video:', video.id);
+
+      // Step 2: Attempt memory creation (non-blocking for record)
       const memory = formatVideoAsMemory(video);
       console.log('Creating memory for video:', video.id, 'content preview:', memory.slice(0, 100));
       
       const success = await createMemory(apiKeys, memory);
       
       if (success) {
-        // Record synced video
-        await supabase
-          .from('youtube_synced_posts')
-          .insert({
-            user_id: userId,
-            youtube_video_id: video.id,
-            video_title: video.title || null,
-            video_category: video.id.startsWith('sub_') ? 'Subscription' : 'Liked Video',
-          });
         memoriesCreated++;
         console.log('Memory created successfully for video:', video.id);
       } else {
         console.error('Failed to create memory for video:', video.id);
       }
+
+      // Small delay between LIAM API calls to avoid overwhelming the API
+      if (videosToSync.indexOf(video) < videosToSync.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
     }
 
-    // Update sync config
+    // Update sync config with ACTUAL counts
     await supabase
       .from('youtube_sync_config')
       .upsert({
         user_id: userId,
         last_sync_at: new Date().toISOString(),
         last_synced_video_id: videosToSync[0]?.id,
-        videos_synced_count: (config?.videos_synced_count || 0) + videosToSync.length,
+        videos_synced_count: (config?.videos_synced_count || 0) + recordsInserted,
         memories_created_count: (config?.memories_created_count || 0) + memoriesCreated,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
-    console.log('Sync complete. Videos synced:', videosToSync.length, 'Memories created:', memoriesCreated);
+    console.log('Sync complete. Records inserted:', recordsInserted, 'Memories created:', memoriesCreated);
 
     return {
       success: true,
