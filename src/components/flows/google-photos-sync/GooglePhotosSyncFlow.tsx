@@ -33,17 +33,8 @@ export function GooglePhotosSyncFlow() {
     saveConfig,
     syncNow,
     fetchRecentPhotos,
-    // Album-related
-    albums,
-    selectedAlbumIds,
-    albumPhotos,
-    isLoadingAlbums,
-    fetchAlbums,
-    fetchAlbumPhotos,
-    setSelectedAlbumIds,
   } = useGooglePhotosSync();
 
-  // Check Google Photos connection status
   useEffect(() => {
     const checkAuth = async () => {
       await googlePhotos.checkStatus();
@@ -52,46 +43,28 @@ export function GooglePhotosSyncFlow() {
     checkAuth();
   }, []);
 
-  // Handle connection status changes
   useEffect(() => {
     if (isCheckingAuth) return;
     
     if (googlePhotos.isConnected) {
-      // Load existing config
       loadConfig();
-      // Fetch albums
-      fetchAlbums();
-      // Fetch recent photos for preview
       fetchRecentPhotos();
     } else {
-      // User is not connected, redirect to Google Photos integration
       navigate('/integration/googlephotos');
     }
   }, [googlePhotos.isConnected, isCheckingAuth]);
 
   const handleBack = () => {
-    switch (phase) {
-      case 'auth-check':
-      case 'configure':
-        navigate('/threads');
-        break;
-      case 'active':
-        navigate('/threads');
-        break;
-      default:
-        navigate('/threads');
-    }
+    navigate('/threads');
   };
 
   const handleSaveConfig = async (config: { 
     syncNewPhotos: boolean; 
     autoCreateMemories: boolean;
-    selectedAlbumIds: string[];
   }) => {
     await saveConfig({
       syncNewPhotos: config.syncNewPhotos,
       autoCreateMemories: config.autoCreateMemories,
-      selectedAlbumIds: config.selectedAlbumIds.length > 0 ? config.selectedAlbumIds : null,
     });
   };
 
@@ -99,7 +72,6 @@ export function GooglePhotosSyncFlow() {
     syncNow();
   };
 
-  // Loading state
   if (isCheckingAuth || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -113,7 +85,6 @@ export function GooglePhotosSyncFlow() {
     );
   }
 
-  // Syncing screen
   if (phase === 'syncing') {
     return (
       <div className="min-h-screen bg-background">
@@ -122,7 +93,6 @@ export function GooglePhotosSyncFlow() {
             <div className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
               <Camera className="w-6 h-6 text-white" />
             </div>
-            
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-white truncate">Photos Dump</h1>
               <p className="text-white/70 text-sm truncate">Dumping photos...</p>
@@ -134,7 +104,6 @@ export function GooglePhotosSyncFlow() {
     );
   }
 
-  // Get subtitle based on phase
   const getSubtitle = () => {
     switch (phase) {
       case 'configure':
@@ -148,7 +117,6 @@ export function GooglePhotosSyncFlow() {
 
   return (
     <div className="min-h-screen bg-background pb-nav">
-      {/* Header */}
       <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses.teal)}>
         <div className="flex items-center gap-3">
           <button
@@ -157,7 +125,6 @@ export function GooglePhotosSyncFlow() {
           >
             <ChevronLeft className="w-6 h-6 text-white" />
           </button>
-          
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-white truncate">Photos Dump</h1>
             <p className="text-white/70 text-sm truncate">{getSubtitle()}</p>
@@ -165,21 +132,14 @@ export function GooglePhotosSyncFlow() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="px-5 pt-5">
         {phase === 'configure' && (
           <GooglePhotosSyncConfig
             syncNewPhotos={syncConfig?.syncNewPhotos ?? true}
             autoCreateMemories={syncConfig?.autoCreateMemories ?? true}
             isSaving={isSavingConfig}
-            albums={albums}
-            selectedAlbumIds={selectedAlbumIds}
-            albumPhotos={albumPhotos}
-            isLoadingAlbums={isLoadingAlbums}
             onSave={handleSaveConfig}
             onStartSync={handleStartSync}
-            onAlbumSelectionChange={setSelectedAlbumIds}
-            onLoadAlbumPhotos={fetchAlbumPhotos}
           />
         )}
 
@@ -188,7 +148,6 @@ export function GooglePhotosSyncFlow() {
             syncConfig={syncConfig}
             recentPhotos={recentPhotos}
             isSyncing={isSyncing}
-            albums={albums}
             onSyncNow={syncNow}
             onConfigure={() => setPhase('configure')}
           />
