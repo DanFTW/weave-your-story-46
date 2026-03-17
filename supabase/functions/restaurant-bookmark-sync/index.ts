@@ -274,7 +274,7 @@ serve(async (req) => {
         });
       }
 
-      if (parsed.isComplete && parsed.name && parsed.address) {
+      if (parsed.name && parsed.address) {
         // Get Google Maps connection
         const { data: integration } = await sb
           .from("user_integrations")
