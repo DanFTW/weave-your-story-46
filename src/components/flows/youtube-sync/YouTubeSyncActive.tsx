@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { RefreshCw, Loader2, ThumbsUp, History, Users, RotateCcw, ChevronDown, ChevronUp, Play } from "lucide-react";
+import { RefreshCw, Loader2, Users, RotateCcw, ChevronDown, ChevronUp, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { VideoPreviewCard } from "./VideoPreviewCard";
