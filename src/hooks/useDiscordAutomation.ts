@@ -52,6 +52,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const [recentMessages, setRecentMessages] = useState<DiscordRecentMessage[]>([]);
   const [triggerWord, setTriggerWord] = useState("");
   const [triggerWordEnabled, setTriggerWordEnabled] = useState(false);
+  const [messageCount, setMessageCount] = useState(0);
 
   const stats: DiscordAutomationStats = {
     messagesTracked: config?.messagesTracked ?? 0,
