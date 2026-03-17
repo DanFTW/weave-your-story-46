@@ -236,15 +236,16 @@ async function listPhotos(connectionId: string, limit: number) {
     console.log(`listPhotos: Fetching photos with connection=${connectionId}, limit=${limit}`);
     
     // Use Composio v3 API format (matching gmail-fetch-emails)
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_LIST_MEDIA_ITEMS', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/GOOGLEPHOTOS_SEARCH_MEDIA_ITEMS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': COMPOSIO_API_KEY!,
       },
       body: JSON.stringify({
-        connected_account_id: connectionId,  // v3 format (snake_case)
-        arguments: {                          // v3 format
+        connected_account_id: connectionId,
+        auth_config_id: 'ac_SQbZGWVauUwV',
+        arguments: {
           pageSize: limit,
         },
       }),
