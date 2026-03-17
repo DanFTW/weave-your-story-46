@@ -483,7 +483,11 @@ function formatVideoAsMemory(video: YouTubeVideo): string {
     day: 'numeric',
   });
 
-  let memory = `YouTube Video\nLiked on ${date}`;
+  const isSubscription = video.id.startsWith('sub_');
+  const label = isSubscription ? 'YouTube Subscription' : 'YouTube Liked Video';
+  const action = isSubscription ? 'Subscribed on' : 'Liked on';
+
+  let memory = `${label}\n${action} ${date}`;
   
   memory += `\n\n${video.title}`;
   
