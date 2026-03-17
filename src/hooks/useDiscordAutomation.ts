@@ -148,7 +148,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     } else {
       setPhase("select-server");
     }
-  }, [loadRecentMessages]);
+  }, [loadRecentMessages, loadMessageCount]);
 
   const initializeAfterAuthCheck = useCallback(async () => {
     if (hasInitialized) return;
