@@ -23,7 +23,7 @@ export function RestaurantBookmarkSyncFlow() {
   const { isConnected, checkStatus } = useComposio("GOOGLEMAPS");
 
   const {
-    phase, setPhase, config, stats, pendingBookmarks,
+    phase, setPhase, config, stats, pendingBookmarks, completedBookmarks,
     isLoading, isActivating, isPushing, isSyncing,
     loadConfig, activate, deactivate,
     updatePendingBookmark, pushBookmark, dismissPending, manualSync,
