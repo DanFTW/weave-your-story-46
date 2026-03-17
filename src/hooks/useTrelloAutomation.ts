@@ -5,6 +5,7 @@ import {
   TrelloAutomationPhase, 
   TrelloBoard, 
   TrelloList, 
+  TrelloListWithCards,
   TrelloAutomationConfig,
   TrelloAutomationStats
 } from "@/types/trelloAutomation";
