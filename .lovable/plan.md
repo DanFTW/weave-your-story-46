@@ -1,115 +1,42 @@
 
 
-## Restaurant Memories to Google Maps Bookmark — Implementation Plan
+## Investigation Results
 
-This thread mirrors the calendar-event-sync pattern exactly: AI parses memories for restaurant mentions, auto-bookmarks them via Composio Google Maps, and queues incomplete ones for manual resolution.
+**Root cause confirmed**: Both Google Photos connections (`ca_NWNCudsPQWnZ` updated today, `ca_xltKkAWRHr1Y` from January) return `401 UNAUTHENTICATED` from Google's API. Composio wraps this in an HTTP 200 response with `"successful": false`. The edge function only checks `response.ok` (which is `true`), so it silently returns empty arrays instead of surfacing the error.
 
-### 1. Database Tables (2 new tables via migration)
+The auth config `ac_SQbZGWVauUwV` is correct and already in the code. The problem is the **connected accounts' OAuth tokens** are invalid — even the one updated today. This suggests the connection was created but the OAuth grant didn't complete properly, or the token was immediately invalid.
 
-**`restaurant_bookmark_config`** — mirrors `calendar_event_sync_config`
-- `id` uuid PK, `user_id` uuid NOT NULL, `is_active` boolean DEFAULT false, `restaurants_bookmarked` integer DEFAULT 0, `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE own rows
+## Plan — 1 file: `supabase/functions/google-photos-sync/index.ts`
 
-**`pending_restaurant_bookmarks`** — mirrors `pending_calendar_events`
-- `id` uuid PK, `user_id` uuid NOT NULL, `memory_id` text NOT NULL, `memory_content` text NOT NULL, `restaurant_name` text, `restaurant_address` text, `restaurant_cuisine` text, `restaurant_notes` text, `status` text DEFAULT 'pending', `created_at` timestamptz, `updated_at` timestamptz
-- RLS: user can SELECT/INSERT/UPDATE/DELETE own rows
-- Unique constraint on `(user_id, memory_id)`
+### Add Composio `successful` field validation
 
-### 2. Edge Function: `restaurant-bookmark-sync`
+In all three fetch functions (`listAlbums`, `listAlbumPhotos`, `listPhotos`), after parsing the JSON response, check `data.successful === false`. If the nested status is 401, throw a typed `NEEDS_RECONNECT` error. Otherwise throw a generic error.
 
-Single edge function (mirrors `calendar-event-sync`) with actions:
-- **`activate`** / **`deactivate`** — toggle `is_active` on config table
-- **`process-new-memory`** — AI parses memory for restaurant mentions (name, address, cuisine). If complete + Google Maps connected, execute Composio `GOOGLEMAPS_SEARCH_PLACES` to find the place, then `GOOGLEMAPS_SAVE_PLACE` (or closest available action) to bookmark. If incomplete, queue in `pending_restaurant_bookmarks`
-- **`create-bookmark`** — from pending queue, search + bookmark via Composio Google Maps
-- **`update-pending`** — update fields on a pending item
-- **`dismiss-pending`** — mark as dismissed
-- **`manual-sync`** — scan all LIAM memories for restaurant mentions, process unprocessed ones
-
-AI parsing uses the same Lovable AI gateway pattern with a `extract_restaurant` tool schema that returns `{ isRestaurant, name, address, cuisine, notes, isComplete }`.
-
-### 3. Types: `src/types/restaurantBookmarkSync.ts`
-
-Mirrors `calendarEventSync.ts`:
-- `RestaurantBookmarkSyncPhase` = "auth-check" | "configure" | "activating" | "active"
-- `RestaurantBookmarkSyncConfig` — id, userId, isActive, restaurantsBookmarked, timestamps
-- `PendingRestaurantBookmark` — id, userId, memoryId, memoryContent, restaurantName, restaurantAddress, restaurantCuisine, restaurantNotes, status
-- `RestaurantBookmarkSyncStats` — restaurantsBookmarked, isActive, pendingCount
-
-### 4. Hook: `src/hooks/useRestaurantBookmarkSync.ts`
-
-Mirrors `useCalendarEventSync.ts` — loadConfig, activate, deactivate, updatePendingBookmark, pushBookmark, dismissPending, manualSync. Queries `restaurant_bookmark_config` and `pending_restaurant_bookmarks`.
-
-### 5. UI Components: `src/components/flows/restaurant-bookmark-sync/`
-
-Mirrors the calendar-event-sync component structure:
-- **`index.ts`** — barrel export
-- **`RestaurantBookmarkSyncFlow.tsx`** — main flow component with auth gate for GOOGLEMAPS (same pattern as CalendarEventSyncFlow)
-- **`AutomationConfig.tsx`** — explains how it works, "Enable Bookmark Sync" button
-- **`ActiveMonitoring.tsx`** — stats, auto-sync toggle, manual sync button, pending list
-- **`ActivatingScreen.tsx`** — loading animation during activation
-- **`PendingBookmarkCard.tsx`** — expandable card to edit restaurant name/address/cuisine and trigger manual bookmark
-
-### 6. Registration (data + routing)
-
-**`src/data/threads.ts`** — add entry:
-```
-{
-  id: "restaurant-bookmark-sync",
-  title: "Restaurant Memories to Google Maps Bookmark",
-  icon: MapPin,  // from lucide-react
-  gradient: "teal",
-  status: "active",
-  type: "automation",
-  category: "personal",
-  integrations: ["googlemaps"],
-  triggerType: "automatic",
-  flowMode: "thread",
+```typescript
+// After: const data = JSON.parse(responseText);
+if (data.successful === false) {
+  const statusCode = data.data?.status_code;
+  if (statusCode === 401) {
+    throw new Error('NEEDS_RECONNECT');
+  }
+  throw new Error(data.error || 'Composio tool failed');
 }
 ```
 
-**`src/data/threadConfigs.ts`** — add config with 3 steps (Connect Google Maps, Enable Sync, Always-On)
+### Propagate `needsReconnect` to frontend
 
-**`src/data/flowConfigs.ts`** — add entry with `isRestaurantBookmarkSyncFlow: true`
+In the main request handler, wrap each action's response in a try/catch that detects `NEEDS_RECONNECT` and returns `{ error: "Google Photos token expired. Please reconnect.", needsReconnect: true }`. This follows the existing pattern used by Slack and Instagram integrations.
 
-**`src/types/flows.ts`** — add `isRestaurantBookmarkSyncFlow?: boolean`
+### Changes summary
 
-**`src/pages/FlowPage.tsx`** — import `RestaurantBookmarkSyncFlow`, add render block for `config.isRestaurantBookmarkSyncFlow`
+| Location | Change |
+|----------|--------|
+| `listAlbums` (after line 156) | Add `data.successful` check, throw on 401 |
+| `listAlbumPhotos` (after line 209) | Same check |
+| `listPhotos` (after line 263) | Same check |
+| Main handler (lines 70-116) | Catch `NEEDS_RECONNECT`, return `{ needsReconnect: true }` |
 
-**`src/pages/Threads.tsx`** — add `'restaurant-bookmark-sync'` to `flowEnabledThreads`
+### User action required
 
-**`src/pages/ThreadOverview.tsx`** — add `'restaurant-bookmark-sync'` to the `flowEnabledThreads` array
-
-### 7. Fire-and-forget trigger: `src/utils/triggerRestaurantBookmarkSync.ts`
-
-Mirrors `triggerCalendarSync.ts` — checks if restaurant bookmark sync is active, then fires `restaurant-bookmark-sync` edge function with `process-new-memory`.
-
-### 8. Wire trigger into memory save
-
-Update `useLiamMemory.ts` `createMemory` to also call `triggerRestaurantBookmarkSync` alongside the existing `triggerCalendarSync`.
-
-### Summary of files to create/modify
-
-**Create (8 files):**
-- `src/types/restaurantBookmarkSync.ts`
-- `src/hooks/useRestaurantBookmarkSync.ts`
-- `src/components/flows/restaurant-bookmark-sync/index.ts`
-- `src/components/flows/restaurant-bookmark-sync/RestaurantBookmarkSyncFlow.tsx`
-- `src/components/flows/restaurant-bookmark-sync/AutomationConfig.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActiveMonitoring.tsx`
-- `src/components/flows/restaurant-bookmark-sync/ActivatingScreen.tsx`
-- `src/components/flows/restaurant-bookmark-sync/PendingBookmarkCard.tsx`
-- `src/utils/triggerRestaurantBookmarkSync.ts`
-- `supabase/functions/restaurant-bookmark-sync/index.ts`
-
-**Modify (6 files):**
-- `src/data/threads.ts` — add thread entry
-- `src/data/threadConfigs.ts` — add thread config
-- `src/data/flowConfigs.ts` — add flow config
-- `src/types/flows.ts` — add boolean flag
-- `src/pages/FlowPage.tsx` — import + render
-- `src/pages/Threads.tsx` — add to flowEnabledThreads
-- `src/pages/ThreadOverview.tsx` — add to flowEnabledThreads
-- `src/hooks/useLiamMemory.ts` — call triggerRestaurantBookmarkSync
-
-**Database migration:** 2 tables + RLS policies
+After deploying, **you must reconnect Google Photos** at `/integration/googlephotos` — disconnect and reconnect to get a fresh OAuth token. The code fix ensures the 401 error is properly surfaced going forward instead of silently returning empty results.
 
