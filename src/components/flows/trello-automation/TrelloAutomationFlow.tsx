@@ -4,8 +4,8 @@ import { ChevronLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTrelloAutomation } from "@/hooks/useTrelloAutomation";
 import { useComposio } from "@/hooks/useComposio";
+import { BoardOverview } from "./ListPicker";
 import { BoardPicker } from "./BoardPicker";
-import { ListPicker } from "./ListPicker";
 import { AutomationConfig } from "./AutomationConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
@@ -20,15 +20,14 @@ export function TrelloAutomationFlow() {
     setPhase,
     config,
     boards,
-    lists,
+    listsWithCards,
     isLoading,
+    isSyncing,
     hasLoadError,
     stats,
     fetchBoards,
     selectBoard,
-    selectDoneList,
-    updateMonitoringOptions,
-    activateMonitoring,
+    syncBoard,
     deactivateMonitoring,
     resetConfig,
     initializeAfterAuthCheck,
@@ -101,9 +100,7 @@ export function TrelloAutomationFlow() {
   }
 
   const handleBack = () => {
-    if (phase === 'configure') {
-      setPhase('select-done-list');
-    } else if (phase === 'select-done-list') {
+    if (phase === 'board-overview') {
       setPhase('select-board');
     } else {
       navigate('/threads');
@@ -126,8 +123,7 @@ export function TrelloAutomationFlow() {
             <h1 className="text-xl font-bold text-white truncate">Trello Task Tracker</h1>
             <p className="text-white/70 text-sm truncate">
               {phase === 'select-board' && 'Select a board to monitor'}
-              {phase === 'select-done-list' && 'Select your "Done" list'}
-              {phase === 'configure' && 'Configure monitoring'}
+              {phase === 'board-overview' && 'Board overview'}
             </p>
           </div>
         </div>
@@ -145,21 +141,13 @@ export function TrelloAutomationFlow() {
           />
         )}
 
-        {phase === 'select-done-list' && (
-          <ListPicker
-            lists={lists}
+        {phase === 'board-overview' && (
+          <BoardOverview
+            lists={listsWithCards}
             isLoading={isLoading}
+            isSyncing={isSyncing}
             boardName={config?.boardName || ''}
-            onSelectList={selectDoneList}
-          />
-        )}
-
-        {phase === 'configure' && config && (
-          <AutomationConfig
-            config={config}
-            onUpdateOptions={updateMonitoringOptions}
-            onActivate={activateMonitoring}
-            isLoading={isLoading}
+            onSync={syncBoard}
           />
         )}
       </div>

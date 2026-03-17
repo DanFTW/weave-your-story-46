@@ -1,10 +1,15 @@
 export type TrelloAutomationPhase = 
   | 'auth-check'
   | 'select-board'
+  | 'board-overview'
   | 'select-done-list'
   | 'configure'
   | 'activating'
   | 'active';
+
+export interface TrelloListWithCards extends TrelloList {
+  cards: TrelloCard[];
+}
 
 export interface TrelloBoard {
   id: string;

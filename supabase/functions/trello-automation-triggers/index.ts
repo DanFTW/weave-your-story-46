@@ -340,6 +340,67 @@ serve(async (req) => {
         });
       }
 
+      case "get-board-data": {
+        if (!boardId) {
+          return new Response(JSON.stringify({ error: "boardId required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        console.log(`[Trello] Fetching board data (lists+cards) for board: ${boardId}`);
+
+        // Fetch lists and cards in parallel
+        const [listsRes, cardsRes] = await Promise.all([
+          fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD", {
+            method: "POST",
+            headers: { "x-api-key": COMPOSIO_API_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ connected_account_id: connectionId, arguments: { idBoard: boardId } }),
+          }),
+          fetch("https://backend.composio.dev/api/v3/tools/execute/TRELLO_GET_BOARDS_CARDS_BY_ID_BOARD", {
+            method: "POST",
+            headers: { "x-api-key": COMPOSIO_API_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ connected_account_id: connectionId, arguments: { idBoard: boardId } }),
+          }),
+        ]);
+
+        if (!listsRes.ok || !cardsRes.ok) {
+          const errText = !listsRes.ok ? await listsRes.text() : await cardsRes.text();
+          console.error(`[Trello] get-board-data error:`, errText);
+          return new Response(JSON.stringify({ error: "Failed to load board data", details: errText }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const [listsData, cardsData] = await Promise.all([safeJsonParse(listsRes), safeJsonParse(cardsRes)]);
+
+        const rawLists = listsData?.data?.response_data || listsData?.data?.details || (Array.isArray(listsData?.data) ? listsData.data : []);
+        const rawCards = cardsData?.data?.response_data || cardsData?.data?.details || (Array.isArray(cardsData?.data) ? cardsData.data : []);
+
+        // Group cards by list
+        const cardsByList: Record<string, any[]> = {};
+        if (Array.isArray(rawCards)) {
+          for (const c of rawCards) {
+            const lid = c.idList;
+            if (!cardsByList[lid]) cardsByList[lid] = [];
+            cardsByList[lid].push({ id: c.id, name: c.name, desc: c.desc, idList: c.idList, idBoard: c.idBoard, due: c.due, dueComplete: c.dueComplete, labels: c.labels, url: c.url });
+          }
+        }
+
+        const listsWithCards = (Array.isArray(rawLists) ? rawLists : [])
+          .filter((l: any) => !l.closed)
+          .map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            closed: l.closed || false,
+            cards: cardsByList[l.id] || [],
+          }));
+
+        return new Response(JSON.stringify({ lists: listsWithCards }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
           status: 400,

@@ -5,6 +5,7 @@ import {
   TrelloAutomationPhase, 
   TrelloBoard, 
   TrelloList, 
+  TrelloListWithCards,
   TrelloAutomationConfig,
   TrelloAutomationStats
 } from "@/types/trelloAutomation";
@@ -15,6 +16,8 @@ interface UseTrelloAutomationReturn {
   config: TrelloAutomationConfig | null;
   boards: TrelloBoard[];
   lists: TrelloList[];
+  listsWithCards: TrelloListWithCards[];
+  isSyncing: boolean;
   isLoading: boolean;
   hasLoadError: boolean;
   stats: TrelloAutomationStats;
@@ -27,6 +30,8 @@ interface UseTrelloAutomationReturn {
   deactivateMonitoring: () => Promise<void>;
   resetConfig: () => Promise<void>;
   initializeAfterAuthCheck: () => Promise<void>;
+  fetchBoardData: (boardId: string) => Promise<void>;
+  syncBoard: () => Promise<void>;
 }
 
 export function useTrelloAutomation(): UseTrelloAutomationReturn {
@@ -36,9 +41,11 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
   const [config, setConfig] = useState<TrelloAutomationConfig | null>(null);
   const [boards, setBoards] = useState<TrelloBoard[]>([]);
   const [lists, setLists] = useState<TrelloList[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // Start as true to prevent flash
+  const [isLoading, setIsLoading] = useState(true);
   const [hasLoadError, setHasLoadError] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [listsWithCards, setListsWithCards] = useState<TrelloListWithCards[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const stats: TrelloAutomationStats = {
     cardsTracked: config?.cardsTracked ?? 0,
@@ -74,13 +81,10 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
         completedTracked: existingConfig.completed_tracked ?? 0,
       });
 
-      // Determine phase based on config state
       if (existingConfig.is_active) {
         setPhase('active');
-      } else if (existingConfig.done_list_id) {
-        setPhase('configure');
       } else if (existingConfig.board_id) {
-        setPhase('select-done-list');
+        setPhase('board-overview');
       } else {
         setPhase('select-board');
       }
@@ -100,6 +104,52 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
 
   // Note: Initialization is now triggered by the component via initializeAfterAuthCheck
   // This removes the old init useEffect that caused the race condition
+
+  // Fetch board data (lists + cards grouped)
+  const fetchBoardData = useCallback(async (bid: string) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('trello-automation-triggers', {
+        body: { action: 'get-board-data', boardId: bid },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast({ title: "Failed to load board data", description: data.error, variant: "destructive" });
+        setListsWithCards([]);
+        return;
+      }
+      setListsWithCards(data.lists || []);
+    } catch (error) {
+      console.error('Failed to fetch board data:', error);
+      toast({ title: "Failed to load board data", description: "Please try again.", variant: "destructive" });
+      setListsWithCards([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  // Sync current board
+  const syncBoard = useCallback(async () => {
+    if (!config?.boardId) return;
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('trello-automation-triggers', {
+        body: { action: 'get-board-data', boardId: config.boardId },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast({ title: "Sync failed", description: data.error, variant: "destructive" });
+        return;
+      }
+      setListsWithCards(data.lists || []);
+      toast({ title: "Synced", description: "Board data updated." });
+    } catch (error) {
+      console.error('Sync failed:', error);
+      toast({ title: "Sync failed", description: "Could not refresh board data.", variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [config?.boardId, toast]);
 
   // Fetch user's Trello boards
   const fetchBoards = useCallback(async () => {
@@ -237,8 +287,8 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
         completedTracked: 0,
       });
 
-      await fetchLists(board.id);
-      setPhase('select-done-list');
+      await fetchBoardData(board.id);
+      setPhase('board-overview');
     } catch (error) {
       console.error('Failed to save board:', error);
       toast({
@@ -451,11 +501,15 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
     config,
     boards,
     lists,
+    listsWithCards,
     isLoading,
+    isSyncing,
     hasLoadError,
     stats,
     fetchBoards,
     fetchLists,
+    fetchBoardData,
+    syncBoard,
     selectBoard,
     selectDoneList,
     updateMonitoringOptions,
