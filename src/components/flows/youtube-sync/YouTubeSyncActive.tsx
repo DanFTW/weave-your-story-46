@@ -1,26 +1,39 @@
+import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Play, RefreshCw, Loader2, ThumbsUp, History, Users, RotateCcw } from "lucide-react";
+import { RefreshCw, Loader2, ThumbsUp, History, Users, RotateCcw, ChevronDown, ChevronUp, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { VideoPreviewCard } from "./VideoPreviewCard";
 import type { YouTubeSyncConfig, YouTubeVideo } from "@/types/youtubeSync";
+import type { SyncHistoryItem } from "@/hooks/useYouTubeSync";
 
 interface YouTubeSyncActiveProps {
   syncConfig: YouTubeSyncConfig;
   recentVideos: YouTubeVideo[];
+  syncHistory: SyncHistoryItem[];
   isSyncing: boolean;
   onSyncNow: () => void;
   onConfigure: () => void;
   onResetSync?: () => void;
 }
 
+const categoryConfig: Record<string, { icon: typeof ThumbsUp; colorClass: string }> = {
+  "Liked Video": { icon: ThumbsUp, colorClass: "bg-red-500/10 text-red-600" },
+  "Watch History": { icon: History, colorClass: "bg-orange-500/10 text-orange-600" },
+  "Subscription": { icon: Users, colorClass: "bg-purple-500/10 text-purple-600" },
+};
+
 export function YouTubeSyncActive({
   syncConfig,
   recentVideos,
+  syncHistory,
   isSyncing,
   onSyncNow,
   onConfigure,
   onResetSync,
 }: YouTubeSyncActiveProps) {
+  const [historyOpen, setHistoryOpen] = useState(true);
+
   const lastSyncText = syncConfig.lastSyncAt
     ? `Last synced ${formatDistanceToNow(new Date(syncConfig.lastSyncAt), { addSuffix: true })}`
     : "Never synced";
@@ -74,6 +87,44 @@ export function YouTubeSyncActive({
           )}
         </div>
       </div>
+
+      {/* Sync History */}
+      {syncHistory.length > 0 && (
+        <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full text-sm font-medium mb-2">
+            <span>Sync History ({syncHistory.length})</span>
+            {historyOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {syncHistory.map((item) => {
+                const cat = categoryConfig[item.videoCategory || "Liked Video"] || categoryConfig["Liked Video"];
+                const CatIcon = cat.icon;
+                return (
+                  <div key={item.id} className="bg-card rounded-xl border p-3 flex items-start gap-3">
+                    <div className={`mt-0.5 flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${cat.colorClass}`}>
+                      <CatIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">
+                        {item.videoTitle || item.youtubeVideoId}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cat.colorClass}`}>
+                          {item.videoCategory || "Liked Video"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(item.syncedAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       {/* Recent Videos Preview */}
       {recentVideos.length > 0 && (

@@ -471,6 +471,8 @@ async function syncYouTubeContent(
           .insert({
             user_id: userId,
             youtube_video_id: video.id,
+            video_title: video.title || null,
+            video_category: video.id.startsWith('sub_') ? 'Subscription' : 'Liked Video',
           });
         memoriesCreated++;
         console.log('Memory created successfully for video:', video.id);

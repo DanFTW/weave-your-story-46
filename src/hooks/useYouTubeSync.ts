@@ -3,11 +3,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import type { YouTubeSyncPhase, YouTubeSyncConfig, YouTubeVideo, YouTubeSyncResult } from '@/types/youtubeSync';
 
+export interface SyncHistoryItem {
+  id: string;
+  videoTitle: string | null;
+  videoCategory: string | null;
+  syncedAt: string;
+  youtubeVideoId: string;
+}
+
 interface UseYouTubeSyncReturn {
   phase: YouTubeSyncPhase;
   setPhase: (phase: YouTubeSyncPhase) => void;
   syncConfig: YouTubeSyncConfig | null;
   recentVideos: YouTubeVideo[];
+  syncHistory: SyncHistoryItem[];
   isSyncing: boolean;
   isLoading: boolean;
   isSavingConfig: boolean;
@@ -17,16 +26,46 @@ interface UseYouTubeSyncReturn {
   syncNow: () => Promise<void>;
   fetchRecentVideos: () => Promise<void>;
   resetSync: () => Promise<void>;
+  loadSyncHistory: () => Promise<void>;
 }
 
 export function useYouTubeSync(): UseYouTubeSyncReturn {
   const [phase, setPhase] = useState<YouTubeSyncPhase>('auth-check');
   const [syncConfig, setSyncConfig] = useState<YouTubeSyncConfig | null>(null);
   const [recentVideos, setRecentVideos] = useState<YouTubeVideo[]>([]);
+  const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<YouTubeSyncResult | null>(null);
+
+  const loadSyncHistory = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('youtube_synced_posts')
+        .select('id, video_title, video_category, synced_at, youtube_video_id')
+        .eq('user_id', user.id)
+        .order('synced_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+
+      setSyncHistory(
+        (data || []).map((row) => ({
+          id: row.id,
+          videoTitle: row.video_title,
+          videoCategory: row.video_category,
+          syncedAt: row.synced_at || new Date().toISOString(),
+          youtubeVideoId: row.youtube_video_id,
+        }))
+      );
+    } catch (error) {
+      console.error('Error loading sync history:', error);
+    }
+  }, []);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -56,7 +95,12 @@ export function useYouTubeSync(): UseYouTubeSyncReturn {
           createdAt: data.created_at,
           updatedAt: data.updated_at,
         });
-        setPhase(data.last_sync_at ? 'active' : 'configure');
+        const newPhase = data.last_sync_at ? 'active' : 'configure';
+        setPhase(newPhase);
+        if (newPhase === 'active') {
+          // Fire and forget — don't block loadConfig
+          loadSyncHistory();
+        }
       } else {
         setPhase('configure');
       }
@@ -70,7 +114,7 @@ export function useYouTubeSync(): UseYouTubeSyncReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadSyncHistory]);
 
   const saveConfig = useCallback(async (config: Partial<YouTubeSyncConfig>) => {
     try {
@@ -158,7 +202,7 @@ export function useYouTubeSync(): UseYouTubeSyncReturn {
 
       // Reload config to get updated stats
       await loadConfig();
-      await fetchRecentVideos();
+      await Promise.all([fetchRecentVideos(), loadSyncHistory()]);
       setPhase('active');
 
       toast({
@@ -182,7 +226,7 @@ export function useYouTubeSync(): UseYouTubeSyncReturn {
     } finally {
       setIsSyncing(false);
     }
-  }, [loadConfig, fetchRecentVideos]);
+  }, [loadConfig, fetchRecentVideos, loadSyncHistory]);
 
   const resetSync = useCallback(async () => {
     try {
@@ -195,6 +239,7 @@ export function useYouTubeSync(): UseYouTubeSyncReturn {
       if (error) throw error;
 
       await loadConfig();
+      setSyncHistory([]);
       setPhase('configure');
 
       toast({
@@ -218,6 +263,7 @@ export function useYouTubeSync(): UseYouTubeSyncReturn {
     setPhase,
     syncConfig,
     recentVideos,
+    syncHistory,
     isSyncing,
     isLoading,
     isSavingConfig,
@@ -227,5 +273,6 @@ export function useYouTubeSync(): UseYouTubeSyncReturn {
     syncNow,
     fetchRecentVideos,
     resetSync,
+    loadSyncHistory,
   };
 }

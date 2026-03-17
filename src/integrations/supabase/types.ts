@@ -1888,6 +1888,8 @@ export type Database = {
           memory_id: string | null
           synced_at: string | null
           user_id: string
+          video_category: string | null
+          video_title: string | null
           youtube_video_id: string
         }
         Insert: {
@@ -1895,6 +1897,8 @@ export type Database = {
           memory_id?: string | null
           synced_at?: string | null
           user_id: string
+          video_category?: string | null
+          video_title?: string | null
           youtube_video_id: string
         }
         Update: {
@@ -1902,6 +1906,8 @@ export type Database = {
           memory_id?: string | null
           synced_at?: string | null
           user_id?: string
+          video_category?: string | null
+          video_title?: string | null
           youtube_video_id?: string
         }
         Relationships: []
