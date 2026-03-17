@@ -20,18 +20,16 @@ export function TrelloAutomationFlow() {
     setPhase,
     config,
     boards,
-    lists,
+    listsWithCards,
     isLoading,
+    isSyncing,
     hasLoadError,
     stats,
     fetchBoards,
     selectBoard,
-    selectDoneList,
-    updateMonitoringOptions,
-    activateMonitoring,
+    syncBoard,
     deactivateMonitoring,
     resetConfig,
-    initializeAfterAuthCheck,
   } = useTrelloAutomation();
 
   // Check Trello connection on mount
