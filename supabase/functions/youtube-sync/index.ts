@@ -179,12 +179,12 @@ async function getYouTubeChannelId(connectionId: string): Promise<string | null>
   }
 }
 
-// Step 2: Fetch liked videos using the "LL" (Liked Videos) playlist
+// Step 2: Fetch liked videos using channel activities
 async function fetchLikedVideos(connectionId: string, limit: number): Promise<YouTubeVideo[]> {
   try {
-    console.log('Fetching liked videos via YOUTUBE_LIST_PLAYLIST_ITEMS with playlistId: LL...');
+    console.log('Fetching liked videos via YOUTUBE_GET_CHANNEL_ACTIVITIES...');
     
-    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_LIST_PLAYLIST_ITEMS', {
+    const response = await fetch('https://backend.composio.dev/api/v3/tools/execute/YOUTUBE_GET_CHANNEL_ACTIVITIES', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -193,7 +193,7 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
       body: JSON.stringify({
         connected_account_id: connectionId,
         arguments: {
-          playlistId: 'LL',
+          mine: true,
           part: 'snippet,contentDetails',
           maxResults: Math.min(limit, 50),
         },
@@ -201,27 +201,27 @@ async function fetchLikedVideos(connectionId: string, limit: number): Promise<Yo
     });
 
     const responseText = await response.text();
-    console.log('Playlist items response status:', response.status);
-    console.log('Playlist items response (first 3000 chars):', responseText.slice(0, 3000));
+    console.log('Channel activities response status:', response.status);
+    console.log('Channel activities response (first 3000 chars):', responseText.slice(0, 3000));
 
     if (!response.ok) {
-      console.error('Failed to fetch liked videos playlist:', responseText);
+      console.error('Failed to fetch channel activities:', responseText);
       return [];
     }
 
     const data = JSON.parse(responseText);
-    return parsePlaylistItemsResponse(data);
+    return parseChannelActivitiesResponse(data);
   } catch (error) {
     console.error('Error fetching liked videos:', error);
     return [];
   }
 }
 
-// Parse playlist items response to extract videos
-function parsePlaylistItemsResponse(data: any): YouTubeVideo[] {
+// Parse channel activities response to extract videos
+function parseChannelActivitiesResponse(data: any): YouTubeVideo[] {
   const videos: YouTubeVideo[] = [];
   
-  console.log('Parsing playlist items response, top-level keys:', Object.keys(data || {}));
+  console.log('Parsing channel activities response, top-level keys:', Object.keys(data || {}));
   
   const responseData = data?.data || data;
   
@@ -237,42 +237,53 @@ function parsePlaylistItemsResponse(data: any): YouTubeVideo[] {
   for (const path of possiblePaths) {
     if (Array.isArray(path) && path.length > 0) {
       items = path;
-      console.log('Found playlist items array, count:', items.length);
+      console.log('Found activity items array, count:', items.length);
       break;
     }
   }
 
   if (items.length === 0) {
-    console.log('No playlist items found in response');
+    console.log('No activity items found in response');
     return [];
   }
 
-  console.log('First playlist item sample:', JSON.stringify(items[0])?.slice(0, 800));
+  console.log('First activity item sample:', JSON.stringify(items[0])?.slice(0, 800));
 
   for (const item of items) {
     const snippet = item.snippet || {};
     const contentDetails = item.contentDetails || {};
+    const activityType = snippet.type;
     
-    // Extract video ID from resourceId or contentDetails
-    const videoId = snippet?.resourceId?.videoId || contentDetails?.videoId;
+    // Extract video ID from different activity types
+    let videoId: string | null = null;
+    
+    if (contentDetails?.upload?.videoId) {
+      videoId = contentDetails.upload.videoId;
+    } else if (contentDetails?.like?.resourceId?.videoId) {
+      videoId = contentDetails.like.resourceId.videoId;
+    } else if (contentDetails?.recommendation?.resourceId?.videoId) {
+      videoId = contentDetails.recommendation.resourceId.videoId;
+    } else if (contentDetails?.favorite?.resourceId?.videoId) {
+      videoId = contentDetails.favorite.resourceId.videoId;
+    }
     
     if (!videoId) {
-      console.log('Playlist item without video ID, snippet keys:', Object.keys(snippet));
+      console.log('Activity item without video ID, type:', activityType, 'contentDetails keys:', Object.keys(contentDetails));
       continue;
     }
 
     videos.push({
       id: videoId,
       title: snippet.title || 'Untitled Video',
-      channelTitle: snippet.videoOwnerChannelTitle || snippet.channelTitle,
+      channelTitle: snippet.channelTitle,
       description: snippet.description,
-      publishedAt: snippet.publishedAt || contentDetails?.videoPublishedAt || new Date().toISOString(),
+      publishedAt: snippet.publishedAt || new Date().toISOString(),
       thumbnailUrl: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url,
       videoUrl: `https://youtube.com/watch?v=${videoId}`,
     });
   }
 
-  console.log('Parsed videos from playlist items count:', videos.length);
+  console.log('Parsed videos from channel activities count:', videos.length);
   return videos;
 }
 
