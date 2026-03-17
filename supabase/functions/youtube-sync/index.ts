@@ -496,7 +496,7 @@ async function syncYouTubeContent(
 
     for (const video of videosToSync.slice(0, 20)) { // Limit to 20 per sync
       // Step 1: Insert record FIRST via upsert — ensures dedup and history even if memory creation fails
-      const videoCategory = video.id.startsWith('sub_') ? 'Subscription' : 'Liked Video';
+      const videoCategory = video.id.startsWith('sub_') ? 'Subscription' : video.id.startsWith('pl_') ? 'Playlist' : 'Playlist';
       const { error: upsertError, count } = await supabase
         .from('youtube_synced_posts')
         .upsert({
