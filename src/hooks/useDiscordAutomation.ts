@@ -60,6 +60,20 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
     isActive: config?.isActive ?? false,
   };
 
+  const loadMessageCount = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { count } = await supabase
+      .from("discord_processed_messages" as any)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    setMessageCount(count ?? 0);
+  }, []);
+
   const loadRecentMessages = useCallback(async () => {
     const {
       data: { user },
