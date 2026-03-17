@@ -355,6 +355,21 @@ serve(async (req) => {
       apiKeys.user_key
     );
 
+    // Record processed email locally for history display
+    try {
+      await adminClient.from("email_automation_processed_emails").insert({
+        user_id: contact.user_id,
+        contact_email: contact.email_address,
+        sender: emailData.from || null,
+        subject: emailData.subject || null,
+        snippet: emailData.body ? emailData.body.substring(0, 200) : null,
+        direction: isIncoming ? "incoming" : "outgoing",
+        email_message_id: emailData.messageId || null,
+      });
+    } catch (logErr) {
+      console.error("Failed to log processed email:", logErr);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: saved, 
