@@ -588,7 +588,7 @@ serve(async (req) => {
 
             if (!parsed.isRestaurant) return r;
 
-            if (parsed.isComplete && parsed.name && parsed.address && integration?.composio_connection_id) {
+            if (parsed.name && parsed.address && integration?.composio_connection_id) {
               const placeResult = await findOnGoogleMaps(
                 integration.composio_connection_id,
                 parsed.name,
