@@ -41,9 +41,11 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
   const [config, setConfig] = useState<TrelloAutomationConfig | null>(null);
   const [boards, setBoards] = useState<TrelloBoard[]>([]);
   const [lists, setLists] = useState<TrelloList[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // Start as true to prevent flash
+  const [isLoading, setIsLoading] = useState(true);
   const [hasLoadError, setHasLoadError] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [listsWithCards, setListsWithCards] = useState<TrelloListWithCards[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const stats: TrelloAutomationStats = {
     cardsTracked: config?.cardsTracked ?? 0,
