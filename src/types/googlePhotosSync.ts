@@ -4,14 +4,6 @@ export type GooglePhotosSyncPhase =
   | 'syncing' 
   | 'active';
 
-export interface Album {
-  id: string;
-  title: string;
-  mediaItemsCount?: number;
-  coverPhotoBaseUrl?: string;
-  productUrl?: string;
-}
-
 export interface SyncConfig {
   id: string;
   userId: string;
@@ -23,7 +15,6 @@ export interface SyncConfig {
   memoriesCreatedCount: number;
   createdAt: string;
   updatedAt: string;
-  selectedAlbumIds: string[] | null;
 }
 
 export interface PhotoItem {

@@ -1,49 +1,33 @@
-import { useState, useEffect } from "react";
-import { Camera, RefreshCw, FolderOpen } from "lucide-react";
+import { useState } from "react";
+import { Camera, RefreshCw, Image as ImageIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Album, PhotoItem } from "@/types/googlePhotosSync";
-import { AlbumPicker } from "./AlbumPicker";
-import { AlbumPhotoPreview } from "./AlbumPhotoPreview";
 import { cn } from "@/lib/utils";
 
 interface GooglePhotosSyncConfigProps {
   syncNewPhotos: boolean;
   autoCreateMemories: boolean;
   isSaving: boolean;
-  albums: Album[];
-  selectedAlbumIds: string[];
-  albumPhotos: Record<string, PhotoItem[]>;
-  isLoadingAlbums: boolean;
   onSave: (config: { 
     syncNewPhotos: boolean; 
     autoCreateMemories: boolean;
-    selectedAlbumIds: string[];
   }) => Promise<void>;
   onStartSync: () => void;
-  onAlbumSelectionChange: (ids: string[]) => void;
-  onLoadAlbumPhotos: (albumId: string) => Promise<PhotoItem[]>;
 }
 
 export function GooglePhotosSyncConfig({
   syncNewPhotos: initialSyncNewPhotos,
   autoCreateMemories: initialAutoCreateMemories,
   isSaving,
-  albums,
-  selectedAlbumIds,
-  albumPhotos,
-  isLoadingAlbums,
   onSave,
   onStartSync,
-  onAlbumSelectionChange,
-  onLoadAlbumPhotos,
 }: GooglePhotosSyncConfigProps) {
   const [syncNewPhotos, setSyncNewPhotos] = useState(initialSyncNewPhotos);
   const [autoCreateMemories, setAutoCreateMemories] = useState(initialAutoCreateMemories);
 
   const handleSaveAndSync = async () => {
-    await onSave({ syncNewPhotos, autoCreateMemories, selectedAlbumIds });
+    await onSave({ syncNewPhotos, autoCreateMemories });
     onStartSync();
   };
 
@@ -58,31 +42,24 @@ export function GooglePhotosSyncConfig({
           Configure Photo Sync
         </h2>
         <p className="text-sm text-muted-foreground">
-          Select albums to sync and configure your preferences.
+          Sync photos from your entire Google Photos library.
         </p>
       </div>
 
-      {/* Album Picker */}
-      <div className="bg-card rounded-2xl border border-border p-4">
-        <AlbumPicker
-          albums={albums}
-          selectedAlbumIds={selectedAlbumIds}
-          onSelectionChange={onAlbumSelectionChange}
-          isLoading={isLoadingAlbums}
-        />
-      </div>
-
-      {/* Album Photo Preview */}
-      {selectedAlbumIds.length > 0 && (
-        <div className="bg-card rounded-2xl border border-border p-4">
-          <AlbumPhotoPreview
-            selectedAlbumIds={selectedAlbumIds}
-            albums={albums}
-            albumPhotos={albumPhotos}
-            onLoadAlbumPhotos={onLoadAlbumPhotos}
-          />
+      {/* Library Info Card */}
+      <div className="bg-gradient-to-br from-teal-500/10 to-emerald-500/10 rounded-2xl border border-teal-500/20 p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center">
+            <ImageIcon className="w-5 h-5 text-teal-500" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Entire Library</h3>
+            <p className="text-xs text-muted-foreground">
+              All photos from your Google Photos library will be synced as memories.
+            </p>
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Settings */}
       <div className="space-y-4 bg-card rounded-2xl border border-border p-4">
@@ -113,16 +90,6 @@ export function GooglePhotosSyncConfig({
             onCheckedChange={setAutoCreateMemories}
           />
         </div>
-      </div>
-
-      {/* Info Card */}
-      <div className="bg-muted/50 rounded-xl p-4">
-        <p className="text-xs text-muted-foreground text-center">
-          {selectedAlbumIds.length === 0 
-            ? "All photos will be synced from your entire library."
-            : `${selectedAlbumIds.length} album${selectedAlbumIds.length !== 1 ? 's' : ''} will be synced as memories.`
-          }
-        </p>
       </div>
 
       {/* Start Sync Button */}

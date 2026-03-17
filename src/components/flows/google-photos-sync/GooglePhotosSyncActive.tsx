@@ -1,6 +1,6 @@
-import { Camera, RefreshCw, Image as ImageIcon, Sparkles, Clock, FolderOpen } from "lucide-react";
+import { Camera, RefreshCw, Image as ImageIcon, Sparkles, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SyncConfig, PhotoItem, Album } from "@/types/googlePhotosSync";
+import { SyncConfig, PhotoItem } from "@/types/googlePhotosSync";
 import { PhotoPreviewCard } from "./PhotoPreviewCard";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,6 @@ interface GooglePhotosSyncActiveProps {
   syncConfig: SyncConfig;
   recentPhotos: PhotoItem[];
   isSyncing: boolean;
-  albums: Album[];
   onSyncNow: () => void;
   onConfigure: () => void;
 }
@@ -18,20 +17,12 @@ export function GooglePhotosSyncActive({
   syncConfig,
   recentPhotos,
   isSyncing,
-  albums,
   onSyncNow,
   onConfigure,
 }: GooglePhotosSyncActiveProps) {
   const lastSyncFormatted = syncConfig.lastSyncAt 
     ? format(new Date(syncConfig.lastSyncAt), "MMM d, yyyy 'at' h:mm a")
     : 'Never';
-
-  // Get selected album names
-  const selectedAlbumNames = syncConfig.selectedAlbumIds
-    ? albums
-        .filter(a => syncConfig.selectedAlbumIds?.includes(a.id))
-        .map(a => a.title)
-    : [];
 
   return (
     <div className="space-y-6">
@@ -43,29 +34,9 @@ export function GooglePhotosSyncActive({
           </div>
           <div>
             <h3 className="font-semibold text-foreground">Sync Active</h3>
-            <p className="text-xs text-muted-foreground">Monitoring Google Photos</p>
+            <p className="text-xs text-muted-foreground">Syncing from: Entire library</p>
           </div>
         </div>
-
-        {/* Selected Albums */}
-        {selectedAlbumNames.length > 0 && (
-          <div className="mb-4 pb-4 border-b border-border/50">
-            <div className="flex items-center gap-2 mb-2">
-              <FolderOpen className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Syncing from:</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {selectedAlbumNames.map((name) => (
-                <span
-                  key={name}
-                  className="text-xs bg-teal-500/10 text-teal-700 dark:text-teal-300 px-2 py-0.5 rounded-full"
-                >
-                  {name}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3">
