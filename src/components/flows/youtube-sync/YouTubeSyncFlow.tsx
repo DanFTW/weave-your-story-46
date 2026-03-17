@@ -26,6 +26,7 @@ export function YouTubeSyncFlow() {
     setPhase,
     syncConfig,
     recentVideos,
+    syncHistory,
     isSyncing,
     isLoading,
     isSavingConfig,
