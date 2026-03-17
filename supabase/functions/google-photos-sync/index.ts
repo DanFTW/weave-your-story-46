@@ -229,6 +229,16 @@ async function listAlbumPhotos(connectionId: string, albumId: string, limit: num
     }
 
     const data = JSON.parse(responseText);
+
+    // Check Composio-level success
+    if (data.successful === false) {
+      const statusCode = data.data?.status_code;
+      console.error(`listAlbumPhotos: Composio tool failed, nested status=${statusCode}`);
+      if (statusCode === 401) {
+        throw new Error('NEEDS_RECONNECT');
+      }
+      throw new Error(data.error || 'Composio tool execution failed');
+    }
     
     // Handle v3 response format
     const responseData = data.data || data;
