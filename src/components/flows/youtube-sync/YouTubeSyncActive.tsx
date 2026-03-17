@@ -129,7 +129,7 @@ export function YouTubeSyncActive({
                 </p>
               ) : (
                 filteredHistory.map((item) => {
-                  const cat = categoryConfig[item.videoCategory || "Liked Video"] || categoryConfig["Liked Video"];
+                  const cat = categoryConfig[item.videoCategory || "Subscription"] || categoryConfig["Subscription"];
                   const CatIcon = cat.icon;
                   return (
                     <div key={item.id} className="bg-card rounded-xl border p-3 flex items-start gap-3">
