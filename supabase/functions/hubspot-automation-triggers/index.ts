@@ -321,6 +321,29 @@ async function pollHubSpotContacts(
       }
     }
 
+    // Backfill existing rows missing contact_name
+    const { data: nullRows } = await supabaseClient
+      .from("hubspot_processed_contacts")
+      .select("id, hubspot_contact_id")
+      .eq("user_id", userId)
+      .is("contact_name", null);
+
+    if (nullRows && nullRows.length > 0) {
+      const contactMap = new Map(contacts.map((c: any) => [c.id, c]));
+      for (const row of nullRows) {
+        const match = contactMap.get(row.hubspot_contact_id);
+        if (match) {
+          const name = [match.properties?.firstname, match.properties?.lastname]
+            .filter(Boolean).join(" ") || match.properties?.email || null;
+          await supabaseClient
+            .from("hubspot_processed_contacts")
+            .update({ contact_name: name, company: match.properties?.company || null })
+            .eq("id", row.id);
+        }
+      }
+      console.log(`[HubSpot Poll] Backfilled ${nullRows.length} contacts with metadata`);
+    }
+
     // Update config with accumulated count
     await supabaseClient
       .from("hubspot_automation_config")
