@@ -241,8 +241,8 @@ export function useTrelloAutomation(): UseTrelloAutomationReturn {
         completedTracked: 0,
       });
 
-      await fetchLists(board.id);
-      setPhase('select-done-list');
+      await fetchBoardData(board.id);
+      setPhase('board-overview');
     } catch (error) {
       console.error('Failed to save board:', error);
       toast({
