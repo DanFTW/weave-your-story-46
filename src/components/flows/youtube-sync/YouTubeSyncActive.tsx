@@ -54,7 +54,7 @@ export function YouTubeSyncActive({
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-card rounded-xl border p-4 text-center">
           <p className="text-3xl font-bold text-red-500">{syncConfig.videosSyncedCount}</p>
-          <p className="text-sm text-muted-foreground">Videos Synced</p>
+          <p className="text-sm text-muted-foreground">Items Synced</p>
         </div>
         <div className="bg-card rounded-xl border p-4 text-center">
           <p className="text-3xl font-bold text-primary">{syncConfig.memoriesCreatedCount}</p>
