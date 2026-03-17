@@ -161,6 +161,8 @@ Deno.serve(async (req) => {
       await supabaseClient.from("hubspot_processed_contacts").insert({
         user_id: userId,
         hubspot_contact_id: contactId,
+        contact_name: fullName || null,
+        company: company || null,
       });
 
       // Update stats - increment contacts_tracked
