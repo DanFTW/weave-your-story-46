@@ -100,9 +100,7 @@ export function TrelloAutomationFlow() {
   }
 
   const handleBack = () => {
-    if (phase === 'configure') {
-      setPhase('select-done-list');
-    } else if (phase === 'select-done-list') {
+    if (phase === 'board-overview') {
       setPhase('select-board');
     } else {
       navigate('/threads');
