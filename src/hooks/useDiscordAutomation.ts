@@ -503,9 +503,10 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
           ? `Imported ${count} new message${count > 1 ? "s" : ""}.`
           : "No new messages found.",
       });
-      // Refresh config and recent messages
+      // Refresh config, count, and recent messages
       await loadConfig();
       await loadRecentMessages();
+      await loadMessageCount();
     } catch (error) {
       console.error("Failed to sync:", error);
       toast({
