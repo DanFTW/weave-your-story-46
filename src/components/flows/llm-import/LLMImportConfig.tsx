@@ -14,7 +14,7 @@ interface LLMImportConfigProps {
 }
 
 const llmLinks = [
-  { name: "ChatGPT", url: "https://chat.openai.com" },
+  { name: "ChatGPT", url: "https://chatgpt.com" },
   { name: "Claude", url: "https://claude.ai" },
   { name: "Gemini", url: "https://gemini.google.com" },
 ];
