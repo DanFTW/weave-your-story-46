@@ -1,12 +1,16 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronDown, ChevronUp, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, Search, User, Filter } from "lucide-react";
+import { useState, useCallback } from "react";
+import { ChevronLeft, ChevronDown, ChevronUp, Hash, MessageSquare, Pause, RotateCcw, RefreshCw, User, Filter, Plus, Check, Lock, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { SlackMessagesSyncStats, SlackRecentMessage } from "@/types/slackMessagesSync";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { SlackMessagesSyncStats, SlackRecentMessage, SlackChannel } from "@/types/slackMessagesSync";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ActiveMonitoringProps {
   stats: SlackMessagesSyncStats;
@@ -36,18 +40,94 @@ export function ActiveMonitoring({
   onUpdateTriggerWord,
 }: ActiveMonitoringProps) {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { toast } = useToast();
   const [messagesOpen, setMessagesOpen] = useState(true);
   const [localTriggerWord, setLocalTriggerWord] = useState(triggerWord);
+
+  // Channel picker state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [availableChannels, setAvailableChannels] = useState<SlackChannel[]>([]);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
+  const [channelsFetched, setChannelsFetched] = useState(false);
+  const [addingChannelId, setAddingChannelId] = useState<string | null>(null);
 
   const lastPolledText = stats.lastPolled
     ? formatDistanceToNow(new Date(stats.lastPolled), { addSuffix: true })
     : "Never";
 
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      onSearch(searchQuery.trim());
+  const monitoredNames = new Set(stats.channelNames?.map(n => n.toLowerCase()) ?? []);
+
+  const fetchChannels = useCallback(async () => {
+    if (channelsFetched) return;
+    setIsLoadingChannels(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("slack-messages-sync", {
+        body: { action: "list-channels" },
+      });
+      if (error) throw error;
+      setAvailableChannels(data?.channels ?? []);
+      setChannelsFetched(true);
+    } catch (err) {
+      console.error("Failed to fetch channels", err);
+      toast({ title: "Failed to load channels", variant: "destructive" });
+    } finally {
+      setIsLoadingChannels(false);
     }
+  }, [channelsFetched, toast]);
+
+  const handleAddChannel = useCallback(async (channel: SlackChannel) => {
+    if (monitoredNames.has(channel.name.toLowerCase())) return;
+    setAddingChannelId(channel.id);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const userId = session?.session?.user?.id;
+      if (!userId) throw new Error("Not authenticated");
+
+      // Fetch current config
+      const { data: configs, error: fetchErr } = await supabase
+        .from("slack_messages_config")
+        .select("id, selected_channel_ids, selected_workspace_ids")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .limit(1);
+
+      if (fetchErr) throw fetchErr;
+      const config = configs?.[0];
+      if (!config) throw new Error("No active config found");
+
+      const currentIds: string[] = config.selected_channel_ids ?? [];
+      const currentNames: string[] = config.selected_workspace_ids ?? [];
+
+      if (currentIds.includes(channel.id)) {
+        toast({ title: "Channel already monitored" });
+        return;
+      }
+
+      const { error: updateErr } = await supabase
+        .from("slack_messages_config")
+        .update({
+          selected_channel_ids: [...currentIds, channel.id],
+          selected_workspace_ids: [...currentNames, channel.name],
+        })
+        .eq("id", config.id);
+
+      if (updateErr) throw updateErr;
+
+      // Update local monitored set so UI reflects immediately
+      stats.channelNames = [...(stats.channelNames ?? []), channel.name];
+      toast({ title: `Now monitoring #${channel.name}` });
+      setPickerOpen(false);
+    } catch (err: any) {
+      console.error("Failed to add channel", err);
+      toast({ title: "Failed to add channel", description: err?.message, variant: "destructive" });
+    } finally {
+      setAddingChannelId(null);
+    }
+  }, [monitoredNames, stats, toast]);
+
+  const handlePickerOpenChange = (open: boolean) => {
+    setPickerOpen(open);
+    if (open) fetchChannels();
   };
 
   return (
@@ -215,32 +295,84 @@ export function ActiveMonitoring({
           </p>
         </div>
 
-        {/* Search */}
+        {/* Add Channel Picker */}
         <div className="p-4 rounded-xl bg-card border border-border">
           <div className="flex items-center gap-2 mb-3">
-            <Search className="w-4 h-4 text-[#4A154B]" />
-            <p className="font-medium text-foreground text-sm">Search Channel</p>
+            <Plus className="w-4 h-4 text-[#4A154B]" />
+            <p className="font-medium text-foreground text-sm">Add Channel</p>
           </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Search messages..."
-              className="flex-1 h-10 px-3 rounded-lg bg-muted border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#4A154B]/30"
-            />
-            <Button
-              size="sm"
-              onClick={handleSearch}
-              disabled={isPolling || !searchQuery.trim()}
-              className="h-10 bg-[#4A154B] hover:bg-[#4A154B]/90"
-            >
-              {isPolling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            </Button>
-          </div>
+          <Popover open={pickerOpen} onOpenChange={handlePickerOpenChange}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full h-10 justify-start text-muted-foreground font-normal"
+              >
+                <Hash className="w-4 h-4 mr-2 text-[#4A154B]" />
+                Select a channel to add...
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search channels..." />
+                <CommandList className="max-h-60">
+                  <CommandEmpty>
+                    {isLoadingChannels ? (
+                      <div className="flex items-center justify-center gap-2 py-4">
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Loading channels...</span>
+                      </div>
+                    ) : (
+                      "No channels found"
+                    )}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {availableChannels.map((channel) => {
+                      const isMonitored = monitoredNames.has(channel.name.toLowerCase());
+                      const isAdding = addingChannelId === channel.id;
+                      return (
+                        <CommandItem
+                          key={channel.id}
+                          value={channel.name}
+                          onSelect={() => !isMonitored && !isAdding && handleAddChannel(channel)}
+                          disabled={isMonitored || isAdding}
+                          className={cn(
+                            "flex items-center gap-3",
+                            isMonitored && "opacity-50"
+                          )}
+                        >
+                          <div className="w-6 h-6 rounded bg-[#4A154B]/10 flex items-center justify-center flex-shrink-0">
+                            {channel.isPrivate ? (
+                              <Lock className="w-3.5 h-3.5 text-[#4A154B]" />
+                            ) : (
+                              <Hash className="w-3.5 h-3.5 text-[#4A154B]" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-foreground truncate block">
+                              {channel.isPrivate ? "🔒 " : "#"}{channel.name}
+                            </span>
+                            {channel.numMembers !== undefined && (
+                              <span className="text-xs text-muted-foreground">
+                                {channel.numMembers} members
+                              </span>
+                            )}
+                          </div>
+                          {isMonitored && (
+                            <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                          )}
+                          {isAdding && (
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
+                          )}
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           <p className="text-xs text-muted-foreground mt-2">
-            Search across channel content and save matches as memories
+            Add more channels to monitor for messages
           </p>
         </div>
 
