@@ -38,6 +38,7 @@ export function useFacebookPagePosts() {
       setSyncedPosts(data.map((p: any) => ({
         id: p.id,
         facebookPostId: p.facebook_post_id,
+        postMessage: p.post_message ?? null,
         memoryId: p.memory_id,
         syncedAt: p.synced_at,
       })));

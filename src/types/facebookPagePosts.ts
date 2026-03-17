@@ -23,6 +23,7 @@ export interface FacebookPagePostsStats {
 export interface SyncedPagePost {
   id: string;
   facebookPostId: string;
+  postMessage: string | null;
   memoryId: string | null;
   syncedAt: string | null;
 }
