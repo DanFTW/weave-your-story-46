@@ -13,6 +13,7 @@ export function useRestaurantBookmarkSync() {
   const [phase, setPhase] = useState<RestaurantBookmarkSyncPhase>("auth-check");
   const [config, setConfig] = useState<RestaurantBookmarkSyncConfig | null>(null);
   const [pendingBookmarks, setPendingBookmarks] = useState<PendingRestaurantBookmark[]>([]);
+  const [completedBookmarks, setCompletedBookmarks] = useState<PendingRestaurantBookmark[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isPushing, setIsPushing] = useState<string | null>(null);
@@ -73,32 +74,43 @@ export function useRestaurantBookmarkSync() {
         setPhase("configure");
       }
 
-      // Load pending bookmarks
-      const { data: pending } = await supabase
-        .from("pending_restaurant_bookmarks" as any)
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
+      // Load pending and completed bookmarks in parallel
+      const mapRow = (p: any): PendingRestaurantBookmark => ({
+        id: p.id,
+        userId: p.user_id,
+        memoryId: p.memory_id,
+        memoryContent: p.memory_content,
+        restaurantName: p.restaurant_name,
+        restaurantAddress: p.restaurant_address,
+        restaurantCuisine: p.restaurant_cuisine,
+        restaurantNotes: p.restaurant_notes,
+        placeId: p.place_id ?? null,
+        googleMapsUrl: p.google_maps_url ?? null,
+        status: p.status,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+      });
 
-      if (pending) {
-        setPendingBookmarks(
-          (pending as any[]).map((p) => ({
-            id: p.id,
-            userId: p.user_id,
-            memoryId: p.memory_id,
-            memoryContent: p.memory_content,
-            restaurantName: p.restaurant_name,
-            restaurantAddress: p.restaurant_address,
-            restaurantCuisine: p.restaurant_cuisine,
-            restaurantNotes: p.restaurant_notes,
-            placeId: p.place_id ?? null,
-            googleMapsUrl: p.google_maps_url ?? null,
-            status: p.status,
-            createdAt: p.created_at,
-            updatedAt: p.updated_at,
-          }))
-        );
+      const [pendingRes, completedRes] = await Promise.all([
+        supabase
+          .from("pending_restaurant_bookmarks" as any)
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("pending_restaurant_bookmarks" as any)
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("status", "completed")
+          .order("updated_at", { ascending: false }),
+      ]);
+
+      if (pendingRes.data) {
+        setPendingBookmarks((pendingRes.data as any[]).map(mapRow));
+      }
+      if (completedRes.data) {
+        setCompletedBookmarks((completedRes.data as any[]).map(mapRow));
       }
     } finally {
       setIsLoading(false);
@@ -278,7 +290,7 @@ export function useRestaurantBookmarkSync() {
   }, [toast, loadConfig]);
 
   return {
-    phase, setPhase, config, stats, pendingBookmarks,
+    phase, setPhase, config, stats, pendingBookmarks, completedBookmarks,
     isLoading, isActivating, isPushing, isSyncing,
     loadConfig, activate, deactivate,
     updatePendingBookmark, pushBookmark, dismissPending, manualSync,
