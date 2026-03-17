@@ -135,8 +135,9 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
 
       if (c.is_active) {
         setPhase("active");
-        // Load recent messages when active
+        // Load recent messages and true count when active
         await loadRecentMessages();
+        await loadMessageCount();
       } else if (c.channel_id) {
         setPhase("configure");
       } else if (c.server_id) {
