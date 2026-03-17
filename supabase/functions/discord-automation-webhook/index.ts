@@ -86,6 +86,16 @@ serve(async (req) => {
       });
     }
 
+    // Trigger word filter
+    if (config.trigger_word_enabled === true && config.trigger_word) {
+      if (!messageContent.toLowerCase().includes(config.trigger_word.toLowerCase())) {
+        console.log("[Discord Webhook] Message does not contain trigger word, skipping");
+        return new Response(JSON.stringify({ received: true, filtered: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Deduplicate
     const { data: existing } = await supabaseClient
       .from("discord_processed_messages")
