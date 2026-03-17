@@ -4,7 +4,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { MonitoredContact } from "@/types/emailAutomation";
 import { TriggerStatus } from "@/hooks/useEmailAutomation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDistanceToNow } from "date-fns";
 
 interface ActiveMonitoringProps {
   contacts: MonitoredContact[];
@@ -15,6 +17,15 @@ interface ActiveMonitoringProps {
   onRemove: (contactId: string) => Promise<boolean>;
   onCheckStatus: (triggerIds: string[]) => Promise<TriggerStatus[]>;
   onEnableTrigger: (triggerId: string) => Promise<boolean>;
+}
+
+interface ProcessedEmail {
+  id: string;
+  contact_email: string;
+  sender: string | null;
+  subject: string | null;
+  direction: string;
+  processed_at: string;
 }
 
 function TriggerStatusIcon({ status }: { status?: TriggerStatus }) {
@@ -41,6 +52,27 @@ export function ActiveMonitoring({
 }: ActiveMonitoringProps) {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [enablingTriggerId, setEnablingTriggerId] = useState<string | null>(null);
+  const [history, setHistory] = useState<ProcessedEmail[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      setHistoryLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setHistoryLoading(false); return; }
+
+      const { data } = await supabase
+        .from("email_automation_processed_emails")
+        .select("id, contact_email, sender, subject, direction, processed_at")
+        .eq("user_id", user.id)
+        .order("processed_at", { ascending: false })
+        .limit(50);
+
+      setHistory(data || []);
+      setHistoryLoading(false);
+    };
+    fetchHistory();
+  }, [contacts.length]);
 
   const handleRemove = async (contactId: string) => {
     setRemovingId(contactId);
@@ -60,7 +92,6 @@ export function ActiveMonitoring({
   const handleEnableTrigger = async (triggerId: string) => {
     setEnablingTriggerId(triggerId);
     await onEnableTrigger(triggerId);
-    // Refresh status after enabling
     await onCheckStatus([triggerId]);
     setEnablingTriggerId(null);
   };
@@ -235,6 +266,45 @@ export function ActiveMonitoring({
             </div>
           );
         })}
+
+        {/* Email History Section */}
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Email History</h3>
+          {historyLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : history.length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-muted-foreground">No emails processed yet. Emails will appear here as they are captured.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {history.map((email) => (
+                <div key={email.id} className="bg-muted/50 rounded-xl p-3 flex items-start gap-3">
+                  <div className="mt-0.5">
+                    {email.direction === "incoming" ? (
+                      <Inbox className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <Send className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {email.sender || email.contact_email}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {email.subject || "(no subject)"}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                    {formatDistanceToNow(new Date(email.processed_at), { addSuffix: true })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Add More Button */}

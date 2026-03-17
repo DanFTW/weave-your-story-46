@@ -305,6 +305,42 @@ export type Database = {
         }
         Relationships: []
       }
+      email_automation_processed_emails: {
+        Row: {
+          contact_email: string
+          direction: string
+          email_message_id: string | null
+          id: string
+          processed_at: string | null
+          sender: string | null
+          snippet: string | null
+          subject: string | null
+          user_id: string
+        }
+        Insert: {
+          contact_email: string
+          direction: string
+          email_message_id?: string | null
+          id?: string
+          processed_at?: string | null
+          sender?: string | null
+          snippet?: string | null
+          subject?: string | null
+          user_id: string
+        }
+        Update: {
+          contact_email?: string
+          direction?: string
+          email_message_id?: string | null
+          id?: string
+          processed_at?: string | null
+          sender?: string | null
+          snippet?: string | null
+          subject?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       facebook_page_posts_config: {
         Row: {
           created_at: string
