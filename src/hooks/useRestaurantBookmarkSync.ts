@@ -13,6 +13,7 @@ export function useRestaurantBookmarkSync() {
   const [phase, setPhase] = useState<RestaurantBookmarkSyncPhase>("auth-check");
   const [config, setConfig] = useState<RestaurantBookmarkSyncConfig | null>(null);
   const [pendingBookmarks, setPendingBookmarks] = useState<PendingRestaurantBookmark[]>([]);
+  const [completedBookmarks, setCompletedBookmarks] = useState<PendingRestaurantBookmark[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isPushing, setIsPushing] = useState<string | null>(null);
