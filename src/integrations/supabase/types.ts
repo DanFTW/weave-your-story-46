@@ -655,18 +655,24 @@ export type Database = {
       }
       hubspot_processed_contacts: {
         Row: {
+          company: string | null
+          contact_name: string | null
           hubspot_contact_id: string
           id: string
           processed_at: string | null
           user_id: string
         }
         Insert: {
+          company?: string | null
+          contact_name?: string | null
           hubspot_contact_id: string
           id?: string
           processed_at?: string | null
           user_id: string
         }
         Update: {
+          company?: string | null
+          contact_name?: string | null
           hubspot_contact_id?: string
           id?: string
           processed_at?: string | null
