@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useTrelloAutomation } from "@/hooks/useTrelloAutomation";
 import { useComposio } from "@/hooks/useComposio";
 import { BoardOverview } from "./ListPicker";
-import { ListPicker } from "./ListPicker";
+import { BoardPicker } from "./BoardPicker";
 import { AutomationConfig } from "./AutomationConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
