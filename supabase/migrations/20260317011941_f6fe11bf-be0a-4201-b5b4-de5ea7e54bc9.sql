@@ -1,0 +1,1 @@
+ALTER TABLE public.hubspot_processed_contacts ADD COLUMN contact_name text, ADD COLUMN company text;

@@ -1,7 +1,17 @@
+import { useState, useEffect } from "react";
 import { UserPlus, Pause, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HubSpotContactStats } from "@/types/hubspotAutomation";
 import { formatDistanceToNow } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+interface HistoryContact {
+  id: string;
+  contact_name: string | null;
+  company: string | null;
+  processed_at: string | null;
+}
 
 interface ActiveMonitoringProps {
   stats: HubSpotContactStats;
@@ -16,9 +26,41 @@ export function ActiveMonitoring({
   onPause,
   onCheckNow,
 }: ActiveMonitoringProps) {
+  const [history, setHistory] = useState<HistoryContact[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
   const lastCheckedText = stats.lastChecked 
     ? formatDistanceToNow(new Date(stats.lastChecked), { addSuffix: true })
     : 'Never';
+
+  useEffect(() => {
+    async function fetchHistory() {
+      setHistoryLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await supabase
+          .from('hubspot_processed_contacts')
+          .select('id, contact_name, company, processed_at')
+          .eq('user_id', user.id)
+          .order('processed_at', { ascending: false })
+          .limit(50);
+
+        if (data) setHistory(data as HistoryContact[]);
+      } catch (err) {
+        console.error('Error fetching contact history:', err);
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+    fetchHistory();
+  }, [stats.contactsTracked]);
+
+  function getInitials(name: string | null): string {
+    if (!name) return '?';
+    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  }
 
   return (
     <div className="space-y-6">
@@ -59,6 +101,45 @@ export function ActiveMonitoring({
             Active
           </span>
         </div>
+      </div>
+
+      {/* Contact History */}
+      <div className="bg-card rounded-xl border border-border p-4">
+        <h4 className="font-medium text-foreground mb-3">Contact History</h4>
+        {historyLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : history.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            No contacts synced yet
+          </p>
+        ) : (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {history.map((contact) => (
+              <div key={contact.id} className="flex items-center gap-3">
+                <Avatar className="w-8 h-8">
+                  <AvatarFallback className="bg-[#FF7A59]/10 text-[#FF7A59] text-xs font-medium">
+                    {getInitials(contact.contact_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {contact.contact_name || 'Unknown Contact'}
+                  </p>
+                  {contact.company && (
+                    <p className="text-xs text-muted-foreground truncate">{contact.company}</p>
+                  )}
+                </div>
+                {contact.processed_at && (
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDistanceToNow(new Date(contact.processed_at), { addSuffix: true })}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Actions */}
