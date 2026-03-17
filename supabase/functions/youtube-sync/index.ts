@@ -491,7 +491,7 @@ async function syncYouTubeContent(
 
     return {
       success: true,
-      videosSynced: videosToSync.length,
+      videosSynced: recordsInserted,
       memoriesCreated,
     };
   } catch (error) {
