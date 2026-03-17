@@ -137,6 +137,7 @@ async function listAlbums(connectionId: string) {
       },
       body: JSON.stringify({
         connected_account_id: connectionId,
+        auth_config_id: 'ac_SQbZGWVauUwV',
         arguments: {
           pageSize: 50,
         },
