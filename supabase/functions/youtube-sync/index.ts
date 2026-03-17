@@ -445,12 +445,12 @@ async function syncYouTubeContent(
     // Fetch content based on config
     let allVideos: YouTubeVideo[] = [];
 
-    // Default to syncing liked videos if no config or sync_liked_videos is true
+    // Fetch playlist items if no config or sync_liked_videos is true
     if (!config || config.sync_liked_videos !== false) {
-      console.log('Fetching liked videos via channel activities...');
-      const likedVideos = await fetchLikedVideos(connectionId, 25);
-      console.log('Fetched videos from activities count:', likedVideos.length);
-      allVideos = [...allVideos, ...likedVideos];
+      console.log('Fetching playlist items...');
+      const playlistVideos = await fetchPlaylistItems(connectionId, 25);
+      console.log('Fetched playlist items count:', playlistVideos.length);
+      allVideos = [...allVideos, ...playlistVideos];
     }
 
     // Fetch subscriptions if enabled
