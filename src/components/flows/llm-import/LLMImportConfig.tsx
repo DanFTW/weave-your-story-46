@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, Copy, Check, ExternalLink } from "lucide-react";
+import { median, isMedian } from "@/utils/median";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { LLMImportCategory } from "@/types/llmImport";
@@ -13,7 +14,7 @@ interface LLMImportConfigProps {
 }
 
 const llmLinks = [
-  { name: "ChatGPT", url: "https://chat.openai.com" },
+  { name: "ChatGPT", url: "https://chatgpt.com" },
   { name: "Claude", url: "https://claude.ai" },
   { name: "Gemini", url: "https://gemini.google.com" },
 ];
@@ -130,7 +131,13 @@ export function LLMImportConfig({ category, onBack, onProcess, isProcessing }: L
                     key={llm.name}
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(llm.url, "_blank")}
+                    onClick={() => {
+                      if (isMedian()) {
+                        median.window.open(llm.url, 'external');
+                      } else {
+                        window.open(llm.url, "_blank");
+                      }
+                    }}
                     className="gap-2"
                   >
                     {llm.name}
