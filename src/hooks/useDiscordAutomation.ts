@@ -55,7 +55,7 @@ export function useDiscordAutomation(): UseDiscordAutomationReturn {
   const [messageCount, setMessageCount] = useState(0);
 
   const stats: DiscordAutomationStats = {
-    messagesTracked: config?.messagesTracked ?? 0,
+    messagesTracked: messageCount,
     lastChecked: config?.lastCheckedAt ?? null,
     isActive: config?.isActive ?? false,
   };
