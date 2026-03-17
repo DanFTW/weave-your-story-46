@@ -108,12 +108,200 @@ async function fetchGuildsForConnection(connId: string): Promise<{ id: string; n
   }
 }
 
+/**
+ * Process messages for a single user config during cron-poll.
+ * Mirrors the manual "poll" logic but accepts config + supabaseClient directly.
+ */
+async function processUserPoll(
+  supabaseClient: ReturnType<typeof createClient>,
+  config: any,
+): Promise<number> {
+  const botToken = Deno.env.get("DISCORD_BOT_TOKEN");
+  if (!botToken) {
+    console.error("[Discord CronPoll] DISCORD_BOT_TOKEN missing");
+    return 0;
+  }
+
+  const messagesUrl = `https://discord.com/api/v10/channels/${config.channel_id}/messages?limit=50`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+
+  let messages: any[];
+  try {
+    const res = await fetch(messagesUrl, {
+      headers: { Authorization: `Bot ${botToken}` },
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (!res.ok) {
+      console.error(`[Discord CronPoll] Messages API ${res.status} for user ${config.user_id}`);
+      return 0;
+    }
+    messages = await res.json();
+  } catch (e) {
+    clearTimeout(t);
+    console.error(`[Discord CronPoll] Fetch failed for user ${config.user_id}:`, e);
+    return 0;
+  }
+
+  if (!Array.isArray(messages)) return 0;
+
+  const triggerWordEnabled = config.trigger_word_enabled === true;
+  const triggerWord = config.trigger_word || "";
+
+  let imported = 0;
+  for (const msg of messages) {
+    if (msg.author?.bot) continue;
+
+    let messageText = msg.content?.trim() || "";
+    if (!messageText && msg.embeds?.length > 0) {
+      messageText = msg.embeds
+        .map((e: any) => [e.title, e.description].filter(Boolean).join(": "))
+        .join("\n");
+    }
+    if (!messageText && msg.attachments?.length > 0) {
+      messageText = msg.attachments
+        .map((a: any) => `[Attachment: ${a.filename}]`)
+        .join(", ");
+    }
+    if (!messageText) continue;
+
+    if (triggerWordEnabled && triggerWord) {
+      if (!messageText.toLowerCase().includes(triggerWord.toLowerCase())) continue;
+    }
+
+    const { data: dup } = await supabaseClient
+      .from("discord_processed_messages")
+      .select("id")
+      .eq("user_id", config.user_id)
+      .eq("discord_message_id", msg.id)
+      .maybeSingle();
+    if (dup) continue;
+
+    const sentDate = new Date(msg.timestamp).toLocaleString("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    const authorDisplayName = msg.author?.global_name || msg.author?.username || "Unknown";
+    const authorUsername = msg.author?.username || "unknown";
+    const memContent = `💬 Discord Message in #${config.channel_name || "unknown"}\n\nFrom: ${authorDisplayName} (@${authorUsername})\nMessage: ${messageText}\nSent: ${sentDate}`;
+
+    const memRes = await fetch(`${SUPABASE_URL}/functions/v1/liam-memory`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "x-supabase-user-id": config.user_id,
+      },
+      body: JSON.stringify({ action: "create", content: memContent, tag: "DISCORD" }),
+    });
+
+    if (!memRes.ok) {
+      console.error("[Discord CronPoll] Memory creation failed for msg:", msg.id);
+      continue;
+    }
+
+    await supabaseClient
+      .from("discord_processed_messages")
+      .insert({
+        user_id: config.user_id,
+        discord_message_id: msg.id,
+        message_content: messageText.substring(0, 500),
+        author_name: authorDisplayName,
+      });
+
+    imported++;
+  }
+
+  if (imported > 0) {
+    await supabaseClient
+      .from("discord_automation_config")
+      .update({ last_checked_at: new Date().toISOString() })
+      .eq("user_id", config.user_id);
+  }
+
+  return imported;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // ── cron-poll: background auto-sync for all active users ──
+    const body = await req.clone().json().catch(() => ({}));
+
+    if (body.action === "cron-poll") {
+      const cronTrigger = req.headers.get("x-cron-trigger");
+      const cronSecret = req.headers.get("x-cron-secret");
+
+      const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      // Validate cron authentication
+      let authorized = cronTrigger === "supabase-internal";
+      if (!authorized && cronSecret) {
+        const { data: setting } = await supabaseClient
+          .from("app_settings")
+          .select("value")
+          .eq("key", "cron_secret")
+          .maybeSingle();
+        if (setting?.value && cronSecret === setting.value) {
+          authorized = true;
+        }
+      }
+
+      if (!authorized) {
+        return new Response(JSON.stringify({ error: "Unauthorized cron request" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log("[Discord CronPoll] Starting background poll for all active users");
+
+      const { data: activeConfigs, error: configErr } = await supabaseClient
+        .from("discord_automation_config")
+        .select("*")
+        .eq("is_active", true)
+        .not("channel_id", "is", null);
+
+      if (configErr || !activeConfigs) {
+        console.error("[Discord CronPoll] Failed to load configs:", configErr);
+        return new Response(JSON.stringify({ error: "Failed to load configs" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log(`[Discord CronPoll] Found ${activeConfigs.length} active configs`);
+
+      let totalImported = 0;
+      const results: { userId: string; imported: number }[] = [];
+
+      for (const config of activeConfigs) {
+        try {
+          const imported = await processUserPoll(supabaseClient, config);
+          totalImported += imported;
+          results.push({ userId: config.user_id, imported });
+          console.log(`[Discord CronPoll] User ${config.user_id}: imported ${imported}`);
+        } catch (e) {
+          console.error(`[Discord CronPoll] Error processing user ${config.user_id}:`, e);
+          results.push({ userId: config.user_id, imported: 0 });
+        }
+      }
+
+      console.log(`[Discord CronPoll] Done. ${activeConfigs.length} users, ${totalImported} messages total`);
+      return new Response(JSON.stringify({
+        usersProcessed: activeConfigs.length,
+        totalMessagesImported: totalImported,
+        results,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Normal user-authenticated actions ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header" }), {
@@ -137,7 +325,7 @@ serve(async (req) => {
       });
     }
 
-    const { action, serverId, channelId, triggerInstanceId, query } = await req.json();
+    const { action, serverId, channelId, triggerInstanceId, query } = body;
 
     // Get user's Discord connections (check both 'discord' and 'discordbot' integration IDs)
     const { data: integrations } = await supabaseClient
