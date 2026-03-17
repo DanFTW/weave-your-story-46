@@ -1,4 +1,4 @@
-import { MapPin, Bookmark, Pause, RefreshCw, Loader2 } from "lucide-react";
+import { MapPin, Bookmark, Pause, RefreshCw, Loader2, ExternalLink, UtensilsCrossed } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { RestaurantBookmarkSyncStats, PendingRestaurantBookmark } from "@/types/restaurantBookmarkSync";
 import { PendingBookmarkCard } from "./PendingBookmarkCard";
@@ -6,6 +6,7 @@ import { PendingBookmarkCard } from "./PendingBookmarkCard";
 interface ActiveMonitoringProps {
   stats: RestaurantBookmarkSyncStats;
   pendingBookmarks: PendingRestaurantBookmark[];
+  completedBookmarks: PendingRestaurantBookmark[];
   onPause: () => Promise<boolean>;
   onUpdateBookmark: (bookmarkId: string, fields: { restaurantName?: string; restaurantAddress?: string; restaurantCuisine?: string; restaurantNotes?: string }) => Promise<void>;
   onPushBookmark: (bookmarkId: string) => Promise<boolean>;
@@ -18,6 +19,7 @@ interface ActiveMonitoringProps {
 export function ActiveMonitoring({
   stats,
   pendingBookmarks,
+  completedBookmarks,
   onPause,
   onUpdateBookmark,
   onPushBookmark,
@@ -102,6 +104,50 @@ export function ActiveMonitoring({
               onDismiss={onDismiss}
               isPushing={isPushing === bookmark.id}
             />
+          ))}
+        </div>
+      )}
+
+      {/* Completed / history */}
+      {completedBookmarks.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">
+            Previously found ({completedBookmarks.length})
+          </h3>
+          {completedBookmarks.map((bookmark) => (
+            <div
+              key={bookmark.id}
+              className="bg-card rounded-2xl border border-border p-4 flex items-start gap-3"
+            >
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <UtensilsCrossed className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-foreground text-sm truncate">
+                  {bookmark.restaurantName || "Unknown restaurant"}
+                </p>
+                {bookmark.restaurantAddress && (
+                  <p className="text-muted-foreground text-xs truncate mt-0.5">
+                    {bookmark.restaurantAddress}
+                  </p>
+                )}
+                {bookmark.restaurantCuisine && (
+                  <p className="text-muted-foreground text-xs mt-0.5">
+                    {bookmark.restaurantCuisine}
+                  </p>
+                )}
+              </div>
+              {bookmark.googleMapsUrl && (
+                <a
+                  href={bookmark.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"
+                >
+                  <ExternalLink className="w-4 h-4 text-primary" />
+                </a>
+              )}
+            </div>
           ))}
         </div>
       )}

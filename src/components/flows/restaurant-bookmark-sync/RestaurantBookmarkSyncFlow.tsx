@@ -104,6 +104,7 @@ export function RestaurantBookmarkSyncFlow() {
           <ActiveMonitoring
             stats={stats}
             pendingBookmarks={pendingBookmarks}
+            completedBookmarks={completedBookmarks}
             onPause={deactivate}
             onUpdateBookmark={updatePendingBookmark}
             onPushBookmark={pushBookmark}
