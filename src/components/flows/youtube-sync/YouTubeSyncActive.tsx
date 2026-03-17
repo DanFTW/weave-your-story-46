@@ -117,7 +117,7 @@ export function YouTubeSyncActive({
                       : "bg-muted/50 text-muted-foreground hover:bg-muted"
                   }`}
                 >
-                  {opt.label === "Liked Video" ? "Liked Videos" : opt.label === "Subscription" ? "Subscriptions" : opt.label}
+                  {opt.label === "Subscription" ? "Subscriptions" : opt.label === "Playlist" ? "Playlists" : opt.label}
                 </button>
               ))}
             </div>
