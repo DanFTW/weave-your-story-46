@@ -4,7 +4,7 @@ import { ChevronLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTrelloAutomation } from "@/hooks/useTrelloAutomation";
 import { useComposio } from "@/hooks/useComposio";
-import { BoardPicker } from "./BoardPicker";
+import { BoardOverview } from "./ListPicker";
 import { ListPicker } from "./ListPicker";
 import { AutomationConfig } from "./AutomationConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
