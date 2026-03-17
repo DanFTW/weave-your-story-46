@@ -123,8 +123,7 @@ export function TrelloAutomationFlow() {
             <h1 className="text-xl font-bold text-white truncate">Trello Task Tracker</h1>
             <p className="text-white/70 text-sm truncate">
               {phase === 'select-board' && 'Select a board to monitor'}
-              {phase === 'select-done-list' && 'Select your "Done" list'}
-              {phase === 'configure' && 'Configure monitoring'}
+              {phase === 'board-overview' && 'Board overview'}
             </p>
           </div>
         </div>
