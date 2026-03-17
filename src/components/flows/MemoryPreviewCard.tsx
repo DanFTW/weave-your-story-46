@@ -114,7 +114,7 @@ export function MemoryPreviewCard({
               <p className="text-sm text-foreground leading-relaxed">
                 {memory.content}
               </p>
-              <div className="flex items-center gap-2 mt-3">
+              <div className="flex flex-wrap items-center gap-2 mt-3">
                 <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
                   {memory.entryName}
                 </span>
@@ -136,7 +136,7 @@ export function MemoryPreviewCard({
                   <span>{tagConfig?.label || 'Add tag'}</span>
                 </button>
                 
-                <span className="text-xs text-muted-foreground ml-auto">
+                <span className="text-xs text-muted-foreground">
                   Swipe to delete
                 </span>
               </div>
