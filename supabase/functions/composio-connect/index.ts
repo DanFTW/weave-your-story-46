@@ -322,10 +322,15 @@ serve(async (req) => {
       const callApiKeyConnect = async (configId: string) => {
         const requestBody: Record<string, unknown> = {
           auth_config: { id: configId },
-          connection: { user_id: user.id },
-          config: {
-            auth_scheme: "API_KEY",
-            val: sanitizedCredentials,
+          connection: {
+            user_id: user.id,
+            state: {
+              auth_scheme: "API_KEY",
+              val: {
+                status: "ACTIVE",
+                ...sanitizedCredentials,
+              },
+            },
           },
           ...(forceReauth && { force_reauth: true }),
         };
