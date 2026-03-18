@@ -192,7 +192,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   googlecalendar: "ac_Tahf9NrBD7Vy",
   googlemaps: "ac_dg71KiJ5nLgN",
   googlesheets: "ac_P0DYB0XdGLn3",
-  coinbase: "ac_8qxtj5vBqSnf",
+  coinbase: "ac_fCVi2K8lFafl",
   apibible: "ac_sBgIg_zusGDy",
 };
 

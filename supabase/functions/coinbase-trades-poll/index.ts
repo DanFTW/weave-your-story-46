@@ -83,108 +83,126 @@ async function createMemory(apiKeys: any, content: string): Promise<boolean> {
   }
 }
 
-// === COMPOSIO PROXY: LIST FILLS ===
+// === COMPOSIO TOOL EXECUTION ===
 
 // deno-lint-ignore no-explicit-any
-async function fetchFillsViaProxy(connectionId: string, cursor?: string): Promise<any> {
-  // deno-lint-ignore no-explicit-any
-  const parameters: any[] = [
-    { name: "limit", in: "query", value: "100" },
-  ];
-  if (cursor) {
-    parameters.push({ name: "cursor", in: "query", value: cursor });
-  }
+async function executeComposioTool(slug: string, connectionId: string, args: Record<string, unknown> = {}): Promise<any> {
+  console.log(`[Composio Tool] Executing ${slug}`);
 
-  console.log(`[Composio Proxy] Fetching fills, cursor=${cursor || "none"}`);
-
-  const response = await fetch("https://backend.composio.dev/api/v3/tools/execute/proxy", {
+  const response = await fetch(`https://backend.composio.dev/api/v3/tools/execute/${slug}`, {
     method: "POST",
     headers: {
       "x-api-key": COMPOSIO_API_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      connectedAccountId: connectionId,
-      endpoint: "api/v3/brokerage/orders/historical/fills",
-      method: "GET",
-      parameters,
+      connected_account_id: connectionId,
+      arguments: args,
     }),
   });
 
   const text = await response.text();
-  console.log(`[Composio Proxy] List Fills status=${response.status}, response (first 1500 chars):\n${text.slice(0, 1500)}`);
+  console.log(`[Composio Tool] ${slug} status=${response.status}, response (first 1500 chars):\n${text.slice(0, 1500)}`);
 
   if (!response.ok) {
-    throw new Error(`Composio Proxy List Fills failed: ${response.status} ${text.slice(0, 300)}`);
+    throw new Error(`Composio tool ${slug} failed: ${response.status} ${text.slice(0, 300)}`);
   }
 
   try {
     const parsed = JSON.parse(text);
-    // The proxy may wrap the response — extract the actual Coinbase response
     return parsed.data?.response_data || parsed.response_data || parsed.data || parsed;
   } catch {
-    throw new Error(`Failed to parse Composio Proxy response: ${text.slice(0, 300)}`);
+    throw new Error(`Failed to parse Composio response for ${slug}: ${text.slice(0, 300)}`);
   }
 }
 
-// === FORMAT FILL AS MEMORY ===
+// === FETCH ACCOUNTS AND TRANSACTIONS ===
 
 // deno-lint-ignore no-explicit-any
-function formatFillAsMemory(fill: any): string {
-  const productId = fill.product_id || "unknown";
-  const side = fill.side || "unknown";
-  const size = fill.size || fill.size_in_quote || "?";
-  const price = fill.price || "?";
-  const commission = fill.commission || "0";
-  const time = fill.trade_time || fill.created_at || new Date().toISOString();
-  const tradeId = fill.trade_id || fill.entry_id || "?";
+async function fetchTransactions(connectionId: string): Promise<any[]> {
+  // Step 1: List accounts/wallets
+  const accountsResult = await executeComposioTool("COINBASE_LIST_ACCOUNTS", connectionId);
+  
+  // deno-lint-ignore no-explicit-any
+  const accounts: any[] = accountsResult?.accounts || accountsResult?.data || 
+    (Array.isArray(accountsResult) ? accountsResult : []);
 
-  const formattedPrice = typeof price === "number" || !isNaN(Number(price))
-    ? `$${Number(price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : price;
+  if (accounts.length === 0) {
+    console.log("[Coinbase Poll] No accounts found");
+    return [];
+  }
 
-  const formattedCommission = typeof commission === "number" || !isNaN(Number(commission))
-    ? `$${Number(commission).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
-    : commission;
+  console.log(`[Coinbase Poll] Found ${accounts.length} accounts`);
+
+  // Step 2: For each account, fetch transactions
+  // deno-lint-ignore no-explicit-any
+  const allTransactions: any[] = [];
+
+  for (const account of accounts) {
+    const accountId = account.id || account.uuid;
+    if (!accountId) continue;
+
+    try {
+      const txResult = await executeComposioTool("COINBASE_LIST_TRANSACTIONS", connectionId, {
+        account_id: accountId,
+      });
+
+      // deno-lint-ignore no-explicit-any
+      const transactions: any[] = txResult?.transactions || txResult?.data ||
+        (Array.isArray(txResult) ? txResult : []);
+
+      // Tag each transaction with the account info
+      for (const tx of transactions) {
+        tx._account_name = account.name || account.currency?.code || "Unknown";
+        tx._account_id = accountId;
+      }
+
+      allTransactions.push(...transactions);
+    } catch (err) {
+      console.error(`[Coinbase Poll] Error fetching transactions for account ${accountId}:`, err);
+    }
+  }
+
+  console.log(`[Coinbase Poll] Total transactions across all accounts: ${allTransactions.length}`);
+  return allTransactions;
+}
+
+// === FORMAT TRANSACTION AS MEMORY ===
+
+// deno-lint-ignore no-explicit-any
+function formatTransactionAsMemory(tx: any): string {
+  const type = tx.type || "unknown";
+  const amount = tx.amount?.amount || tx.native_amount?.amount || "?";
+  const currency = tx.amount?.currency || tx.native_amount?.currency || "?";
+  const nativeAmount = tx.native_amount?.amount || amount;
+  const nativeCurrency = tx.native_amount?.currency || currency;
+  const status = tx.status || "unknown";
+  const time = tx.created_at || tx.updated_at || new Date().toISOString();
+  const txId = tx.id || "?";
+  const description = tx.details?.title || tx.details?.subtitle || "";
+  const accountName = tx._account_name || "Unknown";
+
+  const formattedNative = typeof nativeAmount === "number" || !isNaN(Number(nativeAmount))
+    ? `$${Number(nativeAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `${nativeAmount} ${nativeCurrency}`;
 
   return [
-    "Coinbase Trade",
+    "Coinbase Transaction",
     "",
-    `Pair: ${productId}`,
-    `Side: ${side}`,
-    `Size: ${size}`,
-    `Price: ${formattedPrice}`,
-    `Commission: ${formattedCommission}`,
+    `Type: ${type}`,
+    `Account: ${accountName}`,
+    `Amount: ${amount} ${currency}`,
+    `Value: ${formattedNative}`,
+    `Status: ${status}`,
     `Time: ${time}`,
-    `Trade ID: ${tradeId}`,
+    `Transaction ID: ${txId}`,
+    ...(description ? [`Description: ${description}`] : []),
     "",
-    `A ${side} trade was executed on Coinbase for ${productId}.`,
+    `A ${type} transaction was recorded on Coinbase for ${amount} ${currency}.`,
   ].join("\n");
 }
 
-// === EXTRACT FILLS ARRAY FROM RESPONSE ===
-
-// deno-lint-ignore no-explicit-any
-function extractFills(result: any): { fills: any[]; cursor: string | null } {
-  // Coinbase List Fills returns { fills: [...], cursor: "..." }
-  if (result?.fills && Array.isArray(result.fills)) {
-    return { fills: result.fills, cursor: result.cursor || null };
-  }
-  // Fallback: try to find an array in the response
-  if (Array.isArray(result)) {
-    return { fills: result, cursor: null };
-  }
-  if (typeof result === "object" && result !== null) {
-    for (const k of Object.keys(result)) {
-      if (Array.isArray(result[k])) {
-        return { fills: result[k], cursor: result.cursor || null };
-      }
-    }
-  }
-  return { fills: [], cursor: null };
-}
-
-// === POLL COINBASE FILLS VIA COMPOSIO PROXY ===
+// === POLL COINBASE TRANSACTIONS VIA COMPOSIO TOOLS ===
 
 async function pollCoinbaseTrades(
   // deno-lint-ignore no-explicit-any
@@ -192,7 +210,7 @@ async function pollCoinbaseTrades(
   userId: string,
   connectionId: string
 ): Promise<{ newTrades: number; totalTracked: number }> {
-  console.log(`[Coinbase Poll] Fetching fills for user ${userId}`);
+  console.log(`[Coinbase Poll] Fetching transactions for user ${userId}`);
 
   const { data: currentConfig } = await supabaseClient
     .from("coinbase_trades_config")
@@ -210,74 +228,49 @@ async function pollCoinbaseTrades(
     throw new Error("LIAM API keys not configured. Please set up your API keys first.");
   }
 
+  const cutoffTimestamp = currentConfig?.last_trade_timestamp || null;
   let totalNewTrades = 0;
   let latestTimestamp = currentConfig?.last_trade_timestamp;
-  const cutoffTimestamp = currentConfig?.last_trade_timestamp || null;
 
-  let cursor: string | null = null;
-  let hasMore = true;
-  let pageCount = 0;
-  const maxPages = 5;
+  const transactions = await fetchTransactions(connectionId);
 
-  while (hasMore && pageCount < maxPages) {
-    const result = await fetchFillsViaProxy(connectionId, cursor || undefined);
-    const { fills, cursor: nextCursor } = extractFills(result);
+  for (const tx of transactions) {
+    const tradeTime = tx.created_at || tx.updated_at;
+    const tradeId = String(tx.id || "");
 
-    if (fills.length === 0) {
-      hasMore = false;
-      break;
+    // Skip if we've already processed past this timestamp
+    if (cutoffTimestamp && tradeTime && tradeTime <= cutoffTimestamp) {
+      continue;
     }
 
-    console.log(`[Coinbase Poll] Page ${pageCount + 1}: ${fills.length} fills`);
+    const dedupeId = `tx_${tradeId}`;
 
-    let hitCutoff = false;
-    for (const fill of fills) {
-      const tradeTime = fill.trade_time || fill.created_at;
-      const tradeId = String(fill.trade_id || fill.entry_id || "");
+    const { data: existing } = await supabaseClient
+      .from("coinbase_processed_trades")
+      .select("coinbase_trade_id")
+      .eq("user_id", userId)
+      .eq("coinbase_trade_id", dedupeId)
+      .maybeSingle();
 
-      // Stop if we've reached previously processed fills
-      if (cutoffTimestamp && tradeTime && tradeTime <= cutoffTimestamp) {
-        hitCutoff = true;
-        break;
-      }
+    if (existing) continue;
 
-      const dedupeId = `fill_${tradeId}`;
+    const { error: insertError } = await supabaseClient
+      .from("coinbase_processed_trades")
+      .insert({ user_id: userId, coinbase_trade_id: dedupeId });
 
-      const { data: existing } = await supabaseClient
-        .from("coinbase_processed_trades")
-        .select("coinbase_trade_id")
-        .eq("user_id", userId)
-        .eq("coinbase_trade_id", dedupeId)
-        .maybeSingle();
-
-      if (existing) continue;
-
-      const { error: insertError } = await supabaseClient
-        .from("coinbase_processed_trades")
-        .insert({ user_id: userId, coinbase_trade_id: dedupeId });
-
-      if (insertError) {
-        if (insertError.code === "23505") continue;
-        console.error("[Coinbase Poll] Insert error:", insertError);
-        continue;
-      }
-
-      const memoryContent = formatFillAsMemory(fill);
-      const success = await createMemory(apiKeys, memoryContent);
-      if (success) totalNewTrades++;
-
-      if (tradeTime && (!latestTimestamp || tradeTime > latestTimestamp)) {
-        latestTimestamp = tradeTime;
-      }
+    if (insertError) {
+      if (insertError.code === "23505") continue;
+      console.error("[Coinbase Poll] Insert error:", insertError);
+      continue;
     }
 
-    if (hitCutoff || !nextCursor) {
-      hasMore = false;
-    } else {
-      cursor = nextCursor;
-    }
+    const memoryContent = formatTransactionAsMemory(tx);
+    const success = await createMemory(apiKeys, memoryContent);
+    if (success) totalNewTrades++;
 
-    pageCount++;
+    if (tradeTime && (!latestTimestamp || tradeTime > latestTimestamp)) {
+      latestTimestamp = tradeTime;
+    }
   }
 
   // Update config stats
