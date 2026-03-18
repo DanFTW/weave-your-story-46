@@ -322,14 +322,20 @@ serve(async (req) => {
       const callApiKeyConnect = async (configId: string) => {
         const requestBody: Record<string, unknown> = {
           auth_config: { id: configId },
-          connection: { user_id: user.id },
-          field_inputs: sanitizedCredentials,
+          connection: {
+            user_id: user.id,
+            state: {
+              authScheme: "API_KEY",
+              val: sanitizedCredentials,
+            },
+          },
           ...(forceReauth && { force_reauth: true }),
         };
         
         console.log(
           `[${toolkitLower}] Creating connected account with auth config ${configId} and ${Object.keys(sanitizedCredentials).length} credential fields`
         );
+        console.log(`[${toolkitLower}] Request body: ${JSON.stringify(requestBody)}`);
         
         const response = await fetch("https://backend.composio.dev/api/v3/connected_accounts", {
           method: "POST",
