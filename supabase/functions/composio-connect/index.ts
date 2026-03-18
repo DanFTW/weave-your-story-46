@@ -192,7 +192,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   googlecalendar: "ac_Tahf9NrBD7Vy",
   googlemaps: "ac_dg71KiJ5nLgN",
   googlesheets: "ac_P0DYB0XdGLn3",
-  coinbase: "ac_fCVi2K8lFafl",
+  coinbase: "ac_8qxtj5vBqSnf",
   apibible: "ac_sBgIg_zusGDy",
 };
 
@@ -325,8 +325,11 @@ serve(async (req) => {
           connection: {
             user_id: user.id,
             state: {
-              authScheme: "API_KEY",
-              val: sanitizedCredentials,
+              auth_scheme: "API_KEY",
+              val: {
+                status: "ACTIVE",
+                ...sanitizedCredentials,
+              },
             },
           },
           ...(forceReauth && { force_reauth: true }),
