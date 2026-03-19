@@ -56,6 +56,7 @@ export function LinkedInAutomationFlow() {
       loadConfig();
     } else if (!isCheckingAuth && !isConnected) {
       // Redirect to LinkedIn integration page
+      sessionStorage.setItem('returnAfterLinkedinConnect', '/flow/linkedin-live');
       navigate('/integration/linkedin');
     }
   }, [isCheckingAuth, isConnected, loadConfig, navigate]);

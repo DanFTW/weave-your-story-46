@@ -54,6 +54,7 @@ export const FacebookSyncFlow = React.forwardRef<HTMLDivElement>(function Facebo
     if (facebook.isConnected) {
       loadConfig();
     } else {
+      sessionStorage.setItem('returnAfterFacebookConnect', '/flow/facebook-sync');
       navigate('/integration/facebook');
     }
   }, [facebook.isConnected, isCheckingAuth]);
