@@ -54,6 +54,7 @@ export function YouTubeSyncFlow() {
       loadConfig();
       fetchRecentVideos();
     } else {
+      sessionStorage.setItem('returnAfterYoutubeConnect', '/flow/youtube-sync');
       navigate('/integration/youtube');
     }
   }, [youtube.isConnected, isCheckingAuth]);

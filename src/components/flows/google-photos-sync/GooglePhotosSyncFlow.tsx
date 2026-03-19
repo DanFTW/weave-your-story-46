@@ -50,6 +50,7 @@ export function GooglePhotosSyncFlow() {
       loadConfig();
       fetchRecentPhotos();
     } else {
+      sessionStorage.setItem('returnAfterGooglephotosConnect', '/flow/google-photos-sync');
       navigate('/integration/googlephotos');
     }
   }, [googlePhotos.isConnected, isCheckingAuth]);

@@ -53,6 +53,7 @@ export function InstagramSyncFlow() {
       loadConfig();
       fetchRecentPosts();
     } else {
+      sessionStorage.setItem('returnAfterInstagramConnect', '/flow/instagram-sync');
       navigate('/integration/instagram');
     }
   }, [instagram.isConnected, isCheckingAuth]);

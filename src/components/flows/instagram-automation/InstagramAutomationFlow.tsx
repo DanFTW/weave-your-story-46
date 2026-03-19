@@ -53,6 +53,7 @@ export function InstagramAutomationFlow() {
       loadConfig();
     } else {
       // User is not connected, redirect to Instagram integration
+      sessionStorage.setItem('returnAfterInstagramConnect', '/flow/instagram-live');
       navigate('/integration/instagram');
     }
   }, [instagram.isConnected, isCheckingAuth]);

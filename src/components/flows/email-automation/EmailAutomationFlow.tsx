@@ -78,6 +78,7 @@ export function EmailAutomationFlow() {
       });
     } else {
       // User is not connected, redirect to Gmail integration
+      sessionStorage.setItem('returnAfterGmailConnect', '/flow/email-automation');
       navigate('/integration/gmail');
     }
   }, [gmail.isConnected, isCheckingAuth, phase]);
