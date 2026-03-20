@@ -708,17 +708,27 @@ serve(async (req) => {
         });
       }
 
-      const result = await processUserInstagram(supabase, userId, config);
+      try {
+        const result = await processUserInstagram(supabase, userId, config);
 
-      return new Response(JSON.stringify({
-        success: true,
-        newItems: result.newItems,
-        postsTracked: result.postsTracked,
-        commentsTracked: result.commentsTracked,
-        likesTracked: result.likesTracked,
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        return new Response(JSON.stringify({
+          success: true,
+          newItems: result.newItems,
+          postsTracked: result.postsTracked,
+          commentsTracked: result.commentsTracked,
+          likesTracked: result.likesTracked,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (pollError: any) {
+        if (pollError?.code === 'CONNECTION_EXPIRED' || pollError?.message === 'CONNECTION_EXPIRED') {
+          return new Response(JSON.stringify({ error: "CONNECTION_EXPIRED", message: "Your Instagram connection has expired. Please reconnect." }), {
+            status: 410,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw pollError;
+      }
     }
 
     // Unknown action
