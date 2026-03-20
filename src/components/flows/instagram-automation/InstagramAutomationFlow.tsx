@@ -49,7 +49,9 @@ export function InstagramAutomationFlow() {
   useEffect(() => {
     if (isCheckingAuth) return;
     
-    if (instagram.isConnected) {
+    if (instagram.isConnected && phase !== 'auth-check') {
+      // Already loaded, don't reload
+    } else if (instagram.isConnected) {
       loadConfig();
     } else {
       // User is not connected, redirect to Instagram integration
