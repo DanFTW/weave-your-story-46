@@ -641,6 +641,7 @@ serve(async (req) => {
             console.error(`Cron poll: Error processing user ${config.user_id}:`, error);
             errors.push(`User ${config.user_id}: ${error}`);
           }
+        }
       }
 
       return new Response(JSON.stringify({
