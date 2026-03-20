@@ -632,10 +632,15 @@ serve(async (req) => {
           totalProcessed++;
           totalNewItems += result.newItems;
           console.log(`Cron poll: User ${config.user_id} - ${result.newItems} new items`);
-        } catch (error) {
-          console.error(`Cron poll: Error processing user ${config.user_id}:`, error);
-          errors.push(`User ${config.user_id}: ${error}`);
-        }
+        } catch (error: any) {
+          if (error?.code === 'CONNECTION_EXPIRED' || error?.message === 'CONNECTION_EXPIRED') {
+            console.log(`Cron poll: User ${config.user_id} - Instagram connection expired, deactivating`);
+            await supabase.from("instagram_automation_config").update({ is_active: false }).eq("user_id", config.user_id);
+            errors.push(`User ${config.user_id}: CONNECTION_EXPIRED`);
+          } else {
+            console.error(`Cron poll: Error processing user ${config.user_id}:`, error);
+            errors.push(`User ${config.user_id}: ${error}`);
+          }
       }
 
       return new Response(JSON.stringify({
