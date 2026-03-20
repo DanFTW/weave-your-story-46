@@ -207,6 +207,14 @@ async function fetchInstagramPosts(connectedAccountId: string, igUserId: string 
   if (!response.ok) {
     const errorText = await response.text();
     console.error("Composio API error fetching posts:", response.status, errorText);
+    
+    // Detect expired/disconnected connections (410 Gone)
+    if (response.status === 410 || errorText.includes('EXPIRED')) {
+      const expiredError = new Error('CONNECTION_EXPIRED');
+      (expiredError as any).code = 'CONNECTION_EXPIRED';
+      throw expiredError;
+    }
+    
     throw new Error(`Failed to fetch posts: ${response.statusText}`);
   }
 
