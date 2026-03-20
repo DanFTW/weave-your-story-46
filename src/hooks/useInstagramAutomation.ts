@@ -273,6 +273,17 @@ export function useInstagramAutomation(): UseInstagramAutomationReturn {
       });
 
       if (error) {
+        // Check for connection expired (410)
+        const errorMessage = error.message || '';
+        if (errorMessage.includes('CONNECTION_EXPIRED') || errorMessage.includes('410')) {
+          toast({
+            title: "Connection expired",
+            description: "Your Instagram connection has expired. Please reconnect.",
+            variant: "destructive",
+          });
+          setPhase('auth-check');
+          return false;
+        }
         toast({
           title: "Check failed",
           description: error.message,

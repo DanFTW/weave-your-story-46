@@ -207,6 +207,14 @@ async function fetchInstagramPosts(connectedAccountId: string, igUserId: string 
   if (!response.ok) {
     const errorText = await response.text();
     console.error("Composio API error fetching posts:", response.status, errorText);
+    
+    // Detect expired/disconnected connections (410 Gone)
+    if (response.status === 410 || errorText.includes('EXPIRED')) {
+      const expiredError = new Error('CONNECTION_EXPIRED');
+      (expiredError as any).code = 'CONNECTION_EXPIRED';
+      throw expiredError;
+    }
+    
     throw new Error(`Failed to fetch posts: ${response.statusText}`);
   }
 
@@ -624,9 +632,15 @@ serve(async (req) => {
           totalProcessed++;
           totalNewItems += result.newItems;
           console.log(`Cron poll: User ${config.user_id} - ${result.newItems} new items`);
-        } catch (error) {
-          console.error(`Cron poll: Error processing user ${config.user_id}:`, error);
-          errors.push(`User ${config.user_id}: ${error}`);
+        } catch (error: any) {
+          if (error?.code === 'CONNECTION_EXPIRED' || error?.message === 'CONNECTION_EXPIRED') {
+            console.log(`Cron poll: User ${config.user_id} - Instagram connection expired, deactivating`);
+            await supabase.from("instagram_automation_config").update({ is_active: false }).eq("user_id", config.user_id);
+            errors.push(`User ${config.user_id}: CONNECTION_EXPIRED`);
+          } else {
+            console.error(`Cron poll: Error processing user ${config.user_id}:`, error);
+            errors.push(`User ${config.user_id}: ${error}`);
+          }
         }
       }
 
@@ -700,17 +714,27 @@ serve(async (req) => {
         });
       }
 
-      const result = await processUserInstagram(supabase, userId, config);
+      try {
+        const result = await processUserInstagram(supabase, userId, config);
 
-      return new Response(JSON.stringify({
-        success: true,
-        newItems: result.newItems,
-        postsTracked: result.postsTracked,
-        commentsTracked: result.commentsTracked,
-        likesTracked: result.likesTracked,
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        return new Response(JSON.stringify({
+          success: true,
+          newItems: result.newItems,
+          postsTracked: result.postsTracked,
+          commentsTracked: result.commentsTracked,
+          likesTracked: result.likesTracked,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (pollError: any) {
+        if (pollError?.code === 'CONNECTION_EXPIRED' || pollError?.message === 'CONNECTION_EXPIRED') {
+          return new Response(JSON.stringify({ error: "CONNECTION_EXPIRED", message: "Your Instagram connection has expired. Please reconnect." }), {
+            status: 410,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw pollError;
+      }
     }
 
     // Unknown action

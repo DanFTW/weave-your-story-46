@@ -58,6 +58,14 @@ export function InstagramAutomationFlow() {
     }
   }, [instagram.isConnected, isCheckingAuth]);
 
+  // Handle expired connection — redirect to reconnect
+  useEffect(() => {
+    if (phase === 'auth-check' && !isCheckingAuth && !isLoading && instagram.isConnected) {
+      sessionStorage.setItem('returnAfterInstagramConnect', '/flow/instagram-live');
+      navigate('/integration/instagram');
+    }
+  }, [phase, isCheckingAuth, isLoading, instagram.isConnected]);
+
   const handleBack = () => {
     switch (phase) {
       case 'auth-check':
