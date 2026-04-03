@@ -34,7 +34,7 @@ export function usePurchaseTracker(): UsePurchaseTrackerReturn {
 
       const { data, error } = await supabase.functions.invoke('gmail-purchase-tracker', {
         headers: {
-          Authorization: \`Bearer \${session.access_token}\`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: { maxResults: 50 },
       });
@@ -48,7 +48,7 @@ export function usePurchaseTracker(): UsePurchaseTrackerReturn {
 
       const purchaseList: Purchase[] = data?.purchases || [];
       const saved: number = data?.saved || 0;
-      console.log(\`Found \${purchaseList.length} purchases, \${saved} saved to LIAM\`);
+      console.log(`Found ${purchaseList.length} purchases, ${saved} saved to LIAM`);
 
       if (purchaseList.length === 0) {
         toast({
@@ -60,8 +60,8 @@ export function usePurchaseTracker(): UsePurchaseTrackerReturn {
       }
 
       const memories: PurchaseMemory[] = purchaseList.map((purchase, index) => ({
-        id: \`purchase-\${Date.now()}-\${index}\`,
-        content: \`Purchase from \${purchase.vendor} on \${purchase.date}: \${purchase.amount} - "\${purchase.subject}"\`,
+        id: `purchase-${Date.now()}-${index}`,
+        content: `Purchase from ${purchase.vendor} on ${purchase.date}: ${purchase.amount} - "${purchase.subject}"`,
         tag: 'PURCHASE',
         purchase,
         isEditing: false,
