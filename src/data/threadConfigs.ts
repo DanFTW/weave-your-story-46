@@ -688,6 +688,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "gmail-purchase-tracker": {
+    id: "gmail-purchase-tracker",
+    title: "Gmail Purchase Tracker",
+    subtitle: "Find & save purchases",
+    description: "Scan your Gmail for receipts, invoices, and order confirmations. Parses vendor, amount, and date, then saves each purchase as a memory.",
+    gradient: "teal",
+    icon: Receipt,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to your emails",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+      },
+      {
+        id: "scan",
+        type: "setup",
+        title: "Scan for Purchases",
+        description: "Search receipts and invoices",
+        icon: Search,
+      },
+      {
+        id: "save",
+        type: "save",
+        title: "Purchases Saved",
+        description: "Each purchase stored as a memory",
+        icon: Download,
+        badge: "AUTO",
+      },
+    ],
+  },
   "family": {
     id: "family",
     title: "Add Family to Memory",
