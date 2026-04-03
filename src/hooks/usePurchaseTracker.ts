@@ -33,9 +33,6 @@ export function usePurchaseTracker(): UsePurchaseTrackerReturn {
       console.log('Scanning for purchase emails...');
 
       const { data, error } = await supabase.functions.invoke('gmail-purchase-tracker', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
         body: { maxResults: 50 },
       });
 
