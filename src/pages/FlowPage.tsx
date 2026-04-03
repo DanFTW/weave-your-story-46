@@ -110,6 +110,9 @@ import { LinkedInProfileScrapeFlow } from "@/components/flows/linkedin-profile-s
 // Slack Messages Sync components
 import { SlackMessagesSyncFlow } from "@/components/flows/slack-messages-sync";
 
+// Purchase Tracker components
+import { PurchaseTrackerFlow } from "@/components/flows/purchase-tracker";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -324,6 +327,12 @@ export default function FlowPage() {
 
   if (config.isSlackMessagesSyncFlow) {
     return <SlackMessagesSyncFlow />;
+  }
+
+  // === PURCHASE TRACKER FLOW RENDER ===
+
+  if (config.isPurchaseTrackerFlow) {
+    return <PurchaseTrackerFlow />;
   }
 
   // === BIRTHDAY REMINDER FLOW RENDER ===

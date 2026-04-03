@@ -58,6 +58,7 @@ export interface FlowConfig {
   isWebsiteScrapeFlow?: boolean; // If true, uses Website Scrape UI
   isLinkedInProfileScrapeFlow?: boolean; // If true, uses LinkedIn Profile Scrape UI
   isSlackMessagesSyncFlow?: boolean; // If true, uses Slack Messages Sync UI
+  isPurchaseTrackerFlow?: boolean; // If true, uses Purchase Tracker UI
 }
 
 // Single data entry (e.g., one family member)
