@@ -341,6 +341,72 @@ export type Database = {
         }
         Relationships: []
       }
+      email_receipt_sheet_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          rows_posted: number
+          sheet_name: string | null
+          spreadsheet_id: string | null
+          spreadsheet_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          rows_posted?: number
+          sheet_name?: string | null
+          spreadsheet_id?: string | null
+          spreadsheet_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          rows_posted?: number
+          sheet_name?: string | null
+          spreadsheet_id?: string | null
+          spreadsheet_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_receipt_sheet_processed: {
+        Row: {
+          amount: string | null
+          created_at: string
+          date_str: string | null
+          email_message_id: string
+          id: string
+          user_id: string
+          vendor: string | null
+        }
+        Insert: {
+          amount?: string | null
+          created_at?: string
+          date_str?: string | null
+          email_message_id: string
+          id?: string
+          user_id: string
+          vendor?: string | null
+        }
+        Update: {
+          amount?: string | null
+          created_at?: string
+          date_str?: string | null
+          email_message_id?: string
+          id?: string
+          user_id?: string
+          vendor?: string | null
+        }
+        Relationships: []
+      }
       facebook_page_posts_config: {
         Row: {
           created_at: string
