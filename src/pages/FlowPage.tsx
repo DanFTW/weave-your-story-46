@@ -365,6 +365,12 @@ export default function FlowPage() {
     return <RestaurantBookmarkSyncFlow />;
   }
 
+  // === EMAIL RECEIPT SHEET FLOW RENDER ===
+
+  if (config.isEmailReceiptSheetFlow) {
+    return <EmailReceiptSheetFlow />;
+  }
+
   // === GROCERY SHEET SYNC FLOW RENDER ===
 
   if (config.isGrocerySheetSyncFlow) {

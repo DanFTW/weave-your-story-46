@@ -60,6 +60,7 @@ export interface FlowConfig {
   isSlackMessagesSyncFlow?: boolean; // If true, uses Slack Messages Sync UI
   isPurchaseTrackerFlow?: boolean; // If true, uses Purchase Tracker UI
   isSpotifyMusicFinderFlow?: boolean; // If true, uses Spotify Music Finder UI
+  isEmailReceiptSheetFlow?: boolean; // If true, uses Email Receipt to Spreadsheet UI
 }
 
 // Single data entry (e.g., one family member)
