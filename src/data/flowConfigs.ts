@@ -2,6 +2,19 @@ import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare,
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
+  "spotify-music-finder": {
+    id: "spotify-music-finder",
+    title: "Spotify Music Finder",
+    subtitle: "Memory-powered music discovery",
+    description: "Discover songs from your memories and add them to a Spotify playlist.",
+    gradient: "teal",
+    icon: Music,
+    entryName: "song",
+    entryNamePlural: "songs",
+    memoryTag: "SPOTIFY",
+    fields: [],
+    isSpotifyMusicFinderFlow: true,
+  },
   "instagram-analytics": {
     id: "instagram-analytics",
     title: "Instagram Analytics to Memory",
