@@ -32,6 +32,12 @@ function adminClient() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
+function createNeedsReconnectResponse(error: string) {
+  return new Response(JSON.stringify({ error, needsReconnect: true }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 async function getConnectionId(sb: any, userId: string, integrationId: string): Promise<string | null> {
   const { data } = await sb
     .from("user_integrations")
@@ -404,10 +410,7 @@ serve(async (req) => {
 
       const validation = await validateSheetsConnection(connectionId);
       if (!validation.valid) {
-        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return createNeedsReconnectResponse("Google Sheets connection expired or misconfigured. Please reconnect.");
       }
 
       const res = await fetch(
@@ -430,10 +433,7 @@ serve(async (req) => {
         console.error(`[ReceiptSheet] List spreadsheets error ${res.status}:`, raw);
         const isExpired = res.status === 410 || raw.toLowerCase().includes("expired");
         if (isExpired) {
-          return new Response(JSON.stringify({ error: "Google Sheets connection expired. Please reconnect.", needsReconnect: true }), {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return createNeedsReconnectResponse("Google Sheets connection expired. Please reconnect.");
         }
         return new Response(JSON.stringify({ spreadsheets: [] }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -472,10 +472,7 @@ serve(async (req) => {
 
       const validation = await validateSheetsConnection(connectionId);
       if (!validation.valid) {
-        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return createNeedsReconnectResponse("Google Sheets connection expired or misconfigured. Please reconnect.");
       }
 
       const res = await fetch(
@@ -498,10 +495,7 @@ serve(async (req) => {
         console.error(`[ReceiptSheet] Create spreadsheet error ${res.status}:`, raw);
         const isExpired = res.status === 410 || raw.toLowerCase().includes("expired");
         if (isExpired) {
-          return new Response(JSON.stringify({ error: "Google Sheets connection expired. Please reconnect.", needsReconnect: true }), {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return createNeedsReconnectResponse("Google Sheets connection expired. Please reconnect.");
         }
         return new Response(JSON.stringify({ error: "Failed to create spreadsheet" }), {
           status: 500,
@@ -573,10 +567,7 @@ serve(async (req) => {
 
       const validation = await validateSheetsConnection(sheetsConnectionId);
       if (!validation.valid) {
-        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return createNeedsReconnectResponse("Google Sheets connection expired or misconfigured. Please reconnect.");
       }
 
       // Fetch receipt emails from Gmail
