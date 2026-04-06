@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
@@ -22,8 +22,10 @@ export function EmailReceiptSheetFlow() {
   const [isCheckingGmail, setIsCheckingGmail] = useState(true);
   const [isCheckingSheets, setIsCheckingSheets] = useState(true);
 
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
   const { isConnected: gmailConnected, checkStatus: checkGmail } = useComposio("GMAIL");
-  const { isConnected: sheetsConnected, checkStatus: checkSheets, disconnect: disconnectSheets } = useComposio("GOOGLESHEETS");
+  const { isConnected: sheetsConnected, checkStatus: checkSheets, disconnect: disconnectSheets, connect: connectSheets, connecting: sheetsConnecting } = useComposio("GOOGLESHEETS");
 
   const {
     phase, setPhase, config, stats, spreadsheets,
@@ -75,6 +77,20 @@ export function EmailReceiptSheetFlow() {
     if (!success) setPhase("configure");
   };
 
+  // When sheetsConnecting transitions to false after a reconnect, check if connected
+  useEffect(() => {
+    if (isReconnecting && !sheetsConnecting) {
+      const verifyReconnect = async () => {
+        await checkSheets();
+        setIsReconnecting(false);
+        if (sheetsConnected) {
+          loadConfig();
+        }
+      };
+      verifyReconnect();
+    }
+  }, [isReconnecting, sheetsConnecting, checkSheets, sheetsConnected, loadConfig]);
+
   if (isCheckingGmail || isCheckingSheets || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -89,9 +105,15 @@ export function EmailReceiptSheetFlow() {
 
   if (phase === "needs-reconnect") {
     const handleReconnect = async () => {
-      await disconnectSheets();
-      sessionStorage.setItem("returnAfterGooglesheetsConnect", "/flow/email-receipt-sheet");
-      navigate("/integration/googlesheets");
+      setIsReconnecting(true);
+      // Best-effort disconnect to clear stale DB row
+      try {
+        await disconnectSheets();
+      } catch {
+        // Continue even if disconnect fails
+      }
+      // Directly start OAuth from this screen — no navigation to IntegrationDetail
+      await connectSheets(undefined, true);
     };
     return (
       <div className="min-h-screen bg-background pb-nav">
@@ -110,17 +132,21 @@ export function EmailReceiptSheetFlow() {
           </div>
         </div>
         <div className="px-5 pt-10 flex flex-col items-center text-center gap-4">
-          <RefreshCw className="w-12 h-12 text-muted-foreground" />
+          <RefreshCw className={cn("w-12 h-12 text-muted-foreground", (isReconnecting || sheetsConnecting) && "animate-spin")} />
           <h2 className="text-lg font-semibold text-foreground">Google Sheets connection expired</h2>
           <p className="text-sm text-muted-foreground max-w-xs">
-            Your Google Sheets token has expired. Please reconnect to continue tracking expenses.
+            {isReconnecting || sheetsConnecting
+              ? "Reconnecting… please complete the Google sign-in if prompted."
+              : "Your Google Sheets token has expired. Please reconnect to continue tracking expenses."}
           </p>
-          <button
-            onClick={handleReconnect}
-            className="mt-4 px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm"
-          >
-            Reconnect Google Sheets
-          </button>
+          {!isReconnecting && !sheetsConnecting && (
+            <button
+              onClick={handleReconnect}
+              className="mt-4 px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm"
+            >
+              Reconnect Google Sheets
+            </button>
+          )}
         </div>
       </div>
     );
