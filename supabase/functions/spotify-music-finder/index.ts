@@ -319,7 +319,8 @@ serve(async (req) => {
           { limit, offset }
         );
 
-        const data = result?.response_data || result?.data || result;
+        console.log("[SpotifyFinder] Playlist response shape:", JSON.stringify(result).slice(0, 300));
+        const data = result?.data?.response_data || result?.response_data || result?.data || result;
         const items = data?.items || [];
 
         for (const item of items) {
