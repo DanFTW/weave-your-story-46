@@ -155,6 +155,14 @@ function extractComposioData(result: any, label: string): any {
   return result;
 }
 
+function isSpotifyReconnectRequiredError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  return /developer\.spotify\.com\/dashboard|user may not be registered|403 Client Error: Forbidden for url: https:\/\/api\.spotify\.com\/v1\/me\/playlists/i.test(
+    error.message
+  );
+}
+
 // ── LIAM helpers ──
 
 async function fetchMemories(userId: string, sb: any): Promise<{ id: string; content: string }[]> {
@@ -359,35 +367,51 @@ serve(async (req) => {
       const limit = 50;
       let hasMore = true;
 
-      while (hasMore) {
-        const result = await composioExecute(
-          "SPOTIFY_GET_CURRENT_USER_S_PLAYLISTS",
-          integration.composio_connection_id,
-          { limit, offset }
-        );
+      try {
+        while (hasMore) {
+          const result = await composioExecute(
+            "SPOTIFY_GET_CURRENT_USER_S_PLAYLISTS",
+            integration.composio_connection_id,
+            { limit, offset }
+          );
 
-        const data = extractComposioData(result, "list-playlists");
-        const items = data?.items || [];
-        console.log(`[SpotifyFinder] list-playlists offset=${offset}: ${items.length} items found`);
+          const data = extractComposioData(result, "list-playlists");
+          const items = data?.items || [];
+          console.log(`[SpotifyFinder] list-playlists offset=${offset}: ${items.length} items found`);
 
-        if (items.length === 0 && offset === 0) {
-          // Log full response for debugging first page with no items
-          console.warn(`[SpotifyFinder] list-playlists: 0 items on first page. Full response(1000):`, JSON.stringify(result).slice(0, 1000));
+          if (items.length === 0 && offset === 0) {
+            console.warn(`[SpotifyFinder] list-playlists: 0 items on first page. Full response(1000):`, JSON.stringify(result).slice(0, 1000));
+          }
+
+          for (const item of items) {
+            allPlaylists.push({
+              id: item.id,
+              name: item.name,
+              imageUrl: item.images?.[0]?.url || null,
+              trackCount: item.tracks?.total ?? 0,
+            });
+          }
+
+          hasMore = items.length === limit;
+          offset += limit;
+
+          if (offset > 500) break;
+        }
+      } catch (error) {
+        if (isSpotifyReconnectRequiredError(error)) {
+          console.warn("[SpotifyFinder] list-playlists: Spotify reconnect required");
+          return new Response(
+            JSON.stringify({
+              playlists: [],
+              code: "spotify_reauth_required",
+              shouldReconnect: true,
+              error: "Your Spotify connection needs to be refreshed. Reconnect Spotify to load your playlists.",
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
-        for (const item of items) {
-          allPlaylists.push({
-            id: item.id,
-            name: item.name,
-            imageUrl: item.images?.[0]?.url || null,
-            trackCount: item.tracks?.total ?? 0,
-          });
-        }
-
-        hasMore = items.length === limit;
-        offset += limit;
-
-        if (offset > 500) break;
+        throw error;
       }
 
       console.log(`[SpotifyFinder] list-playlists: total=${allPlaylists.length}`);

@@ -104,6 +104,10 @@ function pickBestAuthConfig(
 
 // Fetch the best auth config for a toolkit (managed first, then custom fallbacks)
 async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
+async function getDefaultAuthConfigId(
+  toolkit: string,
+  options?: { managedOnly?: boolean }
+): Promise<string | null> {
   try {
     const composioName = COMPOSIO_TOOLKIT_NAMES[toolkit] || toolkit.toUpperCase();
 
@@ -115,6 +119,11 @@ async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
     if (managedConfigId) {
       console.log(`Found managed auth config for ${toolkit}: ${managedConfigId}`);
       return managedConfigId;
+    }
+
+    if (options?.managedOnly) {
+      console.log(`No managed auth config found for ${toolkit}`);
+      return null;
     }
 
     const toolkitConfigs = await fetchAuthConfigs(
@@ -204,6 +213,8 @@ const VALID_TOOLKITS = [
   "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps", "coinbase", "apibible", "spotify"
 ];
 
+const MANAGED_AUTH_ONLY_TOOLKITS = new Set(["spotify"]);
+
 const coinbaseCredentialsSchema = z.object({
   "API Key Name": z.string().trim().min(1, "API Key Name is required").max(255, "API Key Name is too long"),
   "api key private key": z.string().trim().min(1, "Private Key is required").max(10000, "Private Key is too long"),
@@ -270,12 +281,15 @@ serve(async (req) => {
     }
 
     // Check if we have a custom auth config, otherwise fetch default from Composio
-    let authConfigId: string | undefined = AUTH_CONFIGS[toolkitLower];
+    const requireManagedAuthConfig = MANAGED_AUTH_ONLY_TOOLKITS.has(toolkitLower);
+    let authConfigId: string | undefined = requireManagedAuthConfig ? undefined : AUTH_CONFIGS[toolkitLower];
     
     // If no custom auth config, fetch the default Composio-managed one
     if (!authConfigId) {
       console.log(`No custom auth config for ${toolkitLower}, fetching Composio default...`);
-      const defaultConfigId = await getDefaultAuthConfigId(toolkitLower);
+      const defaultConfigId = await getDefaultAuthConfigId(toolkitLower, {
+        managedOnly: requireManagedAuthConfig,
+      });
       
       if (!defaultConfigId) {
         return new Response(
@@ -445,7 +459,9 @@ serve(async (req) => {
       responseText.includes("Auth_Config_NotFound")
     ) {
       console.warn(`Auth config ${activeAuthConfigId} not found for ${toolkitLower}, attempting dynamic fallback...`);
-      const fallbackAuthConfigId = await getDefaultAuthConfigId(toolkitLower);
+        const fallbackAuthConfigId = await getDefaultAuthConfigId(toolkitLower, {
+          managedOnly: requireManagedAuthConfig,
+        });
 
       if (fallbackAuthConfigId && fallbackAuthConfigId !== activeAuthConfigId) {
         console.log(`Retrying OAuth link with fallback auth config: ${fallbackAuthConfigId}`);
