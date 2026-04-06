@@ -377,6 +377,13 @@ serve(async (req) => {
       const raw = await res.text();
       if (!res.ok) {
         console.error(`[ReceiptSheet] List spreadsheets error ${res.status}:`, raw);
+        const isExpired = res.status === 410 || raw.toLowerCase().includes("expired");
+        if (isExpired) {
+          return new Response(JSON.stringify({ error: "Google Sheets connection expired. Please reconnect.", needsReconnect: true }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         return new Response(JSON.stringify({ spreadsheets: [] }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
