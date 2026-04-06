@@ -113,6 +113,9 @@ import { SlackMessagesSyncFlow } from "@/components/flows/slack-messages-sync";
 // Purchase Tracker components
 import { PurchaseTrackerFlow } from "@/components/flows/purchase-tracker";
 
+// Spotify Music Finder components
+import { SpotifyMusicFinderFlow } from "@/components/flows/spotify-music-finder";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
