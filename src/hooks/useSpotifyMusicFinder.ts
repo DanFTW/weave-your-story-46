@@ -89,23 +89,35 @@ export function useSpotifyMusicFinder() {
 
   const loadPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
+    console.log("[SpotifyMusicFinder] loadPlaylists: starting");
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        console.warn("[SpotifyMusicFinder] loadPlaylists: no session");
+        return;
+      }
 
       const { data, error } = await supabase.functions.invoke("spotify-music-finder", {
         body: { action: "list-playlists" },
       });
+
+      console.log("[SpotifyMusicFinder] loadPlaylists response:", { error: error?.message, dataKeys: data ? Object.keys(data) : null, playlistCount: data?.playlists?.length, errorPayload: data?.error });
 
       if (error) {
         toast({ title: "Failed to load playlists", description: error.message, variant: "destructive" });
         return;
       }
 
+      if (data?.error) {
+        toast({ title: "Failed to load playlists", description: data.error, variant: "destructive" });
+        return;
+      }
+
       if (data?.playlists) {
         setPlaylists(data.playlists);
       }
-    } catch {
+    } catch (e) {
+      console.error("[SpotifyMusicFinder] loadPlaylists exception:", e);
       toast({ title: "Failed to load playlists", variant: "destructive" });
     } finally {
       setIsLoadingPlaylists(false);

@@ -85,6 +85,7 @@ async function composioExecute(
   connectionId: string,
   args: Record<string, any>
 ): Promise<any> {
+  console.log(`[SpotifyFinder] composioExecute: action=${action}`);
   const res = await fetch(
     `https://backend.composio.dev/api/v3/tools/execute/${action}`,
     {
@@ -100,15 +101,58 @@ async function composioExecute(
     }
   );
   const raw = await res.text();
+  console.log(`[SpotifyFinder] composioExecute ${action} status=${res.status} raw(500):`, raw.slice(0, 500));
+
   if (!res.ok) {
-    console.error(`[SpotifyFinder] Composio ${action} error ${res.status}:`, raw);
+    console.error(`[SpotifyFinder] Composio ${action} HTTP error ${res.status}:`, raw.slice(0, 300));
     throw new Error(`Composio ${action} failed: ${res.status}`);
   }
+
+  let parsed: any;
   try {
-    return JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch {
-    return raw;
+    throw new Error(`Composio ${action} returned non-JSON response`);
   }
+
+  // Detect provider-level failures inside 200 responses
+  const topKeys = Object.keys(parsed || {});
+  console.log(`[SpotifyFinder] composioExecute ${action} topKeys:`, topKeys);
+
+  if (parsed?.successful === false || parsed?.data?.successful === false) {
+    const errMsg = parsed?.error || parsed?.data?.error || parsed?.message || "Provider returned unsuccessful";
+    console.error(`[SpotifyFinder] Composio ${action} provider failure:`, errMsg);
+    throw new Error(`Composio ${action} provider failure: ${errMsg}`);
+  }
+  if (parsed?.error || parsed?.data?.error) {
+    const errMsg = parsed?.error || parsed?.data?.error;
+    console.error(`[SpotifyFinder] Composio ${action} error in payload:`, errMsg);
+    throw new Error(`Composio ${action} error: ${typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)}`);
+  }
+
+  return parsed;
+}
+
+// ── Robust data extractor for nested Composio v3 responses ──
+
+function extractComposioData(result: any, label: string): any {
+  const candidates = [
+    result?.data?.response_data?.data,
+    result?.data?.response_data,
+    result?.response_data?.data,
+    result?.response_data,
+    result?.data?.data,
+    result?.data,
+    result,
+  ];
+  for (let i = 0; i < candidates.length; i++) {
+    if (candidates[i] && typeof candidates[i] === "object") {
+      console.log(`[SpotifyFinder] ${label}: matched candidate index ${i}, keys:`, Object.keys(candidates[i]).slice(0, 10));
+      return candidates[i];
+    }
+  }
+  console.warn(`[SpotifyFinder] ${label}: no candidate matched, returning result as-is`);
+  return result;
 }
 
 // ── LIAM helpers ──
@@ -292,6 +336,7 @@ serve(async (req) => {
 
     // ── LIST-PLAYLISTS ──
     if (action === "list-playlists") {
+      console.log(`[SpotifyFinder] list-playlists: userId=${userId}`);
       const { data: integration } = await sb
         .from("user_integrations")
         .select("composio_connection_id")
@@ -299,6 +344,8 @@ serve(async (req) => {
         .eq("integration_id", "spotify")
         .eq("status", "connected")
         .maybeSingle();
+
+      console.log(`[SpotifyFinder] list-playlists: connectionId=${integration?.composio_connection_id || "NONE"}`);
 
       if (!integration?.composio_connection_id) {
         return new Response(JSON.stringify({ error: "Spotify not connected" }), {
@@ -319,9 +366,14 @@ serve(async (req) => {
           { limit, offset }
         );
 
-        console.log("[SpotifyFinder] Playlist response shape:", JSON.stringify(result).slice(0, 300));
-        const data = result?.data?.response_data || result?.response_data || result?.data || result;
+        const data = extractComposioData(result, "list-playlists");
         const items = data?.items || [];
+        console.log(`[SpotifyFinder] list-playlists offset=${offset}: ${items.length} items found`);
+
+        if (items.length === 0 && offset === 0) {
+          // Log full response for debugging first page with no items
+          console.warn(`[SpotifyFinder] list-playlists: 0 items on first page. Full response(1000):`, JSON.stringify(result).slice(0, 1000));
+        }
 
         for (const item of items) {
           allPlaylists.push({
@@ -335,11 +387,10 @@ serve(async (req) => {
         hasMore = items.length === limit;
         offset += limit;
 
-        // Safety limit
         if (offset > 500) break;
       }
 
-      console.log(`[SpotifyFinder] Found ${allPlaylists.length} playlists`);
+      console.log(`[SpotifyFinder] list-playlists: total=${allPlaylists.length}`);
 
       return new Response(JSON.stringify({ playlists: allPlaylists }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -520,9 +571,9 @@ async function processUserDiscovery(
         { q: searchQuery, type: "track", limit: 10 }
       );
 
-      console.log("[SpotifyFinder] Search response shape:", JSON.stringify(searchResult).slice(0, 300));
-      const data = searchResult?.data?.response_data || searchResult?.response_data || searchResult?.data || searchResult;
+      const data = extractComposioData(searchResult, "search");
       tracks = data?.tracks?.items || [];
+      console.log(`[SpotifyFinder] Search: ${tracks.length} tracks found`);
 
       if (tracks.length > 0) break;
 
@@ -548,8 +599,9 @@ async function processUserDiscovery(
       connectionId,
       { playlist_id: playlistId, limit: 100 }
     );
-    const playlistData = playlistResult?.response_data || playlistResult?.data || playlistResult;
+    const playlistData = extractComposioData(playlistResult, "playlist-items");
     const playlistItems = playlistData?.items || [];
+    console.log(`[SpotifyFinder] Existing playlist tracks: ${playlistItems.length}`);
     for (const item of playlistItems) {
       if (item?.track?.uri) {
         existingTrackUris.add(item.track.uri);
