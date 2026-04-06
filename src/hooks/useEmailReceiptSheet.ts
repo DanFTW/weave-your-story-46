@@ -95,6 +95,12 @@ export function useEmailReceiptSheet() {
       });
 
       if (error) {
+        const errorBody = error?.context?.body ? await error.context.json?.().catch(() => null) : null;
+        if (errorBody?.needsReconnect) {
+          toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+          setPhase("needs-reconnect");
+          return;
+        }
         toast({ title: "Failed to load spreadsheets", description: error.message, variant: "destructive" });
         return;
       }
