@@ -103,7 +103,6 @@ function pickBestAuthConfig(
 }
 
 // Fetch the best auth config for a toolkit (managed first, then custom fallbacks)
-async function getDefaultAuthConfigId(toolkit: string): Promise<string | null> {
 async function getDefaultAuthConfigId(
   toolkit: string,
   options?: { managedOnly?: boolean }
