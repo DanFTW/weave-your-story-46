@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useEmailReceiptSheet } from "@/hooks/useEmailReceiptSheet";
 import { AutomationConfig } from "./AutomationConfig";
