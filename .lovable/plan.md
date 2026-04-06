@@ -1,51 +1,40 @@
 
-Goal: stop the repeating 401 loop in `/flow/email-receipt-sheet` by ensuring Google Sheets reconnections use the intended auth config and actually replace the stale expired connection.
+Preliminary investigation summary
 
-Findings:
-- `supabase/functions/composio-connect/index.ts` already pins `googlesheets` to `ac_P0DYB0XdGLn3` in `AUTH_CONFIGS`.
-- `supabase/functions/email-receipt-sheet/index.ts` does not pass any auth config ID during `GOOGLESHEETS_*` tool execution. It only passes `connected_account_id`, which means the active auth config is whatever was used when that connected account was created.
-- So the edge function is not “using a different auth config” directly; the real risk is that the stored Google Sheets connected account was created under the wrong config, or the reconnect flow never replaced the stale one.
-- In `src/components/flows/email-receipt-sheet/EmailReceiptSheetFlow.tsx`, the `"needs-reconnect"` button only navigates to `/integration/googlesheets`. Unlike the existing Instagram/Slack reconnect patterns, it does not disconnect first. That can leave the expired `user_integrations.composio_connection_id` in place, which explains why the 401 can keep repeating.
-- `composio-connect` also has an `Auth_Config_NotFound` fallback that can retry with a dynamically discovered auth config. For Google Sheets, that is risky because it can silently create a new connection under a different config.
+What I found
+- The Google Sheets auth config is correct in both places:
+  - `supabase/functions/composio-connect/index.ts` pins `googlesheets` to `ac_P0DYB0XdGLn3`
+  - `supabase/functions/email-receipt-sheet/index.ts` validates against `ac_P0DYB0XdGLn3`
+- The live edge-function log confirms the stored Sheets connection is using that same config, but it is expired:
+  - `Connection ca_E2w8GO_fjo9Q: auth_config=ac_P0DYB0XdGLn3, status=EXPIRED`
+- The `user_integrations` row is still pointing to that same old connection ID, with an old March timestamp and `status=connected`. No newer `ca_...` ID has replaced it.
+- In the captured session replay, the reconnect button was not clicked before the report, so there is no disconnect evidence in that snapshot. But the stale DB row shows that no successful reconnect has been persisted yet.
+- There is also a deployment mismatch: the checked-in `email-receipt-sheet` function now returns a JSON reconnect response without setting `401`, but the live network trace is still receiving `401`. So the running edge function does not fully match the current file.
 
-Implementation plan:
-1. Tighten Google Sheets auth config handling in `supabase/functions/composio-connect/index.ts`
-   - Keep `AUTH_CONFIGS.googlesheets = "ac_P0DYB0XdGLn3"`.
-   - Make Google Sheets strict: if the configured auth config is missing or rejected with `Auth_Config_NotFound`, return a clear error instead of silently falling back to another auth config.
-   - This guarantees new Google Sheets connections for this feature cannot drift to a different config.
+Root cause
+- This is not an auth-config mismatch.
+- The real issue is that the stale expired Google Sheets connection is never getting replaced in `user_integrations`, so the flow keeps reusing `ca_E2w8GO_fjo9Q`.
+- The reconnect workflow is brittle:
+  1. `EmailReceiptSheetFlow` calls `disconnectSheets()` and then navigates to `/integration/googlesheets`
+  2. `disconnect()` swallows failures, so navigation still happens even if the stale row was not removed
+  3. `IntegrationDetail` auto-redirects back to the flow whenever `returnAfterGooglesheetsConnect` exists and the integration still looks `connected`
+  4. Since the stale row still says `connected`, the user can be sent right back without ever starting a fresh OAuth flow
+- That explains why reconnecting appears to do nothing and why the same expired connection keeps triggering the error.
 
-2. Validate the stored Google Sheets connected account inside `supabase/functions/email-receipt-sheet/index.ts`
-   - Add a small helper that fetches `GET /api/v3/connected_accounts/{connectionId}` from Composio before Google Sheets actions.
-   - Read the connected account metadata defensively and verify it belongs to Google Sheets and is associated with `ac_P0DYB0XdGLn3`.
-   - Run this validation before `list-spreadsheets`, `create-spreadsheet`, and `manual-sync`.
-   - If the stored account uses a different/missing auth config, return:
-     - `401`
-     - `{ needsReconnect: true, error: "Google Sheets connection is using the wrong authentication configuration. Please reconnect." }`
-   - This is the correct place to enforce auth-config correctness, since tool execution itself only accepts `connected_account_id`.
+Initial solution I’d recommend
+1. First make sure the live `email-receipt-sheet` deployment matches the current repo behavior, so testing is not distorted by an older `401` response.
+2. Make the reconnect path atomic from the thread itself:
+   - start Google Sheets OAuth directly from `/flow/email-receipt-sheet`
+   - use a forced reauth path
+   - do not rely on routing through `IntegrationDetail` as the main recovery path
+3. Keep disconnect as best-effort, but do not let a silent disconnect failure send the user into a stale auto-return loop.
+4. Treat reconnect as successful only after a new `composio_connection_id` or a fresh connection transition is present in `user_integrations`.
 
-3. Fix the reconnect flow in `src/components/flows/email-receipt-sheet/EmailReceiptSheetFlow.tsx`
-   - Destructure `disconnect` from `useComposio("GOOGLESHEETS")`.
-   - Update the `"Reconnect Google Sheets"` button to:
-     1. disconnect the current Google Sheets integration,
-     2. store `returnAfterGooglesheetsConnect`,
-     3. navigate to `/integration/googlesheets`.
-   - This matches the project’s existing reconnect pattern and ensures the next OAuth flow creates and saves a fresh connection ID.
-
-Why this fixes the issue:
-- It prevents `composio-connect` from silently creating Google Sheets connections under the wrong auth config.
-- It makes `email-receipt-sheet` explicitly reject mismatched/stale Google Sheets connected accounts instead of repeatedly trying them.
-- It makes the reconnect CTA actually perform a real reconnect instead of just opening the integration page while the expired connection remains active.
-
-Scope:
-- Only these files:
-  - `supabase/functions/composio-connect/index.ts`
-  - `supabase/functions/email-receipt-sheet/index.ts`
+Technical details
+- Files most directly involved:
   - `src/components/flows/email-receipt-sheet/EmailReceiptSheetFlow.tsx`
-- No database changes.
-- No unrelated integration/UI changes.
-
-Technical note:
-- The key nuance is that `email-receipt-sheet` cannot force an auth config during `GOOGLESHEETS_*` execution. The auth config is implicit in the stored Composio connected account. So the best-practice fix is:
-  - create Google Sheets connections with the pinned config,
-  - validate the stored connected account before use,
-  - and ensure reconnect actually replaces the old account.
+  - `src/hooks/useComposio.ts`
+  - `src/pages/IntegrationDetail.tsx`
+  - `supabase/functions/email-receipt-sheet/index.ts`
+- The existing auth-config checks in the edge function are good and should stay.
+- The main thing to fix is connection replacement and reconnect control flow, not the auth config ID itself.
