@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useSpotifyMusicFinder } from "@/hooks/useSpotifyMusicFinder";
 import { SpotifyMusicFinderConfig } from "./SpotifyMusicFinderConfig";
@@ -19,8 +19,7 @@ const gradientClasses: Record<string, string> = {
 export function SpotifyMusicFinderFlow() {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [isRepairingConnection, setIsRepairingConnection] = useState(false);
-  const hasTriggeredRepairRef = useRef(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const { isConnected, checkStatus, connect, disconnect, connecting } = useComposio("SPOTIFY");
 
@@ -42,45 +41,22 @@ export function SpotifyMusicFinderFlow() {
   useEffect(() => {
     if (!isCheckingAuth && isConnected) {
       loadConfig();
-    } else if (!isCheckingAuth && !isConnected && !isRepairingConnection && !connecting) {
+    } else if (!isCheckingAuth && !isConnected && !connecting) {
       sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
       navigate("/integration/spotify");
     }
-  }, [isCheckingAuth, isConnected, loadConfig, navigate, isRepairingConnection, connecting]);
-
-  useEffect(() => {
-    if (playlistLoadErrorCode !== "spotify_reauth_required" || hasTriggeredRepairRef.current) {
-      return;
-    }
-
-    hasTriggeredRepairRef.current = true;
-    let cancelled = false;
-
-    const repairSpotifyConnection = async () => {
-      setIsRepairingConnection(true);
-      sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
-
-      await disconnect();
-      if (cancelled) return;
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      if (cancelled) return;
-
-      await connect("/flow/spotify-music-finder", true);
-    };
-
-    repairSpotifyConnection().finally(() => {
-      if (!cancelled) {
-        setIsRepairingConnection(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [playlistLoadErrorCode, disconnect, connect]);
+  }, [isCheckingAuth, isConnected, loadConfig, navigate, connecting]);
 
   const handleBack = () => navigate("/threads");
+
+  const handleReconnect = useCallback(async () => {
+    setIsReconnecting(true);
+    sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
+    await disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await connect("/flow/spotify-music-finder", true);
+    setIsReconnecting(false);
+  }, [disconnect, connect]);
 
   const handleActivate = async (playlistId: string, playlistName: string, frequency: "daily" | "weekly") => {
     setPhase("activating");
@@ -88,7 +64,7 @@ export function SpotifyMusicFinderFlow() {
     if (!success) setPhase("configure");
   };
 
-  if (isCheckingAuth || isLoading || isRepairingConnection || connecting) {
+  if (isCheckingAuth || isLoading || connecting) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -100,7 +76,10 @@ export function SpotifyMusicFinderFlow() {
     return <ActivatingScreen />;
   }
 
+  const needsReconnect = playlistLoadErrorCode === "spotify_reauth_required";
+
   const getSubtitle = () => {
+    if (needsReconnect) return "Connection issue";
     switch (phase) {
       case "configure": return "Set up discovery";
       case "active": return "Discovery active";
@@ -126,23 +105,51 @@ export function SpotifyMusicFinderFlow() {
       </div>
 
       <div className="px-5 pt-6">
-        {phase === "configure" && config && (
-          <SpotifyMusicFinderConfig
-            config={config}
-            playlists={playlists}
-            isLoadingPlaylists={isLoadingPlaylists}
-            onLoadPlaylists={loadPlaylists}
-            onActivate={handleActivate}
-            isActivating={isActivating}
-          />
-        )}
-        {phase === "active" && (
-          <SpotifyMusicFinderActive
-            stats={stats}
-            onPause={deactivate}
-            onManualPoll={manualPoll}
-            isSyncing={isSyncing}
-          />
+        {needsReconnect ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 flex flex-col items-center gap-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 text-destructive" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-1">Connection needs refreshing</h2>
+              <p className="text-sm text-muted-foreground">
+                Your Spotify connection has expired or is missing required permissions. Please reconnect to continue.
+              </p>
+            </div>
+            <button
+              onClick={handleReconnect}
+              disabled={isReconnecting}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50"
+            >
+              {isReconnecting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Reconnect Spotify
+            </button>
+          </div>
+        ) : (
+          <>
+            {phase === "configure" && config && (
+              <SpotifyMusicFinderConfig
+                config={config}
+                playlists={playlists}
+                isLoadingPlaylists={isLoadingPlaylists}
+                onLoadPlaylists={loadPlaylists}
+                onActivate={handleActivate}
+                isActivating={isActivating}
+              />
+            )}
+            {phase === "active" && (
+              <SpotifyMusicFinderActive
+                stats={stats}
+                onPause={deactivate}
+                onManualPoll={manualPoll}
+                isSyncing={isSyncing}
+              />
+            )}
+          </>
         )}
       </div>
     </div>
