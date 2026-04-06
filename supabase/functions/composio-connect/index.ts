@@ -212,7 +212,7 @@ const VALID_TOOLKITS = [
   "linkedin", "discord", "discordbot", "googledocs", "googlesheets", "trello", "github", "linear", "onedrive", "todoist", "zoom", "docusign", "canva", "eventbrite", "googletasks", "monday", "supabase", "figma", "reddit", "stripe", "hubspot", "bitbucket", "clickup", "confluence", "mailchimp", "attio", "notion", "strava", "perplexity", "ticketmaster", "facebook", "box", "googlesuper", "fireflies", "googledrive", "slack", "googlecalendar", "googlemaps", "coinbase", "apibible", "spotify"
 ];
 
-const MANAGED_AUTH_ONLY_TOOLKITS = new Set(["spotify"]);
+const MANAGED_AUTH_ONLY_TOOLKITS = new Set<string>([]);
 
 const coinbaseCredentialsSchema = z.object({
   "API Key Name": z.string().trim().min(1, "API Key Name is required").max(255, "API Key Name is too long"),
