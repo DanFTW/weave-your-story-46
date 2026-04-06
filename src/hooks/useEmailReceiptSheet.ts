@@ -238,6 +238,12 @@ export function useEmailReceiptSheet() {
         return;
       }
 
+      if (data?.needsReconnect) {
+        toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+        setPhase("needs-reconnect");
+        return;
+      }
+
       const result = data as { processed?: number; posted?: number };
       toast({
         title: "Sync complete",

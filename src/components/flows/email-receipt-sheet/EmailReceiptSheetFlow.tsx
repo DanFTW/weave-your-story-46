@@ -86,6 +86,44 @@ export function EmailReceiptSheetFlow() {
     return <ActivatingScreen />;
   }
 
+  if (phase === "needs-reconnect") {
+    const handleReconnect = () => {
+      sessionStorage.setItem("returnAfterGooglesheetsConnect", "/flow/email-receipt-sheet");
+      navigate("/integration/googlesheets");
+    };
+    return (
+      <div className="min-h-screen bg-background pb-nav">
+        <div className={cn("relative px-5 pt-status-bar pb-6", gradientClasses.teal)}>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBack}
+              className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0"
+            >
+              <ChevronLeft className="w-6 h-6 text-white" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-white truncate">Email Receipt to Spreadsheet</h1>
+              <p className="text-white/70 text-sm truncate">Reconnection needed</p>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pt-10 flex flex-col items-center text-center gap-4">
+          <RefreshCw className="w-12 h-12 text-muted-foreground" />
+          <h2 className="text-lg font-semibold text-foreground">Google Sheets connection expired</h2>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Your Google Sheets token has expired. Please reconnect to continue tracking expenses.
+          </p>
+          <button
+            onClick={handleReconnect}
+            className="mt-4 px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm"
+          >
+            Reconnect Google Sheets
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const getSubtitle = () => {
     switch (phase) {
       case "configure": return "Set up tracking";

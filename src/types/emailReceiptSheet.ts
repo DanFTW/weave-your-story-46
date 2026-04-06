@@ -2,7 +2,8 @@ export type EmailReceiptSheetPhase =
   | "auth-check"
   | "configure"
   | "activating"
-  | "active";
+  | "active"
+  | "needs-reconnect";
 
 export interface EmailReceiptSheetConfig {
   id: string;
