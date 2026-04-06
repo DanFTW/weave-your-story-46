@@ -214,6 +214,9 @@ const VALID_TOOLKITS = [
 
 const MANAGED_AUTH_ONLY_TOOLKITS = new Set<string>([]);
 
+// Toolkits that must NOT fall back to a different auth config if their pinned one is missing/rejected
+const STRICT_AUTH_CONFIG_TOOLKITS = new Set<string>(["googlesheets"]);
+
 const coinbaseCredentialsSchema = z.object({
   "API Key Name": z.string().trim().min(1, "API Key Name is required").max(255, "API Key Name is too long"),
   "api key private key": z.string().trim().min(1, "Private Key is required").max(10000, "Private Key is too long"),
@@ -370,8 +373,15 @@ serve(async (req) => {
 
       let { response, text: responseText } = await callApiKeyConnect(authConfigId!);
 
-      // Fallback if auth config not found
+      // Fallback if auth config not found (skip for strict toolkits)
       if (!response.ok && response.status === 400 && responseText.includes("Auth_Config_NotFound")) {
+        if (STRICT_AUTH_CONFIG_TOOLKITS.has(toolkitLower)) {
+          console.error(`[${toolkitLower}] Auth config ${authConfigId} not found and fallback is disabled (strict toolkit)`);
+          return new Response(
+            JSON.stringify({ error: `Auth configuration for ${toolkit} is not available. Please contact support.` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         console.warn(`[${toolkitLower}] Auth config ${authConfigId} not found, attempting dynamic fallback...`);
         const fallbackId = await getDefaultAuthConfigId(toolkitLower);
         if (fallbackId && fallbackId !== authConfigId) {
@@ -477,6 +487,13 @@ serve(async (req) => {
       composioResponse.status === 400 &&
       responseText.includes("Auth_Config_NotFound")
     ) {
+      if (STRICT_AUTH_CONFIG_TOOLKITS.has(toolkitLower)) {
+        console.error(`Auth config ${activeAuthConfigId} not found for ${toolkitLower} and fallback is disabled (strict toolkit)`);
+        return new Response(
+          JSON.stringify({ error: `Auth configuration for ${toolkit} is not available. Please contact support.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       console.warn(`Auth config ${activeAuthConfigId} not found for ${toolkitLower}, attempting dynamic fallback...`);
         const fallbackAuthConfigId = await getDefaultAuthConfigId(toolkitLower, {
           managedOnly: requireManagedAuthConfig,

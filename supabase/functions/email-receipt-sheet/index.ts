@@ -12,6 +12,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
+const EXPECTED_SHEETS_AUTH_CONFIG = "ac_P0DYB0XdGLn3";
+
 // ── Helpers ──
 
 function getUserId(req: Request): string | null {
@@ -39,6 +41,47 @@ async function getConnectionId(sb: any, userId: string, integrationId: string): 
     .eq("status", "connected")
     .maybeSingle();
   return data?.composio_connection_id ?? null;
+}
+
+async function validateSheetsConnection(connectionId: string): Promise<{ valid: boolean; reason?: string }> {
+  try {
+    const res = await fetch(`https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`, {
+      method: "GET",
+      headers: {
+        "x-api-key": COMPOSIO_API_KEY,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[ReceiptSheet] Validate connection ${connectionId} failed ${res.status}:`, text);
+      if (res.status === 410 || text.toLowerCase().includes("expired")) {
+        return { valid: false, reason: "expired" };
+      }
+      return { valid: false, reason: "fetch_failed" };
+    }
+
+    const data = await res.json();
+    const authConfigId = data?.auth_config?.id ?? data?.auth_config_id ?? data?.data?.auth_config?.id ?? data?.data?.auth_config_id;
+    const status = (data?.status ?? data?.data?.status ?? "").toUpperCase();
+
+    console.log(`[ReceiptSheet] Connection ${connectionId}: auth_config=${authConfigId}, status=${status}`);
+
+    if (status === "EXPIRED" || status === "REVOKED" || status === "FAILED") {
+      return { valid: false, reason: "expired" };
+    }
+
+    if (authConfigId && authConfigId !== EXPECTED_SHEETS_AUTH_CONFIG) {
+      console.warn(`[ReceiptSheet] Connection ${connectionId} uses auth config ${authConfigId}, expected ${EXPECTED_SHEETS_AUTH_CONFIG}`);
+      return { valid: false, reason: "wrong_config" };
+    }
+
+    return { valid: true };
+  } catch (e) {
+    console.error("[ReceiptSheet] Validate connection error:", e);
+    return { valid: false, reason: "fetch_failed" };
+  }
 }
 
 // ── AI Receipt Parsing ──
@@ -359,6 +402,14 @@ serve(async (req) => {
         });
       }
 
+      const validation = await validateSheetsConnection(connectionId);
+      if (!validation.valid) {
+        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const res = await fetch(
         "https://backend.composio.dev/api/v3/tools/execute/GOOGLESHEETS_SEARCH_SPREADSHEETS",
         {
@@ -415,6 +466,14 @@ serve(async (req) => {
       if (!connectionId) {
         return new Response(JSON.stringify({ error: "Google Sheets not connected" }), {
           status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const validation = await validateSheetsConnection(connectionId);
+      if (!validation.valid) {
+        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
+          status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -508,6 +567,14 @@ serve(async (req) => {
       if (!sheetsConnectionId) {
         return new Response(JSON.stringify({ error: "Google Sheets not connected" }), {
           status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const validation = await validateSheetsConnection(sheetsConnectionId);
+      if (!validation.valid) {
+        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
+          status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

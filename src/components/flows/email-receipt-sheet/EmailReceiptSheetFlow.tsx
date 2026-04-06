@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
+
 import { useEmailReceiptSheet } from "@/hooks/useEmailReceiptSheet";
 import { AutomationConfig } from "./AutomationConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
@@ -22,7 +23,7 @@ export function EmailReceiptSheetFlow() {
   const [isCheckingSheets, setIsCheckingSheets] = useState(true);
 
   const { isConnected: gmailConnected, checkStatus: checkGmail } = useComposio("GMAIL");
-  const { isConnected: sheetsConnected, checkStatus: checkSheets } = useComposio("GOOGLESHEETS");
+  const { isConnected: sheetsConnected, checkStatus: checkSheets, disconnect: disconnectSheets } = useComposio("GOOGLESHEETS");
 
   const {
     phase, setPhase, config, stats, spreadsheets,
@@ -87,7 +88,8 @@ export function EmailReceiptSheetFlow() {
   }
 
   if (phase === "needs-reconnect") {
-    const handleReconnect = () => {
+    const handleReconnect = async () => {
+      await disconnectSheets();
       sessionStorage.setItem("returnAfterGooglesheetsConnect", "/flow/email-receipt-sheet");
       navigate("/integration/googlesheets");
     };
