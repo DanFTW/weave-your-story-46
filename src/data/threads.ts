@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare, Music } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 // Threads moved to bottom: Twitter-related, LinkedIn-related, Coinbase-related, Google Photos
@@ -52,6 +52,19 @@ const mainThreads: Thread[] = [
     type: "automation",
     category: "personal",
     integrations: ["googlemaps"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
+  {
+    id: "spotify-music-finder",
+    title: "Spotify Music Finder",
+    description: "Discover songs from your memories and add them to a Spotify playlist automatically",
+    icon: Music,
+    gradient: "teal",
+    status: "active",
+    type: "automation",
+    category: "personal",
+    integrations: ["spotify"],
     triggerType: "automatic",
     flowMode: "thread",
   },

@@ -31,6 +31,7 @@ const integrationColors: Record<string, CardColorConfig> = {
   discord:      { cardBg: "#99AAF5", orbBg: "#B0C0FF", orbGradientFrom: "#C4D0FF", orbGradientTo: "#E8ECFF" },
   googledrive:  { cardBg: "#437CFB", orbBg: "#2EAFFF", orbGradientFrom: "#3CC8FF", orbGradientTo: "#D3F3FF" },
   todoist:      { cardBg: "#E87A3D", orbBg: "#F5A040", orbGradientFrom: "#FFBE6B", orbGradientTo: "#FFE0B2" },
+  spotify:      { cardBg: "#1DB954", orbBg: "#1ED760", orbGradientFrom: "#4AE87A", orbGradientTo: "#C8F7D8" },
 };
 
 const gradientFallbackColors: Record<ThreadGradient, CardColorConfig> = {
