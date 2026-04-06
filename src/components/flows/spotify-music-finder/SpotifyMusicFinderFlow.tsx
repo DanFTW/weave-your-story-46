@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
@@ -19,12 +19,14 @@ const gradientClasses: Record<string, string> = {
 export function SpotifyMusicFinderFlow() {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isRepairingConnection, setIsRepairingConnection] = useState(false);
+  const hasTriggeredRepairRef = useRef(false);
 
-  const { isConnected, checkStatus } = useComposio("SPOTIFY");
+  const { isConnected, checkStatus, connect, disconnect, connecting } = useComposio("SPOTIFY");
 
   const {
     phase, setPhase, config, stats, playlists,
-    isLoading, isActivating, isLoadingPlaylists, isSyncing,
+    isLoading, isActivating, isLoadingPlaylists, isSyncing, playlistLoadErrorCode,
     loadConfig, loadPlaylists, activate, deactivate, manualPoll,
   } = useSpotifyMusicFinder();
 
@@ -40,11 +42,43 @@ export function SpotifyMusicFinderFlow() {
   useEffect(() => {
     if (!isCheckingAuth && isConnected) {
       loadConfig();
-    } else if (!isCheckingAuth && !isConnected) {
+    } else if (!isCheckingAuth && !isConnected && !isRepairingConnection && !connecting) {
       sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
       navigate("/integration/spotify");
     }
-  }, [isCheckingAuth, isConnected, loadConfig, navigate]);
+  }, [isCheckingAuth, isConnected, loadConfig, navigate, isRepairingConnection, connecting]);
+
+  useEffect(() => {
+    if (playlistLoadErrorCode !== "spotify_reauth_required" || hasTriggeredRepairRef.current) {
+      return;
+    }
+
+    hasTriggeredRepairRef.current = true;
+    let cancelled = false;
+
+    const repairSpotifyConnection = async () => {
+      setIsRepairingConnection(true);
+      sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
+
+      await disconnect();
+      if (cancelled) return;
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (cancelled) return;
+
+      await connect("/flow/spotify-music-finder", true);
+    };
+
+    repairSpotifyConnection().finally(() => {
+      if (!cancelled) {
+        setIsRepairingConnection(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [playlistLoadErrorCode, disconnect, connect]);
 
   const handleBack = () => navigate("/threads");
 
@@ -54,7 +88,7 @@ export function SpotifyMusicFinderFlow() {
     if (!success) setPhase("configure");
   };
 
-  if (isCheckingAuth || isLoading) {
+  if (isCheckingAuth || isLoading || isRepairingConnection || connecting) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
