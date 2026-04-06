@@ -571,9 +571,9 @@ async function processUserDiscovery(
         { q: searchQuery, type: "track", limit: 10 }
       );
 
-      console.log("[SpotifyFinder] Search response shape:", JSON.stringify(searchResult).slice(0, 300));
-      const data = searchResult?.data?.response_data || searchResult?.response_data || searchResult?.data || searchResult;
+      const data = extractComposioData(searchResult, "search");
       tracks = data?.tracks?.items || [];
+      console.log(`[SpotifyFinder] Search: ${tracks.length} tracks found`);
 
       if (tracks.length > 0) break;
 
