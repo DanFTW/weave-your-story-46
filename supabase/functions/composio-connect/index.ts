@@ -487,6 +487,13 @@ serve(async (req) => {
       composioResponse.status === 400 &&
       responseText.includes("Auth_Config_NotFound")
     ) {
+      if (STRICT_AUTH_CONFIG_TOOLKITS.has(toolkitLower)) {
+        console.error(`Auth config ${activeAuthConfigId} not found for ${toolkitLower} and fallback is disabled (strict toolkit)`);
+        return new Response(
+          JSON.stringify({ error: `Auth configuration for ${toolkit} is not available. Please contact support.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       console.warn(`Auth config ${activeAuthConfigId} not found for ${toolkitLower}, attempting dynamic fallback...`);
         const fallbackAuthConfigId = await getDefaultAuthConfigId(toolkitLower, {
           managedOnly: requireManagedAuthConfig,

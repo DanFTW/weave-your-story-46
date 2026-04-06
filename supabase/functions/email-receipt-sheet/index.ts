@@ -571,6 +571,14 @@ serve(async (req) => {
         });
       }
 
+      const validation = await validateSheetsConnection(sheetsConnectionId);
+      if (!validation.valid) {
+        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       // Fetch receipt emails from Gmail
       const emails = await fetchReceiptEmails(gmailConnectionId);
       console.log(`[ReceiptSheet] Fetched ${emails.length} candidate emails`);

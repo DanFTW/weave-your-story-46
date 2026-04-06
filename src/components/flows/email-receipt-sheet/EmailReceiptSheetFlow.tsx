@@ -88,7 +88,8 @@ export function EmailReceiptSheetFlow() {
   }
 
   if (phase === "needs-reconnect") {
-    const handleReconnect = () => {
+    const handleReconnect = async () => {
+      await disconnectSheets();
       sessionStorage.setItem("returnAfterGooglesheetsConnect", "/flow/email-receipt-sheet");
       navigate("/integration/googlesheets");
     };
