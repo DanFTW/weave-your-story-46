@@ -599,8 +599,9 @@ async function processUserDiscovery(
       connectionId,
       { playlist_id: playlistId, limit: 100 }
     );
-    const playlistData = playlistResult?.response_data || playlistResult?.data || playlistResult;
+    const playlistData = extractComposioData(playlistResult, "playlist-items");
     const playlistItems = playlistData?.items || [];
+    console.log(`[SpotifyFinder] Existing playlist tracks: ${playlistItems.length}`);
     for (const item of playlistItems) {
       if (item?.track?.uri) {
         existingTrackUris.add(item.track.uri);
