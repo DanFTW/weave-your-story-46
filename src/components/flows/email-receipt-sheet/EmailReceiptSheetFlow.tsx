@@ -77,6 +77,20 @@ export function EmailReceiptSheetFlow() {
     if (!success) setPhase("configure");
   };
 
+  // When sheetsConnecting transitions to false after a reconnect, check if connected
+  useEffect(() => {
+    if (isReconnecting && !sheetsConnecting) {
+      const verifyReconnect = async () => {
+        await checkSheets();
+        setIsReconnecting(false);
+        if (sheetsConnected) {
+          loadConfig();
+        }
+      };
+      verifyReconnect();
+    }
+  }, [isReconnecting, sheetsConnecting, checkSheets, sheetsConnected, loadConfig]);
+
   if (isCheckingGmail || isCheckingSheets || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -88,22 +102,6 @@ export function EmailReceiptSheetFlow() {
   if (phase === "activating") {
     return <ActivatingScreen />;
   }
-
-  // When sheetsConnecting transitions to false after a reconnect, check if connected
-  useEffect(() => {
-    if (isReconnecting && !sheetsConnecting) {
-      // Polling finished — check if we're now connected
-      const verifyReconnect = async () => {
-        await checkSheets();
-        setIsReconnecting(false);
-        // If connected, reload config to resume the flow
-        if (sheetsConnected) {
-          loadConfig();
-        }
-      };
-      verifyReconnect();
-    }
-  }, [isReconnecting, sheetsConnecting, checkSheets, sheetsConnected, loadConfig]);
 
   if (phase === "needs-reconnect") {
     const handleReconnect = async () => {
