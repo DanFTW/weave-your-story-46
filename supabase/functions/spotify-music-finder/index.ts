@@ -520,7 +520,8 @@ async function processUserDiscovery(
         { q: searchQuery, type: "track", limit: 10 }
       );
 
-      const data = searchResult?.response_data || searchResult?.data || searchResult;
+      console.log("[SpotifyFinder] Search response shape:", JSON.stringify(searchResult).slice(0, 300));
+      const data = searchResult?.data?.response_data || searchResult?.response_data || searchResult?.data || searchResult;
       tracks = data?.tracks?.items || [];
 
       if (tracks.length > 0) break;
