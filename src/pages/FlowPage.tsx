@@ -116,6 +116,9 @@ import { PurchaseTrackerFlow } from "@/components/flows/purchase-tracker";
 // Spotify Music Finder components
 import { SpotifyMusicFinderFlow } from "@/components/flows/spotify-music-finder";
 
+// Email Receipt Sheet components
+import { EmailReceiptSheetFlow } from "@/components/flows/email-receipt-sheet";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
