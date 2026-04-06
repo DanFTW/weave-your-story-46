@@ -319,7 +319,8 @@ serve(async (req) => {
           { limit, offset }
         );
 
-        const data = result?.response_data || result?.data || result;
+        console.log("[SpotifyFinder] Playlist response shape:", JSON.stringify(result).slice(0, 300));
+        const data = result?.data?.response_data || result?.response_data || result?.data || result;
         const items = data?.items || [];
 
         for (const item of items) {
@@ -519,7 +520,8 @@ async function processUserDiscovery(
         { q: searchQuery, type: "track", limit: 10 }
       );
 
-      const data = searchResult?.response_data || searchResult?.data || searchResult;
+      console.log("[SpotifyFinder] Search response shape:", JSON.stringify(searchResult).slice(0, 300));
+      const data = searchResult?.data?.response_data || searchResult?.response_data || searchResult?.data || searchResult;
       tracks = data?.tracks?.items || [];
 
       if (tracks.length > 0) break;
