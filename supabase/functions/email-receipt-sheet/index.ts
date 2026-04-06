@@ -302,6 +302,10 @@ async function saveMemoryToLiam(
 // ── Fetch emails via Composio ──
 
 async function fetchReceiptEmails(connectionId: string): Promise<any[]> {
+  const query = "(receipt OR order OR purchase OR invoice OR payment OR subscription OR billing OR charge OR confirmation) newer_than:7d";
+  console.log(`[ReceiptSheet] Gmail connection: ${connectionId}`);
+  console.log(`[ReceiptSheet] Gmail query: ${query}`);
+
   try {
     const res = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/GMAIL_FETCH_EMAILS",
@@ -314,8 +318,8 @@ async function fetchReceiptEmails(connectionId: string): Promise<any[]> {
         body: JSON.stringify({
           connected_account_id: connectionId,
           arguments: {
-            query: "subject:(receipt OR order confirmation OR purchase OR invoice OR payment) newer_than:7d",
-            max_results: 20,
+            query,
+            max_results: 50,
           },
         }),
       },
@@ -328,14 +332,21 @@ async function fetchReceiptEmails(connectionId: string): Promise<any[]> {
     }
 
     const data = await res.json();
-    console.log("[ReceiptSheet] Raw Gmail response keys:", JSON.stringify(data).slice(0, 1500));
+    const rawStr = JSON.stringify(data);
+    console.log(`[ReceiptSheet] Raw response (${rawStr.length} chars):`, rawStr.slice(0, 2000));
 
     // Navigate nested Composio v3 response
     const innerData = data?.data?.response_data ?? data?.response_data ?? data?.data ?? data;
     const messages = innerData?.messages ?? innerData?.emails ?? innerData?.data?.messages ?? 
                      innerData?.data?.emails ?? (Array.isArray(innerData) ? innerData : []);
 
-    return Array.isArray(messages) ? messages : [];
+    const result = Array.isArray(messages) ? messages : [];
+    console.log(`[ReceiptSheet] Messages found: ${result.length}`);
+    if (result.length > 0) {
+      console.log(`[ReceiptSheet] First message sample:`, JSON.stringify(result[0]).slice(0, 500));
+    }
+
+    return result;
   } catch (e) {
     console.error("[ReceiptSheet] Fetch emails error:", e);
     return [];
