@@ -214,6 +214,9 @@ const VALID_TOOLKITS = [
 
 const MANAGED_AUTH_ONLY_TOOLKITS = new Set<string>([]);
 
+// Toolkits that must NOT fall back to a different auth config if their pinned one is missing/rejected
+const STRICT_AUTH_CONFIG_TOOLKITS = new Set<string>(["googlesheets"]);
+
 const coinbaseCredentialsSchema = z.object({
   "API Key Name": z.string().trim().min(1, "API Key Name is required").max(255, "API Key Name is too long"),
   "api key private key": z.string().trim().min(1, "Private Key is required").max(10000, "Private Key is too long"),
