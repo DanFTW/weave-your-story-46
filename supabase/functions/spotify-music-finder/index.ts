@@ -336,6 +336,7 @@ serve(async (req) => {
 
     // ── LIST-PLAYLISTS ──
     if (action === "list-playlists") {
+      console.log(`[SpotifyFinder] list-playlists: userId=${userId}`);
       const { data: integration } = await sb
         .from("user_integrations")
         .select("composio_connection_id")
@@ -343,6 +344,8 @@ serve(async (req) => {
         .eq("integration_id", "spotify")
         .eq("status", "connected")
         .maybeSingle();
+
+      console.log(`[SpotifyFinder] list-playlists: connectionId=${integration?.composio_connection_id || "NONE"}`);
 
       if (!integration?.composio_connection_id) {
         return new Response(JSON.stringify({ error: "Spotify not connected" }), {
@@ -363,9 +366,14 @@ serve(async (req) => {
           { limit, offset }
         );
 
-        console.log("[SpotifyFinder] Playlist response shape:", JSON.stringify(result).slice(0, 300));
-        const data = result?.data?.response_data || result?.response_data || result?.data || result;
+        const data = extractComposioData(result, "list-playlists");
         const items = data?.items || [];
+        console.log(`[SpotifyFinder] list-playlists offset=${offset}: ${items.length} items found`);
+
+        if (items.length === 0 && offset === 0) {
+          // Log full response for debugging first page with no items
+          console.warn(`[SpotifyFinder] list-playlists: 0 items on first page. Full response(1000):`, JSON.stringify(result).slice(0, 1000));
+        }
 
         for (const item of items) {
           allPlaylists.push({
@@ -379,11 +387,10 @@ serve(async (req) => {
         hasMore = items.length === limit;
         offset += limit;
 
-        // Safety limit
         if (offset > 500) break;
       }
 
-      console.log(`[SpotifyFinder] Found ${allPlaylists.length} playlists`);
+      console.log(`[SpotifyFinder] list-playlists: total=${allPlaylists.length}`);
 
       return new Response(JSON.stringify({ playlists: allPlaylists }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
