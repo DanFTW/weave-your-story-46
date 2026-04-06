@@ -1,37 +1,60 @@
 
+Fix only the missing persistence step in the Spotify reconnect path so the newest Composio connected account ID is saved to `user_integrations` as soon as a reconnect starts.
 
-# Fix: Break the Spotify Reconnect Infinite Loop
+What I found
+- The reconnect path is:
+  `SpotifyMusicFinderFlow.handleReconnect()` -> `useComposio.connect(..., true)` -> `composio-connect`
+- `composio-connect` creates a new Composio connected account during OAuth initiation and returns the new `connectionId`.
+- But unlike the older `composio-auth` function pattern, `composio-connect` does not write that new `connectionId` to `user_integrations` before redirecting.
+- The Spotify Music Finder edge function reads `user_integrations.composio_connection_id` before calling Composio.
+- So after reconnect, the app still uses the stale old `ca_...` value from the previous row until callback persistence catches up or fails, which matches the behavior you described.
+- `composio-callback` does eventually upsert `composio_connection_id = connectionId`, but the missing write in `composio-connect` is the gap causing the stale-ID bug.
 
-## Problem
+Conservative fix
+1. Update only `supabase/functions/composio-connect/index.ts`
+   - After OAuth link creation succeeds and `connectionId` is parsed
+   - Upsert `user_integrations` with:
+     - `user_id`
+     - `integration_id: toolkitLower`
+     - `composio_connection_id: connectionId`
+     - `status: "pending"`
+     - `updated_at`
+   - Use the existing unique key `onConflict: "user_id,integration_id"`
 
-The screenshots show the exact loop:
-1. Page loads → playlists fail to load (`spotify_reauth_required`)
-2. The `useEffect` on lines 51-81 of `SpotifyMusicFinderFlow.tsx` auto-triggers `disconnect()` + `connect()` 
-3. Composio redirects to Spotify OAuth → succeeds → redirects back to the page
-4. Component remounts → `hasTriggeredRepairRef` resets to `false` → playlist fetch fails again → auto-repair triggers again → infinite loop
+2. Use service-role DB access in that function for the upsert
+   - `composio-connect` currently authenticates the user with anon auth only
+   - Add a Supabase admin client in this function using `SUPABASE_SERVICE_ROLE_KEY`
+   - Reuse it only for this single upsert
+   - No schema changes needed
 
-The `hasTriggeredRepairRef` guard doesn't survive the OAuth redirect because the component unmounts and remounts.
+3. Keep all other reconnect behavior unchanged
+   - Do not alter `SpotifyMusicFinderFlow`
+   - Do not alter `useComposio`
+   - Do not alter `spotify-music-finder`
+   - Do not change callback logic beyond relying on the existing final upsert in `composio-callback`
 
-## Fix
+Why this is the right single fix
+- It matches the proven pattern already used in `composio-auth`, where the freshly created connection ID is saved immediately after initiation.
+- It directly addresses the stale `user_integrations.composio_connection_id` problem you observed.
+- It is minimal and low-risk: one function, one added persistence step, no UI or schema changes.
 
-**Remove the automatic repair effect entirely.** Replace it with an inline "needs reconnect" UI state that lets the user manually trigger reconnection.
+Files to touch
+- `supabase/functions/composio-connect/index.ts`
 
-### File 1: `src/components/flows/spotify-music-finder/SpotifyMusicFinderFlow.tsx`
+Expected result
+- Each Spotify reconnect writes the newly created `ca_...` ID into `user_integrations` right away.
+- The subsequent playlist fetch reads the latest connection ID instead of the stale one.
+- Reconnect should stop failing solely because the old Composio connected account ID remained in the database.
 
-- Delete the entire `useEffect` block (lines 51-81) that watches `playlistLoadErrorCode` and auto-triggers disconnect/connect
-- Remove the `hasTriggeredRepairRef` and `isRepairingConnection` state since they only exist for the auto-repair
-- Remove `isRepairingConnection` from the loading gate (line 91)
-- Add a `handleReconnect` callback that does the disconnect + connect sequence, triggered only by a user button click
-- When `playlistLoadErrorCode === "spotify_reauth_required"`, render a "needs-reconnect" UI instead of the config form — a card with the error message and a "Reconnect Spotify" button
+Technical note
+```text
+Current:
+reconnect -> composio-connect creates new ca_new -> redirect
+DB still has ca_old
+spotify-music-finder reads ca_old -> Composio rejects -> spotify_reauth_required
 
-### File 2: `src/components/flows/spotify-music-finder/SpotifyMusicFinderConfig.tsx`
-
-No changes needed — the config component already handles the empty playlists state. The parent will simply not render it when `playlistLoadErrorCode` is set.
-
-### Result
-
-- No automatic reconnection on error
-- User sees a clear error message: "Your Spotify connection needs to be refreshed"
-- User clicks "Reconnect Spotify" to manually initiate the OAuth flow
-- If the underlying Spotify issue persists, the user sees the error again without being trapped in a loop
-
+After fix:
+reconnect -> composio-connect creates new ca_new -> upsert DB with ca_new + pending -> redirect
+spotify-music-finder reads ca_new
+composio-callback later finalizes same row as connected
+```
