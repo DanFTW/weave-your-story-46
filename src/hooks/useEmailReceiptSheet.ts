@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import {
   EmailReceiptSheetPhase,
@@ -95,6 +96,14 @@ export function useEmailReceiptSheet() {
       });
 
       if (error) {
+        if (error instanceof FunctionsHttpError) {
+          const errorBody = await error.context.json().catch(() => null);
+          if (errorBody?.needsReconnect) {
+            toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+            setPhase("needs-reconnect");
+            return;
+          }
+        }
         toast({ title: "Failed to load spreadsheets", description: error.message, variant: "destructive" });
         return;
       }
@@ -125,6 +134,14 @@ export function useEmailReceiptSheet() {
       });
 
       if (error) {
+        if (error instanceof FunctionsHttpError) {
+          const errorBody = await error.context.json().catch(() => null);
+          if (errorBody?.needsReconnect) {
+            toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+            setPhase("needs-reconnect");
+            return null;
+          }
+        }
         toast({ title: "Failed to create spreadsheet", description: error.message, variant: "destructive" });
         return null;
       }
@@ -234,6 +251,14 @@ export function useEmailReceiptSheet() {
       });
 
       if (error) {
+        if (error instanceof FunctionsHttpError) {
+          const errorBody = await error.context.json().catch(() => null);
+          if (errorBody?.needsReconnect) {
+            toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+            setPhase("needs-reconnect");
+            return;
+          }
+        }
         toast({ title: "Sync failed", description: error.message, variant: "destructive" });
         return;
       }
