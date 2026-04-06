@@ -338,6 +338,12 @@ export default function FlowPage() {
     return <PurchaseTrackerFlow />;
   }
 
+  // === SPOTIFY MUSIC FINDER FLOW RENDER ===
+
+  if (config.isSpotifyMusicFinderFlow) {
+    return <SpotifyMusicFinderFlow />;
+  }
+
   // === BIRTHDAY REMINDER FLOW RENDER ===
 
   if (config.isBirthdayReminderFlow) {
