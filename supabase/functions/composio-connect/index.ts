@@ -373,8 +373,15 @@ serve(async (req) => {
 
       let { response, text: responseText } = await callApiKeyConnect(authConfigId!);
 
-      // Fallback if auth config not found
+      // Fallback if auth config not found (skip for strict toolkits)
       if (!response.ok && response.status === 400 && responseText.includes("Auth_Config_NotFound")) {
+        if (STRICT_AUTH_CONFIG_TOOLKITS.has(toolkitLower)) {
+          console.error(`[${toolkitLower}] Auth config ${authConfigId} not found and fallback is disabled (strict toolkit)`);
+          return new Response(
+            JSON.stringify({ error: `Auth configuration for ${toolkit} is not available. Please contact support.` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         console.warn(`[${toolkitLower}] Auth config ${authConfigId} not found, attempting dynamic fallback...`);
         const fallbackId = await getDefaultAuthConfigId(toolkitLower);
         if (fallbackId && fallbackId !== authConfigId) {
