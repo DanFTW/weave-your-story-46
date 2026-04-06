@@ -23,7 +23,7 @@ export function EmailReceiptSheetFlow() {
   const [isCheckingSheets, setIsCheckingSheets] = useState(true);
 
   const { isConnected: gmailConnected, checkStatus: checkGmail } = useComposio("GMAIL");
-  const { isConnected: sheetsConnected, checkStatus: checkSheets } = useComposio("GOOGLESHEETS");
+  const { isConnected: sheetsConnected, checkStatus: checkSheets, disconnect: disconnectSheets } = useComposio("GOOGLESHEETS");
 
   const {
     phase, setPhase, config, stats, spreadsheets,
