@@ -85,6 +85,7 @@ async function composioExecute(
   connectionId: string,
   args: Record<string, any>
 ): Promise<any> {
+  console.log(`[SpotifyFinder] composioExecute: action=${action}`);
   const res = await fetch(
     `https://backend.composio.dev/api/v3/tools/execute/${action}`,
     {
@@ -100,15 +101,58 @@ async function composioExecute(
     }
   );
   const raw = await res.text();
+  console.log(`[SpotifyFinder] composioExecute ${action} status=${res.status} raw(500):`, raw.slice(0, 500));
+
   if (!res.ok) {
-    console.error(`[SpotifyFinder] Composio ${action} error ${res.status}:`, raw);
+    console.error(`[SpotifyFinder] Composio ${action} HTTP error ${res.status}:`, raw.slice(0, 300));
     throw new Error(`Composio ${action} failed: ${res.status}`);
   }
+
+  let parsed: any;
   try {
-    return JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch {
-    return raw;
+    throw new Error(`Composio ${action} returned non-JSON response`);
   }
+
+  // Detect provider-level failures inside 200 responses
+  const topKeys = Object.keys(parsed || {});
+  console.log(`[SpotifyFinder] composioExecute ${action} topKeys:`, topKeys);
+
+  if (parsed?.successful === false || parsed?.data?.successful === false) {
+    const errMsg = parsed?.error || parsed?.data?.error || parsed?.message || "Provider returned unsuccessful";
+    console.error(`[SpotifyFinder] Composio ${action} provider failure:`, errMsg);
+    throw new Error(`Composio ${action} provider failure: ${errMsg}`);
+  }
+  if (parsed?.error || parsed?.data?.error) {
+    const errMsg = parsed?.error || parsed?.data?.error;
+    console.error(`[SpotifyFinder] Composio ${action} error in payload:`, errMsg);
+    throw new Error(`Composio ${action} error: ${typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)}`);
+  }
+
+  return parsed;
+}
+
+// ── Robust data extractor for nested Composio v3 responses ──
+
+function extractComposioData(result: any, label: string): any {
+  const candidates = [
+    result?.data?.response_data?.data,
+    result?.data?.response_data,
+    result?.response_data?.data,
+    result?.response_data,
+    result?.data?.data,
+    result?.data,
+    result,
+  ];
+  for (let i = 0; i < candidates.length; i++) {
+    if (candidates[i] && typeof candidates[i] === "object") {
+      console.log(`[SpotifyFinder] ${label}: matched candidate index ${i}, keys:`, Object.keys(candidates[i]).slice(0, 10));
+      return candidates[i];
+    }
+  }
+  console.warn(`[SpotifyFinder] ${label}: no candidate matched, returning result as-is`);
+  return result;
 }
 
 // ── LIAM helpers ──
