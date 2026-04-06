@@ -470,6 +470,14 @@ serve(async (req) => {
         });
       }
 
+      const validation = await validateSheetsConnection(connectionId);
+      if (!validation.valid) {
+        return new Response(JSON.stringify({ error: "Google Sheets connection expired or misconfigured. Please reconnect.", needsReconnect: true }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const res = await fetch(
         "https://backend.composio.dev/api/v3/tools/execute/GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
         {
