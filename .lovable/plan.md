@@ -1,60 +1,57 @@
 
-Fix only the missing persistence step in the Spotify reconnect path so the newest Composio connected account ID is saved to `user_integrations` as soon as a reconnect starts.
+Investigation summary
 
-What I found
-- The reconnect path is:
-  `SpotifyMusicFinderFlow.handleReconnect()` -> `useComposio.connect(..., true)` -> `composio-connect`
-- `composio-connect` creates a new Composio connected account during OAuth initiation and returns the new `connectionId`.
-- But unlike the older `composio-auth` function pattern, `composio-connect` does not write that new `connectionId` to `user_integrations` before redirecting.
-- The Spotify Music Finder edge function reads `user_integrations.composio_connection_id` before calling Composio.
-- So after reconnect, the app still uses the stale old `ca_...` value from the previous row until callback persistence catches up or fails, which matches the behavior you described.
-- `composio-callback` does eventually upsert `composio_connection_id = connectionId`, but the missing write in `composio-connect` is the gap causing the stale-ID bug.
+Workflow traced
+`SpotifyMusicFinderFlow.handleReconnect`
+→ `useComposio.connect(..., true)`
+→ `composio-connect`
+→ Composio OAuth
+→ `OAuthComplete`
+→ `composio-callback`
+→ `user_integrations`
+→ `spotify-music-finder` `list-playlists`
 
-Conservative fix
-1. Update only `supabase/functions/composio-connect/index.ts`
-   - After OAuth link creation succeeds and `connectionId` is parsed
-   - Upsert `user_integrations` with:
-     - `user_id`
-     - `integration_id: toolkitLower`
-     - `composio_connection_id: connectionId`
-     - `status: "pending"`
-     - `updated_at`
-   - Use the existing unique key `onConflict: "user_id,integration_id"`
+What the evidence shows
+- `composio-disconnect` is succeeding and clearing the old Spotify row.
+- `composio-connect` is now saving the new connected account ID immediately.
+  - Edge logs show fresh saves like `ca_Qonmj76BvtxL` and `ca_C4lAzCLW5Ca7`.
+- `composio-callback` is finalizing that same new ID as `status: "connected"`.
+- `spotify-music-finder` is reading the new ID, not the stale one.
+  - Example log: `list-playlists: connectionId=ca_C4lAzCLW5Ca7`.
+- The failure happens after that, inside the Spotify provider call:
+  - `403 ... Check settings on https://developer.spotify.com/dashboard, the user may not be registered.`
 
-2. Use service-role DB access in that function for the upsert
-   - `composio-connect` currently authenticates the user with anon auth only
-   - Add a Supabase admin client in this function using `SUPABASE_SERVICE_ROLE_KEY`
-   - Reuse it only for this single upsert
-   - No schema changes needed
+Root cause
+The stale `ca_...` persistence bug does not appear to be the active problem anymore. The reconnect flow is completing, the newest connected account is being stored, and the playlist edge function is using it correctly.
 
-3. Keep all other reconnect behavior unchanged
-   - Do not alter `SpotifyMusicFinderFlow`
-   - Do not alter `useComposio`
-   - Do not alter `spotify-music-finder`
-   - Do not change callback logic beyond relying on the existing final upsert in `composio-callback`
+The current root cause is most likely the Spotify auth configuration behind `ac_VEoX-dA2CYrF`, not the reconnect code.
 
-Why this is the right single fix
-- It matches the proven pattern already used in `composio-auth`, where the freshly created connection ID is saved immediately after initiation.
-- It directly addresses the stale `user_integrations.composio_connection_id` problem you observed.
-- It is minimal and low-risk: one function, one added persistence step, no UI or schema changes.
+Why this points to auth config / provider setup
+- Multiple brand-new connected accounts fail the same way, which rules out “old ID still being read” as the main issue.
+- The callback logs show the granted Spotify scopes are:
+  `app-remote-control streaming user-modify-playback-state user-read-playback-state user-read-currently-playing user-read-email user-read-private`
+- Those scopes do not include the playlist scopes this flow needs for playlist listing and track insertion, such as:
+  `playlist-read-private`, `playlist-read-collaborative`, and likely `playlist-modify-private` / `playlist-modify-public`.
+- The provider error text also specifically points to Spotify app registration / development-mode restrictions.
 
-Files to touch
-- `supabase/functions/composio-connect/index.ts`
+Initial solution
+1. Do not change the reconnect persistence path again; it looks correct now.
+2. Fix the Spotify auth config / underlying Spotify app:
+   - Update Composio auth config `ac_VEoX-dA2CYrF` to request the missing playlist scopes.
+   - In Spotify Developer Dashboard, make sure the authenticating user is added in User Management if the app is still in development mode, or move the app out of development mode.
+3. Reconnect Spotify once after those external settings are fixed so a fresh token is issued.
+4. Retest `/flow/spotify-music-finder`.
 
-Expected result
-- Each Spotify reconnect writes the newly created `ca_...` ID into `user_integrations` right away.
-- The subsequent playlist fetch reads the latest connection ID instead of the stale one.
-- Reconnect should stop failing solely because the old Composio connected account ID remained in the database.
+Recommended code follow-up after that
+- Only if needed, make a small diagnostic UX change: stop classifying this exact provider 403 as generic `spotify_reauth_required`, since reconnect alone cannot fix a dashboard/scope misconfiguration.
 
 Technical note
 ```text
-Current:
-reconnect -> composio-connect creates new ca_new -> redirect
-DB still has ca_old
-spotify-music-finder reads ca_old -> Composio rejects -> spotify_reauth_required
+new ca_* created
+-> saved to user_integrations
+-> callback marks it connected
+-> spotify-music-finder reads that same new ca_*
+-> Spotify provider returns 403
 
-After fix:
-reconnect -> composio-connect creates new ca_new -> upsert DB with ca_new + pending -> redirect
-spotify-music-finder reads ca_new
-composio-callback later finalizes same row as connected
+So the break is after connection persistence, not before it.
 ```
