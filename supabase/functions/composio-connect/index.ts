@@ -240,6 +240,7 @@ serve(async (req) => {
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
     // Get user from auth header
     const authHeader = req.headers.get("Authorization");
@@ -398,6 +399,25 @@ serve(async (req) => {
       const connectionId = composioData.connected_account_id || composioData.id;
       
       console.log(`[${toolkitLower}] API Key connection created: ${connectionId}`);
+
+      // Persist the new connection ID immediately
+      if (connectionId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { error: upsertError } = await supabaseAdmin
+          .from("user_integrations")
+          .upsert({
+            user_id: user.id,
+            integration_id: toolkitLower,
+            composio_connection_id: connectionId,
+            status: "connected",
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,integration_id" });
+        if (upsertError) {
+          console.error(`[${toolkitLower}] Failed to upsert user_integrations:`, upsertError);
+        } else {
+          console.log(`[${toolkitLower}] Upserted user_integrations with connectionId ${connectionId}`);
+        }
+      }
       
       // API Key connections don't need a redirect — return connectionId directly
       return new Response(
@@ -480,6 +500,25 @@ serve(async (req) => {
     
     console.log(`Connection ID: ${connectionId}`);
     console.log(`Redirect URL: ${redirectUrl}`);
+
+    // Persist the new connection ID immediately so downstream functions read the latest value
+    if (connectionId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { error: upsertError } = await supabaseAdmin
+        .from("user_integrations")
+        .upsert({
+          user_id: user.id,
+          integration_id: toolkitLower,
+          composio_connection_id: connectionId,
+          status: "pending",
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,integration_id" });
+      if (upsertError) {
+        console.error(`Failed to upsert user_integrations for ${toolkitLower}:`, upsertError);
+      } else {
+        console.log(`Upserted user_integrations with connectionId ${connectionId} for ${toolkitLower}`);
+      }
+    }
 
     return new Response(
       JSON.stringify({
