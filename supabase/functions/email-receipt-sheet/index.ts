@@ -43,6 +43,47 @@ async function getConnectionId(sb: any, userId: string, integrationId: string): 
   return data?.composio_connection_id ?? null;
 }
 
+async function validateSheetsConnection(connectionId: string): Promise<{ valid: boolean; reason?: string }> {
+  try {
+    const res = await fetch(`https://backend.composio.dev/api/v3/connected_accounts/${connectionId}`, {
+      method: "GET",
+      headers: {
+        "x-api-key": COMPOSIO_API_KEY,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[ReceiptSheet] Validate connection ${connectionId} failed ${res.status}:`, text);
+      if (res.status === 410 || text.toLowerCase().includes("expired")) {
+        return { valid: false, reason: "expired" };
+      }
+      return { valid: false, reason: "fetch_failed" };
+    }
+
+    const data = await res.json();
+    const authConfigId = data?.auth_config?.id ?? data?.auth_config_id ?? data?.data?.auth_config?.id ?? data?.data?.auth_config_id;
+    const status = (data?.status ?? data?.data?.status ?? "").toUpperCase();
+
+    console.log(`[ReceiptSheet] Connection ${connectionId}: auth_config=${authConfigId}, status=${status}`);
+
+    if (status === "EXPIRED" || status === "REVOKED" || status === "FAILED") {
+      return { valid: false, reason: "expired" };
+    }
+
+    if (authConfigId && authConfigId !== EXPECTED_SHEETS_AUTH_CONFIG) {
+      console.warn(`[ReceiptSheet] Connection ${connectionId} uses auth config ${authConfigId}, expected ${EXPECTED_SHEETS_AUTH_CONFIG}`);
+      return { valid: false, reason: "wrong_config" };
+    }
+
+    return { valid: true };
+  } catch (e) {
+    console.error("[ReceiptSheet] Validate connection error:", e);
+    return { valid: false, reason: "fetch_failed" };
+  }
+}
+
 // ── AI Receipt Parsing ──
 
 interface ParsedReceipt {
