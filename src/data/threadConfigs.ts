@@ -1198,6 +1198,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "spotify-music-finder": {
+    id: "spotify-music-finder",
+    title: "Spotify Music Finder",
+    subtitle: "Memory-powered music discovery",
+    description: "Analyzes your recent memories for mood and themes, finds a matching song on Spotify, and drops it into your chosen playlist automatically.",
+    gradient: "teal",
+    icon: Music,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Spotify",
+        description: "Authorize access to your playlists",
+        iconUrl: "https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Primary_Logo_RGB_Green.png",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Select Playlist & Frequency",
+        description: "Choose a playlist and how often to discover",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Discovery",
+        description: "Songs added automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
 };
 
 export function getThreadConfig(threadId: string): ThreadConfig | undefined {
