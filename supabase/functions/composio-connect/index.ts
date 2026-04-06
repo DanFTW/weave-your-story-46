@@ -399,6 +399,25 @@ serve(async (req) => {
       const connectionId = composioData.connected_account_id || composioData.id;
       
       console.log(`[${toolkitLower}] API Key connection created: ${connectionId}`);
+
+      // Persist the new connection ID immediately
+      if (connectionId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { error: upsertError } = await supabaseAdmin
+          .from("user_integrations")
+          .upsert({
+            user_id: user.id,
+            integration_id: toolkitLower,
+            composio_connection_id: connectionId,
+            status: "connected",
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,integration_id" });
+        if (upsertError) {
+          console.error(`[${toolkitLower}] Failed to upsert user_integrations:`, upsertError);
+        } else {
+          console.log(`[${toolkitLower}] Upserted user_integrations with connectionId ${connectionId}`);
+        }
+      }
       
       // API Key connections don't need a redirect — return connectionId directly
       return new Response(
