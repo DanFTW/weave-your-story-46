@@ -129,6 +129,12 @@ export function useEmailReceiptSheet() {
         return null;
       }
 
+      if (data?.needsReconnect) {
+        toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+        setPhase("needs-reconnect");
+        return null;
+      }
+
       if (!data?.spreadsheetId) {
         toast({ title: "Spreadsheet created but ID missing", variant: "destructive" });
         return null;
