@@ -99,6 +99,12 @@ export function useEmailReceiptSheet() {
         return;
       }
 
+      if (data?.needsReconnect) {
+        toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+        setPhase("needs-reconnect");
+        return;
+      }
+
       setSpreadsheets(data?.spreadsheets ?? []);
     } catch {
       toast({ title: "Failed to load spreadsheets", variant: "destructive" });
@@ -120,6 +126,12 @@ export function useEmailReceiptSheet() {
 
       if (error) {
         toast({ title: "Failed to create spreadsheet", description: error.message, variant: "destructive" });
+        return null;
+      }
+
+      if (data?.needsReconnect) {
+        toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+        setPhase("needs-reconnect");
         return null;
       }
 
@@ -223,6 +235,12 @@ export function useEmailReceiptSheet() {
 
       if (error) {
         toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      if (data?.needsReconnect) {
+        toast({ title: "Google Sheets connection expired", description: "Please reconnect your Google Sheets account.", variant: "destructive" });
+        setPhase("needs-reconnect");
         return;
       }
 
