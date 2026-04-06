@@ -501,6 +501,25 @@ serve(async (req) => {
     console.log(`Connection ID: ${connectionId}`);
     console.log(`Redirect URL: ${redirectUrl}`);
 
+    // Persist the new connection ID immediately so downstream functions read the latest value
+    if (connectionId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { error: upsertError } = await supabaseAdmin
+        .from("user_integrations")
+        .upsert({
+          user_id: user.id,
+          integration_id: toolkitLower,
+          composio_connection_id: connectionId,
+          status: "pending",
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,integration_id" });
+      if (upsertError) {
+        console.error(`Failed to upsert user_integrations for ${toolkitLower}:`, upsertError);
+      } else {
+        console.log(`Upserted user_integrations with connectionId ${connectionId} for ${toolkitLower}`);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         redirectUrl,
