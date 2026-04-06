@@ -194,6 +194,7 @@ const AUTH_CONFIGS: Record<string, string> = {
   googlesheets: "ac_P0DYB0XdGLn3",
   coinbase: "ac_fCVi2K8lFafl",
   apibible: "ac_sBgIg_zusGDy",
+  spotify: "ac_VEoX-dA2CYrF",
 };
 
 // All valid toolkits (includes those using Composio default auth)
