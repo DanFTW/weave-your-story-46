@@ -1072,6 +1072,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "email-receipt-sheet": {
+    id: "email-receipt-sheet",
+    title: "Email Receipt to Spreadsheet",
+    subtitle: "Auto-track expenses",
+    description: "Every purchase confirmation email gets parsed and a row gets added to a Google Sheet with date, vendor, and amount. Expense tracking on autopilot.",
+    gradient: "teal",
+    icon: Receipt,
+    steps: [
+      {
+        id: "connect-gmail",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to your email",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+      },
+      {
+        id: "connect-sheets",
+        type: "integration",
+        title: "Connect Google Sheets",
+        description: "Select or create a target spreadsheet",
+        iconUrl: "/src/assets/integrations/googlesheets.svg",
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Expense Tracking",
+        description: "Toggle on/off — expenses tracked automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
   "grocery-sheet-sync": {
     id: "grocery-sheet-sync",
     title: "Grocery Memory to Google Sheet",
