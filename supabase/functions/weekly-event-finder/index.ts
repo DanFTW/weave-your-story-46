@@ -193,7 +193,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
 
   const eventSummaries = events
     .slice(0, 15)
-    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — ${e.date || e.start_date || ""}`)
+    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — ${e.date || e.start_date || ""} — ${e.link || e.url || e.event_url || ""}`)
     .join("\n");
 
   try {
