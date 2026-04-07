@@ -1,68 +1,57 @@
 
 
-## Fix: Raw JSON rendering for event dates
+## Fix: SMS alerts failing with 502 but alert count still incrementing
 
 ### Problem
 
-The `extractDateString` helper doesn't recognize objects with `when` or `start_date` keys. When an event's `date` field is an object like `{"start_date":"May 16","when":"Sat, May 16, 4 – 8 PM EDT"}`, it falls through to `JSON.stringify(value)` (line 199), which produces the raw JSON visible in the screenshot.
+Two issues confirmed from the edge function logs:
 
-Additionally, the date extraction chain (`e.date || e.start_date || e.when`) short-circuits at `e.date` — but `e.date` can itself be an object containing the nested `when` field. The `when` field is the best human-readable string and should be prioritized.
+1. **SMS gateway returning 502**: The log shows `[TextAlert] SMS send failed 502: {"error":"Failed to send SMS"}`. The Render-hosted SMS gateway at `https://weave-fabric-sms.onrender.com/send` is returning a 502 (Bad Gateway), likely because the free-tier Render service spins down after inactivity and the first request hits a cold start timeout.
 
-### Solution — single file: `supabase/functions/weekly-event-finder/index.ts`
+2. **Alert count increments regardless of SMS delivery**: In the manual-sync handler (line 310-311), `sendSms` is fire-and-forget — its return value is ignored, and `alertCount++` runs unconditionally. The counter reflects "emails processed" rather than "alerts actually delivered."
 
-**1. Update `extractDateString` to handle `when` and `start_date` keys (lines 189-199)**
+### Solution — single file: `supabase/functions/email-text-alert/index.ts`
 
-Add checks for `v.when` and `v.start_date` before the `JSON.stringify` fallback:
+**1. Make `sendSms` return a boolean (like the weekly-event-finder version)**
 
+Change the return type from `void` to `boolean` so callers can check delivery status:
 ```typescript
-if (typeof value === "object") {
-  const v = value as Record<string, any>;
-  if (v.when && typeof v.when === "string") return v.when;        // prioritize human-readable
-  if (v.dateTime && typeof v.dateTime === "string") return v.dateTime;
-  if (v.start_date && typeof v.start_date === "string") return v.start_date;
-  if (v.date && typeof v.date === "string") return v.date;
-  if (v.year && v.month && v.day) { /* existing pad logic */ }
-  // Recurse into nested objects if any known key holds an object
-  if (v.when) return extractDateString(v.when);
-  if (v.dateTime) return extractDateString(v.dateTime);
-  if (v.date) return extractDateString(v.date);
-  if (v.start_date) return extractDateString(v.start_date);
-  try { return JSON.stringify(value); } catch { return ""; }
+async function sendSms(to: string, body: string): Promise<boolean> {
+  // ... existing fetch logic ...
+  if (!res.ok) { /* log error */ return false; }
+  return true;
+  // catch: return false;
 }
 ```
 
-**2. Prioritize `when` in all extraction chains**
+**2. Add retry logic for cold-start 502s**
 
-Change the fallback order everywhere from `e.date || e.start_date || e.when` to `e.when || e.date || e.start_date` at these locations:
-- Line 206 (`isUpcomingEvent`)
-- Line 231 (LLM summary builder)
-- Line 327 (date recovery map)
-- Line 537 (delivery message builder)
-
-**3. Skip `new Date()` reformatting when `when` is already human-readable (lines 539-562)**
-
-The `when` field like `"Sat, May 16, 4 – 8 PM EDT"` is already the ideal display format. Attempting `new Date()` on it will fail or produce a worse result. Update the delivery formatter to use the raw string directly when it's already human-readable (i.e., not an ISO date):
-
+Render free-tier services sleep after 15 minutes of inactivity. The first request often gets a 502 or timeout. Add a single retry with a short delay to handle this:
 ```typescript
-const dateStr = extractDateString(e.when) || extractDateString(e.date) || extractDateString(e.start_date);
-let formattedDate = dateStr;
-// Only attempt Date parsing if it looks like an ISO/standard date, not already human-readable
-if (dateStr && /^\d{4}-\d{2}/.test(dateStr)) {
-  try {
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      // existing formatting logic
-    }
-  } catch { /* keep raw */ }
+// Inside sendSms, after a 502 response:
+if (res.status === 502) {
+  console.log("[TextAlert] SMS gateway cold start, retrying in 3s...");
+  await new Promise(r => setTimeout(r, 3000));
+  // retry the fetch once
 }
 ```
+
+**3. Only increment alertCount when SMS actually succeeds**
+
+Update the manual-sync loop (line 310-311) to check the return value:
+```typescript
+const sent = await sendSms(configData.phone_number, summary);
+if (sent) alertCount++;
+```
+
+This ensures the UI counter ("X alerts sent") reflects actual deliveries, not just processed emails.
 
 **4. Redeploy the edge function.**
 
 ### Why this works
 
-- `when` is prioritized everywhere because Composio returns it as the cleanest human-readable string (e.g., "Sat, May 16, 4 – 8 PM EDT").
-- The `extractDateString` helper now recognizes `when` and `start_date` as object keys, preventing the `JSON.stringify` fallback.
-- ISO-only reformatting avoids mangling already-formatted `when` strings.
-- No other changes to the codebase.
+- The retry handles Render's cold-start behavior, which is the most likely cause of the 502.
+- The boolean return aligns with the pattern already used in `weekly-event-finder`.
+- Conditional counting ensures the alert count is accurate.
+- No other files or logic are changed.
 
