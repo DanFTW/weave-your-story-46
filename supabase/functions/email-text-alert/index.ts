@@ -182,25 +182,35 @@ async function summarizeEmail(emailBody: string): Promise<string> {
   }
 }
 
-async function sendSms(to: string, body: string): Promise<void> {
+async function sendSms(to: string, body: string): Promise<boolean> {
+  const url = "https://weave-fabric-sms.onrender.com/send";
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": SMS_API_KEY,
+  };
+  const payload = JSON.stringify({ to, body });
+
   try {
-    const res = await fetch("https://weave-fabric-sms.onrender.com/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": SMS_API_KEY,
-      },
-      body: JSON.stringify({ to, body }),
-    });
+    let res = await fetch(url, { method: "POST", headers, body: payload });
+
+    // Retry once on 502 (Render cold-start)
+    if (res.status === 502) {
+      console.log("[TextAlert] SMS gateway cold start (502), retrying in 3s...");
+      await new Promise((r) => setTimeout(r, 3000));
+      res = await fetch(url, { method: "POST", headers, body: payload });
+    }
 
     if (!res.ok) {
       const errText = await res.text();
       console.error(`[TextAlert] SMS send failed ${res.status}:`, errText);
-    } else {
-      console.log(`[TextAlert] SMS sent to ${to}`);
+      return false;
     }
+
+    console.log(`[TextAlert] SMS sent to ${to}`);
+    return true;
   } catch (e) {
     console.error("[TextAlert] SMS send error:", e);
+    return false;
   }
 }
 
