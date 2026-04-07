@@ -1,22 +1,16 @@
 
 
-## Fix Gmail send field name
+## Fix SMS endpoint URL in both edge functions
 
-The Composio `GMAIL_SEND_EMAIL` tool expects `body` in its arguments, but the `sendEmail` function on line 298 passes `message_body`. This causes the error: `"Following fields are missing: {'body'}"`.
+Both `weekly-event-finder` and `email-text-alert` edge functions use the incorrect SMS gateway URL `https://weave-mcp-server.onrender.com/send`. Both need to be updated to `https://weave-fabric-sms.onrender.com/send`.
 
-### Change
+### Changes
 
-**File:** `supabase/functions/weekly-event-finder/index.ts`, line 298
+**1. `supabase/functions/weekly-event-finder/index.ts` (line 327)**
+Change URL from `https://weave-mcp-server.onrender.com/send` to `https://weave-fabric-sms.onrender.com/send`.
 
-Change:
-```typescript
-message_body: bodyText,
-```
-To:
-```typescript
-body: bodyText,
-```
+**2. `supabase/functions/email-text-alert/index.ts` (line 187)**
+Same URL change.
 
-### Post-change
-Redeploy the `weekly-event-finder` edge function.
+**3. Redeploy both edge functions.**
 
