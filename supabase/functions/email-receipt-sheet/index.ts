@@ -602,7 +602,7 @@ serve(async (req) => {
       const candidates = emails
         .map((e: any) => ({
           messageId: e.id ?? e.messageId ?? e.message_id ?? "",
-          body: e.body ?? e.snippet ?? e.text ?? e.content ?? e.data ?? "",
+          body: e.messageText ?? e.body ?? e.snippet ?? e.text ?? e.content ?? e.data ?? "",
           subject: e.subject ?? "",
         }))
         .filter((e: any) => e.messageId && !processedIds.has(e.messageId));
@@ -622,17 +622,19 @@ serve(async (req) => {
       for (const email of candidates) {
         try {
           const emailText = email.subject ? `Subject: ${email.subject}\n\n${email.body}` : email.body;
+          console.log(`[ReceiptSheet] Email ${email.messageId} body length: ${emailText.length}, first 200 chars: ${emailText.substring(0, 200)}`);
           const parsed = await parseEmailForReceipt(emailText);
+          console.log(`[ReceiptSheet] LLM result for ${email.messageId}: isReceipt=${parsed.isReceipt}, vendor=${parsed.vendor}, amount=${parsed.amount}`);
           processed++;
 
           // Record as processed regardless
-          await sb.from("email_receipt_sheet_processed").insert({
+          await sb.from("email_receipt_sheet_processed").upsert({
             user_id: userId,
             email_message_id: email.messageId,
             vendor: parsed.isReceipt ? parsed.vendor : null,
             amount: parsed.isReceipt ? parsed.amount : null,
             date_str: parsed.isReceipt ? parsed.date : null,
-          }).onConflict("user_id,email_message_id");
+          }, { onConflict: "user_id,email_message_id" });
 
           if (!parsed.isReceipt) continue;
 
