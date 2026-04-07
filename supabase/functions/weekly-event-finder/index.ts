@@ -324,7 +324,7 @@ async function sendEmail(connId: string, to: string, subject: string, bodyText: 
 // Send SMS via weave-mcp-server gateway
 async function sendSms(to: string, body: string): Promise<boolean> {
   try {
-    const res = await fetch("https://weave-mcp-server.onrender.com/send", {
+    const res = await fetch("https://weave-fabric-sms.onrender.com/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

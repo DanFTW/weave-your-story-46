@@ -184,7 +184,7 @@ async function summarizeEmail(emailBody: string): Promise<string> {
 
 async function sendSms(to: string, body: string): Promise<void> {
   try {
-    const res = await fetch("https://weave-mcp-server.onrender.com/send", {
+    const res = await fetch("https://weave-fabric-sms.onrender.com/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
