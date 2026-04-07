@@ -1,31 +1,37 @@
 
 
-## Fix: COMPOSIO_SEARCH_EVENT 400 error
+## Fix: COMPOSIO_SEARCH_EVENT "Tool not found" — wrong API endpoint
 
 ### Root Cause
 
-The Composio v2 `/actions/.../execute` endpoint returns 400 with "App name and entity id must be present, if connected account id is not specified." The current request body only sends `{ input: { query } }` — it's missing the required `appName` and `entityId` fields.
+The logs show `"Tool COMPOSIO_SEARCH_EVENT not found"` because the function calls `/api/v2/actions/COMPOSIO_SEARCH_EVENT/execute` — the **actions** endpoint. But `COMPOSIO_SEARCH_EVENT` is registered as a **tool** under the `COMPOSIO_SEARCH` toolkit. Every other Composio tool execution in the codebase (Gmail, Google Drive, Twitter, Spotify, Calendar, etc.) uses the **v3 tools** endpoint: `/api/v3/tools/execute/{TOOL_SLUG}`.
 
 ### Change (single file)
 
-**`supabase/functions/weekly-event-finder/index.ts`** — `searchEvents` function, line 96:
+**`supabase/functions/weekly-event-finder/index.ts`** — `searchEvents` function:
 
-Change the request body from:
-```typescript
-const body = { input: { query: searchQuery } };
-```
-to:
-```typescript
-const body = {
-  appName: "composio",
-  entityId: "default",
-  input: { query: searchQuery },
-};
-```
+1. Change the URL from:
+   ```
+   https://backend.composio.dev/api/v2/actions/COMPOSIO_SEARCH_EVENT/execute
+   ```
+   to:
+   ```
+   https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT
+   ```
 
-`appName: "composio"` identifies the COMPOSIO_SEARCH_EVENT tool's parent app. `entityId: "default"` is the standard Composio entity for tools that don't require user-level OAuth. No other changes needed.
+2. Update the request body to match the v3 tools format used everywhere else in the codebase:
+   ```typescript
+   const body = {
+     connectedAccountId: undefined,  // not needed for Composio-native tools
+     appName: "composio_search",
+     entityId: "default",
+     input: { query: searchQuery },
+   };
+   ```
 
-### After deployment
-- Redeploy the edge function
-- Trigger "Find events now" and check logs to confirm a 200 response with event data
+No other changes — logging, extraction, curation, and delivery logic stay the same.
+
+### Why this is correct
+
+All 37 other edge functions in this project use `/api/v3/tools/execute/` for tool execution. The v2 actions endpoint is for a different class of Composio resources and does not resolve tool slugs like `COMPOSIO_SEARCH_EVENT`.
 
