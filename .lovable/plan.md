@@ -1,67 +1,41 @@
 
 
-## Filter out past events from Weekly Event Finder results
+## Fix: Event dates lost in the curation pipeline
 
-### Problem
+### Root cause
 
-The event finder returns events with dates that have already passed. There is no date filtering anywhere in the pipeline — raw results and curated results both pass through without checking whether the event date is in the future.
+There are two places where date information is being dropped:
+
+**1. Incomplete date field extraction in the LLM prompt (line 211)**
+
+The event summaries sent to the LLM for curation use `e.date || e.start_date || ""` but omit `e.when` — a common field in Composio search results. Events that only have a `when` field appear dateless to the LLM, so it returns empty or fabricated dates.
+
+**2. LLM prompt lacks explicit instruction to preserve dates**
+
+The prompt says "pick the top 5 most relevant events" but doesn't tell the LLM to copy dates verbatim. The model may paraphrase ("next Saturday") or omit dates it considers unimportant.
+
+**3. No fallback to original event data after curation**
+
+After the LLM returns curated events, the code uses the LLM's output directly. If the LLM drops or mangles a date, there's no mechanism to recover the original date from the raw search results.
 
 ### Solution
 
-Add a utility function `isUpcomingEvent` that attempts to parse the date field from an event and returns `true` only if the date is today or in the future. Apply this filter at two points:
-
-1. **Before LLM curation** — filter raw search results so the LLM only sees upcoming events
-2. **After LLM curation** — filter curated results as a safety net (the LLM may hallucinate or return stale dates)
-
-### Changes
-
 **File: `supabase/functions/weekly-event-finder/index.ts`**
 
-**1. Add `isUpcomingEvent` helper (after the existing utility functions, ~line 182)**
-
-A function that extracts the date string from an event (checking `date`, `start_date`, `when`), attempts to parse it, and returns `true` if it's today or later. Events with unparseable dates are kept (benefit of the doubt).
-
-```typescript
-function isUpcomingEvent(event: any): boolean {
-  const dateStr = event.date || event.start_date || event.when || "";
-  if (!dateStr) return true; // keep events with no date info
-  try {
-    const eventDate = new Date(dateStr);
-    if (isNaN(eventDate.getTime())) return true; // unparseable, keep it
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return eventDate >= today;
-  } catch {
-    return true;
-  }
-}
+**A. Fix the event summary extraction (line 211)**
+Add `e.when` to the date fallback chain so dates from all common Composio fields reach the LLM:
+```
+e.date || e.start_date || e.when || ""
 ```
 
-**2. Filter raw results before curation (~line 443)**
-
-After `searchEvents` returns, filter out past events before passing to the LLM:
-
-```typescript
-const rawEvents = await searchEvents(interests, location);
-const upcomingRaw = rawEvents.filter(isUpcomingEvent);
-console.log(`Found ${rawEvents.length} raw events, ${upcomingRaw.length} upcoming`);
+**B. Strengthen the LLM prompt (line 226)**
+Explicitly instruct the LLM to copy the exact date string from the input for each event. Update the prompt to:
+```
+"You are an event curator. Given a user's interests and a list of events, pick the top 5 most relevant events. IMPORTANT: For each event, copy the exact date string from the input — do not rephrase, summarize, or omit dates."
 ```
 
-**3. Filter curated results after curation (~line 448)**
+**C. Post-curation date recovery**
+After the LLM returns curated events, cross-reference each curated event title against the original raw events. If a curated event has an empty or missing `date` field, copy the date from the matching raw event. This ensures dates survive even if the LLM drops them.
 
-```typescript
-const curated = await curateEvents(upcomingRaw, interests);
-const upcomingCurated = curated.filter(isUpcomingEvent);
-console.log(`Curated to ${curated.length} events, ${upcomingCurated.length} upcoming`);
-```
-
-Then use `upcomingCurated` in place of `curated` for the rest of the sync logic.
-
-**4. Redeploy the edge function.**
-
-### Design notes
-
-- Events with missing or unparseable dates are kept rather than dropped — avoids losing valid events that use non-standard date formats
-- Filtering at both pre- and post-curation stages ensures robustness
-- No other files or logic are changed
+### No other files changed
 
