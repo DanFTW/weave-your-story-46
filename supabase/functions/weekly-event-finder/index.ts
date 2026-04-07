@@ -128,6 +128,7 @@ async function searchEventsSingle(interest: string, location: string): Promise<a
     }
 
     const candidates = [
+      data?.data?.results?.events_results,
       data?.data?.response_data?.events_results,
       data?.data?.response_data?.results,
       data?.data?.response_data?.data?.items,
