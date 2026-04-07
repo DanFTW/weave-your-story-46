@@ -324,7 +324,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
   const titleToRawDate = new Map<string, string>();
   for (const e of events) {
     const key = (e.title || e.name || "").toLowerCase().trim();
-    const rawDate = e.date || e.start_date || e.when || "";
+    const rawDate = extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when);
     if (key && rawDate) {
       titleToRawDate.set(key, rawDate);
     }
