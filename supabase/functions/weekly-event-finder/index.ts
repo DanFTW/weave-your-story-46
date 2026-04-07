@@ -221,7 +221,7 @@ ${eventSummaries}`,
 
 // Send email via Composio Gmail
 async function sendEmail(connId: string, to: string, subject: string, body: string) {
-  const res = await fetch("https://backend.composio.dev/api/v3/actions/GMAIL_SEND_EMAIL/execute", {
+  const res = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEND_EMAIL", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
