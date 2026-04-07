@@ -94,9 +94,8 @@ async function searchEvents(query: string, location: string): Promise<any[]> {
   const searchQuery = `${query} events near ${location}`;
   const url = "https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT";
   const body = {
-    appName: "composio_search",
-    entityId: "default",
-    input: { query: searchQuery },
+    entity_id: "default",
+    arguments: { query: searchQuery },
   };
 
   console.log("[EventSearch] URL:", url);
