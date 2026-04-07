@@ -40,17 +40,28 @@ export function SpotifyMusicFinderFlow() {
 
   useEffect(() => {
     if (!isCheckingAuth && isConnected) {
+      // Connected — clear any stale redirect keys so they don't leak to the integration page
+      sessionStorage.removeItem("returnAfterSpotifyConnect");
+      sessionStorage.removeItem("spotifyConnectIntent");
       loadConfig();
     } else if (!isCheckingAuth && !isConnected && !connecting) {
+      // Set intent guard so IntegrationDetail knows this redirect is deliberate
+      sessionStorage.setItem("spotifyConnectIntent", "music-finder");
       sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
       navigate("/integration/spotify");
     }
   }, [isCheckingAuth, isConnected, loadConfig, navigate, connecting]);
 
-  const handleBack = () => navigate("/threads");
+  const handleBack = () => {
+    // Clean up redirect keys when user deliberately leaves
+    sessionStorage.removeItem("returnAfterSpotifyConnect");
+    sessionStorage.removeItem("spotifyConnectIntent");
+    navigate("/threads");
+  };
 
   const handleReconnect = useCallback(async () => {
     setIsReconnecting(true);
+    sessionStorage.setItem("spotifyConnectIntent", "music-finder");
     sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
     await disconnect();
     await new Promise((resolve) => setTimeout(resolve, 500));

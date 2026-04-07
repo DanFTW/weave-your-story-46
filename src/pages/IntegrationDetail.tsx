@@ -49,18 +49,34 @@ export default function IntegrationDetail() {
     checkStatus();
   }, [checkStatus]);
 
+  // On mount: clear stale return keys if user arrived without an active intent
+  // This prevents redirects when the user navigates here independently (e.g. from /integrations)
+  useEffect(() => {
+    if (integrationId) {
+      const capitalizedId = integrationId.charAt(0).toUpperCase() + integrationId.slice(1).toLowerCase();
+      const intentKey = `${integrationId}ConnectIntent`;
+      const returnPathKey = `returnAfter${capitalizedId}Connect`;
+      const hasIntent = sessionStorage.getItem(intentKey);
+      if (!hasIntent) {
+        // No active intent — user arrived directly, clear any stale redirect keys
+        sessionStorage.removeItem(returnPathKey);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Check for return path after connection becomes active (generic for all integrations)
   useEffect(() => {
     if (isConnected && !hasHandledReturn.current && integrationId) {
-      // Build the return path key using capitalized integration name
-      // e.g., 'gmail' -> 'returnAfterGmailConnect', 'trello' -> 'returnAfterTrelloConnect'
       const capitalizedId = integrationId.charAt(0).toUpperCase() + integrationId.slice(1).toLowerCase();
       const returnPathKey = `returnAfter${capitalizedId}Connect`;
+      const intentKey = `${integrationId}ConnectIntent`;
       const returnPath = sessionStorage.getItem(returnPathKey);
       
       if (returnPath) {
         hasHandledReturn.current = true;
         sessionStorage.removeItem(returnPathKey);
+        sessionStorage.removeItem(intentKey);
         // Small delay to show connection success before redirecting
         setTimeout(() => {
           navigate(returnPath);
