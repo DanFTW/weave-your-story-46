@@ -61,6 +61,7 @@ export interface FlowConfig {
   isPurchaseTrackerFlow?: boolean; // If true, uses Purchase Tracker UI
   isSpotifyMusicFinderFlow?: boolean; // If true, uses Spotify Music Finder UI
   isEmailReceiptSheetFlow?: boolean; // If true, uses Email Receipt to Spreadsheet UI
+  isEmailTextAlertFlow?: boolean; // If true, uses Email to Text Alert UI
 }
 
 // Single data entry (e.g., one family member)

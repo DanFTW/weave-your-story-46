@@ -676,6 +676,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     fields: [],
     isSlackMessagesSyncFlow: true,
   },
+  "email-text-alert": {
+    id: "email-text-alert",
+    title: "Email to Text Alert",
+    subtitle: "SMS summaries for important emails",
+    description: "Monitor Gmail for matching emails and send text alert summaries to your phone.",
+    gradient: "orange",
+    icon: Bell,
+    entryName: "alert",
+    entryNamePlural: "alerts",
+    memoryTag: "EMAIL_ALERT",
+    fields: [],
+    isEmailTextAlertFlow: true,
+  },
 };
 
 export function getFlowConfig(flowId: string): FlowConfig | undefined {
