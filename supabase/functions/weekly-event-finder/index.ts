@@ -471,7 +471,7 @@ serve(async (req: Request) => {
           .eq("user_id", userId);
 
         const processedIds = new Set((processed || []).map((p: any) => p.event_id));
-        const newEvents = curated.filter((e: any) => {
+        const newEvents = upcomingCurated.filter((e: any) => {
           const eventId = e.title || e.name || JSON.stringify(e);
           return !processedIds.has(eventId);
         });
