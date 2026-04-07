@@ -89,9 +89,9 @@ async function fetchLiamMemories(): Promise<{ interests: string; location: strin
   return { interests, location };
 }
 
-// Search events via Composio (no auth required)
-async function searchEvents(query: string, location: string): Promise<any[]> {
-  const searchQuery = `${query} events near ${location}`;
+// Search events for a single interest via Composio (no auth required)
+async function searchEventsSingle(interest: string, location: string): Promise<any[]> {
+  const searchQuery = `${interest.trim()} events in ${location.trim()}`;
   const url = "https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT_SEARCH";
   const body = {
     appName: "composio_search",
@@ -99,8 +99,7 @@ async function searchEvents(query: string, location: string): Promise<any[]> {
     arguments: { query: searchQuery },
   };
 
-  console.log("[EventSearch] URL:", url);
-  console.log("[EventSearch] Body:", JSON.stringify(body));
+  console.log("[EventSearch] Query:", searchQuery);
 
   try {
     const res = await fetch(url, {
@@ -123,13 +122,11 @@ async function searchEvents(query: string, location: string): Promise<any[]> {
 
     const data = JSON.parse(rawText);
 
-    // Check Composio successful flag
     if (data?.successful === false || data?.error) {
       console.error("[EventSearch] Composio error:", JSON.stringify(data.error || data));
       return [];
     }
 
-    // Try multiple extraction paths — Composio nests data unpredictably
     const candidates = [
       data?.data?.response_data?.events_results,
       data?.data?.response_data?.results,
@@ -153,12 +150,35 @@ async function searchEvents(query: string, location: string): Promise<any[]> {
       }
     }
 
-    console.warn("[EventSearch] No events found in any extraction path");
+    console.warn("[EventSearch] No events found for query:", searchQuery);
     return [];
   } catch (e) {
     console.error("[EventSearch] Error:", e);
     return [];
   }
+}
+
+// Split interests and search each individually, then deduplicate
+async function searchEvents(interests: string, location: string): Promise<any[]> {
+  const terms = interests.split(",").map(s => s.trim()).filter(Boolean).slice(0, 5);
+  if (terms.length === 0) return [];
+
+  const allResults: any[] = [];
+  const seenTitles = new Set<string>();
+
+  for (const term of terms) {
+    const results = await searchEventsSingle(term, location);
+    for (const r of results) {
+      const key = (r.title || r.name || "").toLowerCase();
+      if (key && !seenTitles.has(key)) {
+        seenTitles.add(key);
+        allResults.push(r);
+      }
+    }
+  }
+
+  console.log(`[EventSearch] Total unique events across ${terms.length} searches: ${allResults.length}`);
+  return allResults;
 }
 
 // Curate events via LLM
