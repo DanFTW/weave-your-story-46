@@ -1,39 +1,46 @@
 
 
-## Investigation Results
+## Analysis: Spotify Auth State Bleed
 
-The edge function logs show exactly what's happening. Two bugs are causing zero posted rows:
+### How it works today
 
-### Bug 1: `.onConflict()` crashes every email (PRIMARY CAUSE)
+Both `/integration/spotify` (IntegrationDetail) and `/flow/spotify-music-finder` (SpotifyMusicFinderFlow) call `useComposio("SPOTIFY")`, which reads/writes the **same** `user_integrations` row (`integration_id = 'spotify'`). They are tightly coupled through two mechanisms:
 
-Every single email processing throws the same error:
-```
-TypeError: sb.from(...).insert(...).onConflict is not a function
-```
+### Problem 1: Stale sessionStorage redirect
 
-The Supabase JS v2 client does not have an `.onConflict()` method on `.insert()`. The correct method is `.upsert()` with `onConflict` as an option. This crash happens at line 635 — after the LLM call returns but before the result can be acted upon. Every email hits the `catch` block, so `totalPosted` stays at 0.
+**SpotifyMusicFinderFlow lines 44-47**: When the thread flow detects Spotify is not connected, it sets `sessionStorage.returnAfterSpotifyConnect = "/flow/spotify-music-finder"` and navigates to `/integration/spotify`.
 
-### Bug 2: Email body field name mismatch
+**IntegrationDetail lines 53-70**: When connection succeeds, it reads `returnAfterSpotifyConnect` from sessionStorage and auto-redirects to that path.
 
-The log shows the Gmail response uses `messageText` as the body field:
-```
-"messageText":"Lovable Labs Incorporated ... Receipt #2148-7756 ..."
-```
+**The bleed**: If a user visits the thread flow (which sets the sessionStorage key), navigates away without connecting, and later goes to `/integration/spotify` independently to connect Spotify for general use, they get unexpectedly redirected to the thread flow. The sessionStorage key persists across the session and is never cleared unless the redirect fires.
 
-But line 605 tries: `e.body ?? e.snippet ?? e.text ?? e.content ?? e.data ?? ""`
+### Problem 2: Reconnect on thread disconnects globally
 
-None of these match `messageText`, so the LLM receives an empty string for every email. Even if Bug 1 were fixed, the LLM would see no content and return `isReceipt: false`.
+**SpotifyMusicFinderFlow lines 52-59**: `handleReconnect` calls `disconnect()` then `connect()`. This deletes the `user_integrations` row entirely — the same row the integration page reads. If both pages were open, the integration page would show disconnected.
 
-### Plan — single file change: `supabase/functions/email-receipt-sheet/index.ts`
+### Problem 3: Thread auto-redirect loop risk
 
-1. **Fix body extraction** (line 605): Add `e.messageText` to the fallback chain, placing it first since that's the field Composio actually returns.
+**SpotifyMusicFinderFlow lines 41-48**: If `isConnected` is false and `connecting` is false, the thread immediately navigates away to `/integration/spotify`. There's no way for the user to stay on the thread page in a disconnected state — the thread has no standalone connect UI, it always delegates to the integration page.
 
-2. **Fix `.onConflict()` crash** (lines 629-635): Replace `.insert({...}).onConflict("user_id,email_message_id")` with `.upsert({...}, { onConflict: "user_id,email_message_id" })`.
+### What's NOT a problem
 
-3. **Add diagnostic logging** in the processing loop:
-   - Log the email body length and first 200 chars being sent to the LLM
-   - Log the LLM's parsed result (`isReceipt`, `vendor`, `amount`)
-   - This surfaces what the LLM receives and returns without needing code changes next time
+Both pages *should* share the same Composio connection — there's only one Spotify OAuth token per user. The `user_integrations` row is the single source of truth for "is Spotify connected." That's correct. The issue is the **navigation coupling and side effects**, not the shared connection state.
 
-No other files or features changed. Redeploy after edit.
+### Plan
+
+**File: `src/components/flows/spotify-music-finder/SpotifyMusicFinderFlow.tsx`**
+
+1. **Clear sessionStorage on thread mount** — Add cleanup logic: when the thread flow component mounts, if the user is already connected, remove `returnAfterSpotifyConnect` so it can't leak into a future integration page visit.
+
+2. **Clear sessionStorage on back navigation** — When the user clicks "Back" (handleBack), remove `returnAfterSpotifyConnect` to prevent stale redirects if they later visit the integration page.
+
+3. **Guard the redirect with intent** — Before setting `returnAfterSpotifyConnect` and navigating to the integration page, set a second flag like `sessionStorage.spotifyConnectIntent = "music-finder"`. On IntegrationDetail, only honor the return redirect if the intent flag matches. This prevents accidental redirects when the user independently visits the integration page.
+
+**File: `src/pages/IntegrationDetail.tsx`**
+
+4. **Clear stale return keys on direct navigation** — If the user arrived at the integration page without an active intent flag (i.e., they navigated here directly from `/integrations`, not from a thread redirect), remove any `returnAfter*Connect` keys for that integration on mount. This prevents accumulated stale keys from prior thread visits.
+
+### Summary
+
+The fix is purely navigation hygiene — clear sessionStorage keys when they're no longer relevant, and add an intent guard so the integration page only auto-redirects when the user was explicitly sent there by a thread flow. No changes to the shared `user_integrations` row or Composio connection logic.
 
