@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare, Music } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare, Music, Bell } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 // Threads moved to bottom: Twitter-related, LinkedIn-related, Coinbase-related, Google Photos
