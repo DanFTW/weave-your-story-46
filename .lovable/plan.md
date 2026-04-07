@@ -1,80 +1,96 @@
 
-Goal: fix the weekly-event-finder curation 404 by making its LLM call match the project’s existing, working pattern instead of using a different endpoint/provider style.
 
-What I found:
-- `supabase/functions/weekly-event-finder/index.ts` is the outlier.
-- Its curation code calls:
-  - URL: `https://lovable.dev/api/v1/chat`
-  - model: `gemini-2.5-flash-preview-05-20`
-- Other working edge functions in this project consistently use:
-  - URL: `https://ai.gateway.lovable.dev/v1/chat/completions`
-  - auth header: `Authorization: Bearer ${LOVABLE_API_KEY}`
-  - model: `google/gemini-3-flash-preview`
-- Examples already working in this repo:
-  - `generate-memories`
-  - `generate-tags`
-  - `calendar-event-sync`
-  - `email-text-alert`
-  - `spotify-music-finder`
-  - `birthday-reminder`
+## Fix event notifications: response inspection, SMS delivery, and DB migration
 
-Why the 404 happens:
-- `weekly-event-finder` is using a different, non-matching endpoint than the rest of the codebase.
-- The current model name also does not match the repo’s established provider/model format.
+### Problem summary
 
-Implementation plan:
-1. Update `curateEvents` in `supabase/functions/weekly-event-finder/index.ts` to use the same Lovable AI Gateway endpoint as the other working functions:
-   - `https://ai.gateway.lovable.dev/v1/chat/completions`
+1. **Email delivery** — `sendEmail` only checks `res.ok` but Composio can return 200 with `{ successful: false }`. Failures are invisible.
+2. **SMS delivery** — The text delivery branch is a `console.log` stub that fakes success. No actual SMS is sent.
+3. **No phone_number column** — `weekly_event_finder_config` has no `phone_number` field, so there's nowhere to store the user's phone number for text delivery.
 
-2. Change the request body to the project-standard model:
-   - `google/gemini-3-flash-preview`
+### Changes
 
-3. Keep the existing backend-only auth pattern:
-   - read `LOVABLE_API_KEY` from env
-   - send `Authorization: Bearer ...`
-   - keep `Content-Type: application/json`
+#### 1. DB migration — add `phone_number` to `weekly_event_finder_config`
 
-4. Improve curation output handling to follow existing best practices in this repo:
-   - preferred: use tool calling for structured curated results instead of regex-parsing freeform JSON
-   - define a tool like `select_events` returning an array of up to 5 curated events with:
-     - `title`
-     - `date`
-     - `description`
-     - `reason`
-   - parse `message.tool_calls[0].function.arguments`
-   - fallback to current top-5 raw events if parsing fails
-
-5. Preserve current resilience behavior:
-   - if `LOVABLE_API_KEY` is missing, return the first 5 events
-   - if the AI call fails, log status/text and fall back to basic filtering
-   - optionally add explicit handling for `429` and `402`, matching the style used elsewhere
-
-Technical details:
-- File to change:
-  - `supabase/functions/weekly-event-finder/index.ts`
-
-- Exact alignment target from other functions:
-```text
-fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    model: "google/gemini-3-flash-preview",
-    ...
-  }),
-})
+```sql
+ALTER TABLE public.weekly_event_finder_config
+ADD COLUMN phone_number text DEFAULT null;
 ```
 
-- Best-practice improvement:
-```text
-Use tools + tool_choice for structured event selection
-instead of asking for JSON in plain text and regex-parsing it.
+#### 2. `sendEmail` — add Composio response body inspection
+
+Read and parse the JSON body after every call. Check for `successful === false` or `error` fields. Log the full response. Return false on logical failure even if HTTP was 200.
+
+```typescript
+async function sendEmail(connId, to, subject, bodyText) {
+  const res = await fetch(...);
+  const data = await res.json();
+
+  if (!res.ok || data?.successful === false || data?.error) {
+    console.error("[EventFinder] Gmail send failed:", res.status, JSON.stringify(data));
+    return false;
+  }
+
+  console.log("[EventFinder] Gmail send succeeded");
+  return true;
+}
 ```
 
-Expected result:
-- The 404 should disappear.
-- Weekly event curation will use the same LLM provider/call pattern already proven elsewhere in the project.
-- The curation step will become more reliable because structured output parsing will match the established edge-function approach.
+#### 3. `sendSms` — implement real SMS delivery
+
+Add a `sendSms` function matching the proven pattern from `email-text-alert`:
+
+```typescript
+const SMS_API_KEY = Deno.env.get("SMS_API_KEY")!;
+
+async function sendSms(to: string, body: string): Promise<boolean> {
+  const res = await fetch("https://weave-mcp-server.onrender.com/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": SMS_API_KEY,
+    },
+    body: JSON.stringify({ to, body }),
+  });
+  if (!res.ok) {
+    console.error("[EventFinder] SMS failed:", res.status, await res.text());
+    return false;
+  }
+  console.log("[EventFinder] SMS sent to", to);
+  return true;
+}
+```
+
+#### 4. Update the text delivery branch in `manual-sync`
+
+Replace the stub with an actual `sendSms` call using `cfg.phone_number`:
+
+```typescript
+} else if (cfg.delivery_method === "text" && cfg.phone_number) {
+  const sent = await sendSms(cfg.phone_number, emailBody);
+  if (sent) delivered = newEvents.length;
+} else {
+  console.warn("[EventFinder] No valid delivery target configured");
+}
+```
+
+#### 5. Update `update-config` action to accept `phoneNumber`
+
+Add `phoneNumber` to the destructured params and persist it as `phone_number`.
+
+#### 6. Frontend — wire `phone_number` through config and UI
+
+- **`src/types/weeklyEventFinder.ts`** — add `phoneNumber: string | null` to `WeeklyEventFinderConfig`.
+- **`src/hooks/useWeeklyEventFinder.ts`** — map `phone_number` from DB row, pass it in `updateConfig`.
+- **`src/components/flows/weekly-event-finder/EventFinderConfig.tsx`** — add a phone number input field (shown when delivery method is "text"), matching the existing email input pattern.
+
+#### 7. Redeploy the edge function
+
+### Files touched
+
+- `supabase/functions/weekly-event-finder/index.ts` — steps 2, 3, 4, 5
+- `src/types/weeklyEventFinder.ts` — step 6
+- `src/hooks/useWeeklyEventFinder.ts` — step 6
+- `src/components/flows/weekly-event-finder/EventFinderConfig.tsx` — step 6
+- DB migration — step 1
+
