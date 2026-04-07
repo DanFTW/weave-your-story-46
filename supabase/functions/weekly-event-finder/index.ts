@@ -181,9 +181,29 @@ async function searchEvents(interests: string, location: string): Promise<any[]>
   return allResults;
 }
 
+// Safely coerce any date field value (string, object, Date) into a string
+function extractDateString(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    const v = value as Record<string, any>;
+    if (v.dateTime) return String(v.dateTime);
+    if (v.date) return extractDateString(v.date);
+    if (v.year && v.month && v.day) {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      let s = `${v.year}-${pad(v.month)}-${pad(v.day)}`;
+      if (v.hour != null) s += `T${pad(v.hour)}:${pad(v.minute || 0)}:00`;
+      return s;
+    }
+    try { return JSON.stringify(value); } catch { return ""; }
+  }
+  return String(value);
+}
+
 // Filter out events with dates in the past
 function isUpcomingEvent(event: any): boolean {
-  const dateStr = event.date || event.start_date || event.when || "";
+  const dateStr = extractDateString(event.date) || extractDateString(event.start_date) || extractDateString(event.when);
   if (!dateStr) return true;
   try {
     const eventDate = new Date(dateStr);
@@ -208,7 +228,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
 
   const eventSummaries = events
     .slice(0, 15)
-    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — Date: ${e.date || e.start_date || e.when || "unknown"} — ${e.link || e.url || e.event_url || ""}`)
+    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — Date: ${extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when) || "unknown"} — ${e.link || e.url || e.event_url || ""}`)
     .join("\n");
 
   let curated: any[];
@@ -304,7 +324,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
   const titleToRawDate = new Map<string, string>();
   for (const e of events) {
     const key = (e.title || e.name || "").toLowerCase().trim();
-    const rawDate = e.date || e.start_date || e.when || "";
+    const rawDate = extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when);
     if (key && rawDate) {
       titleToRawDate.set(key, rawDate);
     }
@@ -514,7 +534,7 @@ serve(async (req: Request) => {
         const eventList = newEvents
           .map((e: any, i: number) => {
             const title = e.title || e.name || "Untitled Event";
-            const dateStr = e.date || e.start_date || e.when || "";
+            const dateStr = extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when);
             let formattedDate = dateStr;
             if (dateStr) {
               try {
@@ -526,13 +546,14 @@ serve(async (req: Request) => {
                     day: "numeric",
                     year: "numeric",
                   });
-                  const timeStr = d.toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                  });
                   if (d.getHours() !== 0 || d.getMinutes() !== 0) {
-                    formattedDate += ` at ${timeStr}`;
+                    const timeStr = d.toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      hour12: true,
+                      timeZoneName: "short",
+                    });
+                    formattedDate += ` @ ${timeStr}`;
                   }
                 }
               } catch {
