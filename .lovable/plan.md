@@ -1,37 +1,31 @@
 
 
-## Fix: Weekly Event Finder returning 0 events
+## Fix: COMPOSIO_SEARCH_EVENT 400 error
 
 ### Root Cause
 
-The slug `COMPOSIO_SEARCH_EVENT` is correct per the Composio dashboard. The current code already uses it. The issue is likely the **API version** (`/api/v3/actions/` may not route this tool correctly) and the **lack of logging** to see what Composio actually returns.
+The Composio v2 `/actions/.../execute` endpoint returns 400 with "App name and entity id must be present, if connected account id is not specified." The current request body only sends `{ input: { query } }` — it's missing the required `appName` and `entityId` fields.
 
-### Changes (single file)
+### Change (single file)
 
-**`supabase/functions/weekly-event-finder/index.ts`** — `searchEvents` function only:
+**`supabase/functions/weekly-event-finder/index.ts`** — `searchEvents` function, line 96:
 
-1. **Add verbose logging** before and after the Composio call:
-   - Log the full request URL and body
-   - Log the response status code
-   - Log the raw response body (truncated to 2000 chars)
-   - Log each extraction path attempt and whether it yielded results
+Change the request body from:
+```typescript
+const body = { input: { query: searchQuery } };
+```
+to:
+```typescript
+const body = {
+  appName: "composio",
+  entityId: "default",
+  input: { query: searchQuery },
+};
+```
 
-2. **Try the v2 endpoint as well**: Change from `/api/v3/actions/COMPOSIO_SEARCH_EVENT/execute` to `/api/v2/actions/COMPOSIO_SEARCH_EVENT/execute` — the v2 actions endpoint is the standard one for tool execution without a connected account
-
-3. **Broaden response extraction**: Add more extraction paths to handle various Composio response shapes:
-   - `data.response_data.events_results`
-   - `data.response_data.results`
-   - `data.response_data` (if it's an array itself)
-   - Keep existing paths as fallbacks
-
-4. **Remove `limit` param**: `COMPOSIO_SEARCH_EVENT` may not accept `limit` — pass only `query` to avoid rejected/ignored params
-
-### What stays the same
-- Tool slug: `COMPOSIO_SEARCH_EVENT` (confirmed correct)
-- LLM curation, email delivery, all frontend code — unchanged
+`appName: "composio"` identifies the COMPOSIO_SEARCH_EVENT tool's parent app. `entityId: "default"` is the standard Composio entity for tools that don't require user-level OAuth. No other changes needed.
 
 ### After deployment
 - Redeploy the edge function
-- Trigger "Find events now" and check edge function logs to see the actual Composio response shape
-- If events are returned in an unexpected structure, the logs will reveal it for a quick follow-up fix
+- Trigger "Find events now" and check logs to confirm a 200 response with event data
 
