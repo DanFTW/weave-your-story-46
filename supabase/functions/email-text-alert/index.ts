@@ -11,6 +11,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+const SMS_API_KEY = Deno.env.get("SMS_API_KEY")!;
 
 function getUserId(req: Request): string | null {
   const authHeader = req.headers.get("authorization");
@@ -181,6 +182,28 @@ async function summarizeEmail(emailBody: string): Promise<string> {
   }
 }
 
+async function sendSms(to: string, body: string): Promise<void> {
+  try {
+    const res = await fetch("https://weave-mcp-server.onrender.com/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": SMS_API_KEY,
+      },
+      body: JSON.stringify({ to, body }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[TextAlert] SMS send failed ${res.status}:`, errText);
+    } else {
+      console.log(`[TextAlert] SMS sent to ${to}`);
+    }
+  } catch (e) {
+    console.error("[TextAlert] SMS send error:", e);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -283,8 +306,8 @@ serve(async (req) => {
           summary,
         });
 
-        // Log the would-be SMS
-        console.log(`[TextAlert] Would send SMS to ${configData.phone_number}: ${summary}`);
+        // Send SMS alert
+        await sendSms(configData.phone_number, summary);
         alertCount++;
       }
 
