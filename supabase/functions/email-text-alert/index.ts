@@ -39,19 +39,53 @@ async function getGmailConnectionId(sb: any, userId: string): Promise<string | n
   return data?.composio_connection_id ?? null;
 }
 
-function buildGmailQuery(senderFilter: string | null, keywordFilter: string | null): string {
-  const parts: string[] = [];
+interface SenderRule {
+  email: string;
+  keywords: string[];
+}
 
-  if (senderFilter) {
-    const senders = senderFilter.split(",").map((s) => s.trim()).filter(Boolean);
-    if (senders.length > 0) {
-      const fromClauses = senders.map((s) => `from:${s}`).join(" OR ");
-      parts.push(`(${fromClauses})`);
+function buildGmailQuery(senderFilter: string | null, keywordFilter: string | null): string {
+  if (!senderFilter) {
+    return "newer_than:7d";
+  }
+
+  const trimmed = senderFilter.trim();
+
+  // New JSON format: [{ email, keywords }]
+  if (trimmed.startsWith("[")) {
+    try {
+      const rules: SenderRule[] = JSON.parse(trimmed);
+      if (Array.isArray(rules) && rules.length > 0) {
+        const ruleClauses = rules
+          .filter((r) => r.email)
+          .map((r) => {
+            const from = `from:${r.email}`;
+            if (r.keywords && r.keywords.length > 0) {
+              const kws = r.keywords.map((k) => `"${k}"`).join(" OR ");
+              return `(${from} (${kws}))`;
+            }
+            return `(${from})`;
+          });
+
+        if (ruleClauses.length > 0) {
+          return `(${ruleClauses.join(" OR ")}) newer_than:7d`;
+        }
+      }
+    } catch {
+      // fall through to legacy
     }
   }
 
+  // Legacy: comma/||| separated senders with optional global keywords
+  const parts: string[] = [];
+  const senders = trimmed.split(/\|\|\||,/).map((s) => s.trim()).filter(Boolean);
+  if (senders.length > 0) {
+    const fromClauses = senders.map((s) => `from:${s}`).join(" OR ");
+    parts.push(`(${fromClauses})`);
+  }
+
   if (keywordFilter) {
-    const keywords = keywordFilter.split(",").map((k) => k.trim()).filter(Boolean);
+    const keywords = keywordFilter.split(/\|\|\||,/).map((k) => k.trim()).filter(Boolean);
     if (keywords.length > 0) {
       const kwClauses = keywords.map((k) => `"${k}"`).join(" OR ");
       parts.push(`(${kwClauses})`);
