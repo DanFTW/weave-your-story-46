@@ -467,7 +467,7 @@ serve(async (req: Request) => {
 
         // Build delivery content
         const eventList = newEvents
-          .map((e: any, i: number) => `${i + 1}. ${e.title || e.name}\n   ${e.date || ""}\n   ${e.description || ""}\n   ${e.reason || ""}`)
+          .map((e: any, i: number) => `${i + 1}. ${e.title || e.name}\n   ${e.date || ""}\n   ${e.description || ""}\n   ${e.reason || ""}${e.link ? `\n   ${e.link}` : ""}`)
           .join("\n\n");
 
         const emailBody = `Hi! Here are events we found matching your interests:\n\n${eventList}\n\n— Weave Event Finder`;
