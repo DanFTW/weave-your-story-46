@@ -1,0 +1,392 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+const LIAM_API_KEY = Deno.env.get("LIAM_API_KEY")!;
+const LIAM_USER_KEY = Deno.env.get("LIAM_USER_KEY")!;
+
+function getUserId(req: Request): string | null {
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader) return null;
+  try {
+    const token = authHeader.replace("Bearer ", "");
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.sub || null;
+  } catch {
+    return null;
+  }
+}
+
+function adminClient() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+}
+
+async function getGmailConnectionId(sb: any, userId: string): Promise<string | null> {
+  const { data } = await sb
+    .from("user_integrations")
+    .select("composio_connection_id")
+    .eq("user_id", userId)
+    .eq("integration_id", "gmail")
+    .eq("status", "connected")
+    .maybeSingle();
+  return data?.composio_connection_id ?? null;
+}
+
+// Fetch LIAM memories to pre-fill interests & location
+async function fetchLiamMemories(): Promise<{ interests: string; location: string }> {
+  let interests = "";
+  let location = "";
+
+  try {
+    const res = await fetch("https://web.askbuddy.ai/devspacexdb/api/memory/list", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apiKey: LIAM_API_KEY,
+      },
+      body: JSON.stringify({ userKey: LIAM_USER_KEY }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const memories = data?.memories || data?.data || [];
+
+      const interestWords: string[] = [];
+      const locationWords: string[] = [];
+
+      for (const m of memories) {
+        const text = (m.memory || m.content || "").toLowerCase();
+        // Heuristic: if memory mentions "interest", "hobby", "love", "enjoy" → interests
+        if (/interest|hobby|hobbies|love|enjoy|passion|like doing/i.test(text)) {
+          interestWords.push(m.memory || m.content);
+        }
+        // Heuristic: if memory mentions "live in", "based in", "located", city names
+        if (/live in|based in|located|city|town|neighborhood|address/i.test(text)) {
+          locationWords.push(m.memory || m.content);
+        }
+      }
+
+      if (interestWords.length > 0) {
+        interests = interestWords.slice(0, 5).join("; ");
+      }
+      if (locationWords.length > 0) {
+        location = locationWords[0];
+      }
+    }
+  } catch (e) {
+    console.error("Failed to fetch LIAM memories:", e);
+  }
+
+  return { interests, location };
+}
+
+// Search events via Composio (no auth required)
+async function searchEvents(query: string, location: string): Promise<any[]> {
+  try {
+    const res = await fetch("https://backend.composio.dev/api/v3/actions/COMPOSIO_SEARCH_EVENT/execute", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": COMPOSIO_API_KEY,
+      },
+      body: JSON.stringify({
+        input: {
+          query: `${query} events near ${location}`,
+          limit: 20,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("Composio search failed:", res.status, await res.text());
+      return [];
+    }
+
+    const data = await res.json();
+
+    // Extract events from nested Composio response
+    const items =
+      data?.data?.response_data?.data?.items ||
+      data?.data?.response_data?.items ||
+      data?.data?.items ||
+      data?.items ||
+      [];
+
+    return Array.isArray(items) ? items : [];
+  } catch (e) {
+    console.error("Event search error:", e);
+    return [];
+  }
+}
+
+// Curate events via LLM
+async function curateEvents(events: any[], interests: string): Promise<any[]> {
+  if (events.length === 0) return [];
+
+  const apiKey = LOVABLE_API_KEY;
+  if (!apiKey) {
+    console.warn("No LOVABLE_API_KEY — returning raw events");
+    return events.slice(0, 5);
+  }
+
+  const eventSummaries = events
+    .slice(0, 15)
+    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — ${e.date || e.start_date || ""}`)
+    .join("\n");
+
+  try {
+    const res = await fetch("https://lovable.dev/api/v1/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gemini-2.5-flash-preview-05-20",
+        messages: [
+          {
+            role: "user",
+            content: `You are an event curator. Given a user's interests and a list of events, pick the top 5 most relevant events. Return ONLY a JSON array of objects with "title", "date", "description", and "reason" (why it matches). No markdown, just JSON.
+
+User interests: ${interests}
+
+Events:
+${eventSummaries}`,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("LLM curation failed:", res.status);
+      return events.slice(0, 5);
+    }
+
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+
+    // Extract JSON from response
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+
+    return events.slice(0, 5);
+  } catch (e) {
+    console.error("LLM error:", e);
+    return events.slice(0, 5);
+  }
+}
+
+// Send email via Composio Gmail
+async function sendEmail(connId: string, to: string, subject: string, body: string) {
+  const res = await fetch("https://backend.composio.dev/api/v3/actions/GMAIL_SEND_EMAIL/execute", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": COMPOSIO_API_KEY,
+    },
+    body: JSON.stringify({
+      connectedAccountId: connId,
+      authConfig: { parameters: [{ name: "auth_config_id", value: "ac_IlbziSKZknmH" }] },
+      input: {
+        recipient_email: to,
+        subject,
+        message_body: body,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    console.error("Gmail send failed:", res.status, await res.text());
+  }
+  return res.ok;
+}
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { action, ...params } = await req.json();
+    const sb = adminClient();
+
+    switch (action) {
+      case "activate": {
+        await sb
+          .from("weekly_event_finder_config")
+          .update({ is_active: true })
+          .eq("user_id", userId);
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "deactivate": {
+        await sb
+          .from("weekly_event_finder_config")
+          .update({ is_active: false })
+          .eq("user_id", userId);
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "update-config": {
+        const { interests, location, frequency, deliveryMethod, email } = params;
+        await sb
+          .from("weekly_event_finder_config")
+          .update({
+            interests,
+            location,
+            frequency,
+            delivery_method: deliveryMethod,
+            email,
+          })
+          .eq("user_id", userId);
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "prefill": {
+        const result = await fetchLiamMemories();
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "manual-sync": {
+        // Load config
+        const { data: cfg } = await sb
+          .from("weekly_event_finder_config")
+          .select("*")
+          .eq("user_id", userId)
+          .single();
+
+        if (!cfg) {
+          return new Response(JSON.stringify({ error: "No config found" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const interests = cfg.interests || "";
+        const location = cfg.location || "";
+
+        if (!interests || !location) {
+          return new Response(JSON.stringify({ error: "Interests and location required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Search events
+        const rawEvents = await searchEvents(interests, location);
+        console.log(`Found ${rawEvents.length} raw events`);
+
+        // Curate via LLM
+        const curated = await curateEvents(rawEvents, interests);
+        console.log(`Curated to ${curated.length} events`);
+
+        // Filter out already-processed events
+        const { data: processed } = await sb
+          .from("weekly_event_finder_processed")
+          .select("event_id")
+          .eq("user_id", userId);
+
+        const processedIds = new Set((processed || []).map((p: any) => p.event_id));
+        const newEvents = curated.filter((e: any) => {
+          const eventId = e.title || e.name || JSON.stringify(e);
+          return !processedIds.has(eventId);
+        });
+
+        if (newEvents.length === 0) {
+          return new Response(JSON.stringify({ eventsFound: 0, delivered: 0 }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Build delivery content
+        const eventList = newEvents
+          .map((e: any, i: number) => `${i + 1}. ${e.title || e.name}\n   ${e.date || ""}\n   ${e.description || ""}\n   ${e.reason || ""}`)
+          .join("\n\n");
+
+        const emailBody = `Hi! Here are events we found matching your interests:\n\n${eventList}\n\n— Weave Event Finder`;
+
+        let delivered = 0;
+
+        if (cfg.delivery_method === "email" && cfg.email) {
+          const connId = await getGmailConnectionId(sb, userId);
+          if (connId) {
+            const sent = await sendEmail(
+              connId,
+              cfg.email,
+              `🎉 ${newEvents.length} Events Found For You`,
+              emailBody
+            );
+            if (sent) delivered = newEvents.length;
+          } else {
+            console.warn("No Gmail connection found for email delivery");
+          }
+        } else {
+          // Text delivery — stubbed
+          console.log("[TEXT DELIVERY STUB]", emailBody);
+          delivered = newEvents.length;
+        }
+
+        // Record processed events
+        for (const e of newEvents) {
+          const eventId = e.title || e.name || JSON.stringify(e);
+          await sb.from("weekly_event_finder_processed").upsert(
+            { user_id: userId, event_id: eventId, event_title: e.title || e.name || "" },
+            { onConflict: "user_id,event_id" }
+          );
+        }
+
+        // Update counter
+        await sb
+          .from("weekly_event_finder_config")
+          .update({ events_found: (cfg.events_found || 0) + newEvents.length })
+          .eq("user_id", userId);
+
+        return new Response(JSON.stringify({ eventsFound: newEvents.length, delivered }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      default:
+        return new Response(JSON.stringify({ error: "Unknown action" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+    }
+  } catch (e) {
+    console.error("Edge function error:", e);
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

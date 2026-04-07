@@ -19,7 +19,7 @@ const flowEnabledThreads = [
   'birthday-reminder', 'calendar-event-sync', 'restaurant-bookmark-sync', 'grocery-sheet-sync',
   'coinbase-trades', 'instagram-analytics', 'facebook-sync', 'facebook-page-posts',
   'website-scrape', 'linkedin-profile-scrape', 'slack-messages-sync', 'gmail-purchase-tracker',
-  'spotify-music-finder', 'email-receipt-sheet', 'email-text-alert'
+  'spotify-music-finder', 'email-receipt-sheet', 'email-text-alert', 'weekly-event-finder'
 ];
 
 type FlowModeFilter = "all" | "thread" | "flow" | "dump";

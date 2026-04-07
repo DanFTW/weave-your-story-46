@@ -1,0 +1,133 @@
+import { Heart, MapPin, Clock, Mail, Phone, Pause, RefreshCw, Loader2, Calendar } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { WeeklyEventFinderStats, WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
+
+interface ActiveMonitoringProps {
+  stats: WeeklyEventFinderStats;
+  config: WeeklyEventFinderConfig;
+  onPause: () => Promise<boolean>;
+  onManualSync: () => Promise<void>;
+  isSyncing: boolean;
+}
+
+export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing }: ActiveMonitoringProps) {
+  return (
+    <div className="space-y-6">
+      {/* Toggle card */}
+      <div className="bg-card rounded-2xl border border-border p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground text-base">Event Finder</h3>
+              <p className="text-muted-foreground text-sm">
+                {stats.isActive ? "Active" : "Paused"}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={stats.isActive}
+            onCheckedChange={(checked) => {
+              if (!checked) onPause();
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Config summary */}
+      <div className="bg-card rounded-2xl border border-border p-5 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Heart className="w-5 h-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">Interests</p>
+            <p className="text-sm font-semibold text-foreground line-clamp-2">
+              {config.interests || "Not set"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <MapPin className="w-5 h-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">Location</p>
+            <p className="text-sm font-semibold text-foreground truncate">
+              {config.location || "Not set"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Clock className="w-5 h-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">Frequency</p>
+            <p className="text-sm font-semibold text-foreground capitalize">{config.frequency}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            {config.deliveryMethod === "email" ? (
+              <Mail className="w-5 h-5 text-primary" />
+            ) : (
+              <Phone className="w-5 h-5 text-primary" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">Delivery</p>
+            <p className="text-sm font-semibold text-foreground truncate">
+              {config.deliveryMethod === "email" ? config.email : "Text message"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <Calendar className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <p className="text-2xl font-bold text-foreground">{stats.eventsFound}</p>
+          <p className="text-sm text-muted-foreground">Events found</p>
+        </div>
+      </div>
+
+      {/* Sync now */}
+      <button
+        onClick={onManualSync}
+        disabled={isSyncing}
+        className="w-full bg-card rounded-2xl border border-border p-5 flex items-center gap-4 hover:bg-accent/50 transition-colors disabled:opacity-60"
+      >
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          {isSyncing ? (
+            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+          ) : (
+            <RefreshCw className="w-5 h-5 text-primary" />
+          )}
+        </div>
+        <div className="text-left">
+          <p className="font-semibold text-foreground text-base">
+            {isSyncing ? "Searching…" : "Find events now"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Search for events matching your interests
+          </p>
+        </div>
+      </button>
+
+      {/* Pause hint */}
+      <button
+        onClick={onPause}
+        className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground py-3"
+      >
+        <Pause className="w-4 h-4" />
+        Pause event finder
+      </button>
+    </div>
+  );
+}

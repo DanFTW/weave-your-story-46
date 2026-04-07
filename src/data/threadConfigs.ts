@@ -1294,6 +1294,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "weekly-event-finder": {
+    id: "weekly-event-finder",
+    title: "Weekly Event Finder",
+    subtitle: "Personalized event discovery",
+    description: "Uses your interests and location to find local events, curates them with AI, and delivers the best matches via email or text on your chosen schedule.",
+    gradient: "purple",
+    icon: Calendar,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to send event emails",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Configure Preferences",
+        description: "Set interests, location, and delivery",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Discovery",
+        description: "Events found automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
 };
 
 export function getThreadConfig(threadId: string): ThreadConfig | undefined {

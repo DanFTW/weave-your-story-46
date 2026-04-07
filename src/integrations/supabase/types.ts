@@ -2005,6 +2005,72 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_event_finder_config: {
+        Row: {
+          created_at: string
+          delivery_method: string
+          email: string | null
+          events_found: number
+          frequency: string
+          id: string
+          interests: string | null
+          is_active: boolean
+          location: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_method?: string
+          email?: string | null
+          events_found?: number
+          frequency?: string
+          id?: string
+          interests?: string | null
+          is_active?: boolean
+          location?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_method?: string
+          email?: string | null
+          events_found?: number
+          frequency?: string
+          id?: string
+          interests?: string | null
+          is_active?: boolean
+          location?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      weekly_event_finder_processed: {
+        Row: {
+          event_id: string
+          event_title: string | null
+          id: string
+          processed_at: string
+          user_id: string
+        }
+        Insert: {
+          event_id: string
+          event_title?: string | null
+          id?: string
+          processed_at?: string
+          user_id: string
+        }
+        Update: {
+          event_id?: string
+          event_title?: string | null
+          id?: string
+          processed_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       youtube_sync_config: {
         Row: {
           created_at: string
