@@ -182,6 +182,28 @@ async function summarizeEmail(emailBody: string): Promise<string> {
   }
 }
 
+async function sendSms(to: string, body: string): Promise<void> {
+  try {
+    const res = await fetch("https://weave-mcp-server.onrender.com/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": SMS_API_KEY,
+      },
+      body: JSON.stringify({ to, body }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[TextAlert] SMS send failed ${res.status}:`, errText);
+    } else {
+      console.log(`[TextAlert] SMS sent to ${to}`);
+    }
+  } catch (e) {
+    console.error("[TextAlert] SMS send error:", e);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
