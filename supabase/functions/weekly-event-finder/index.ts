@@ -13,6 +13,7 @@ const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const LIAM_API_KEY = Deno.env.get("LIAM_API_KEY")!;
 const LIAM_USER_KEY = Deno.env.get("LIAM_USER_KEY")!;
+const SMS_API_KEY = Deno.env.get("SMS_API_KEY")!;
 
 function getUserId(req: Request): string | null {
   const authHeader = req.headers.get("authorization");
@@ -65,11 +66,9 @@ async function fetchLiamMemories(): Promise<{ interests: string; location: strin
 
       for (const m of memories) {
         const text = (m.memory || m.content || "").toLowerCase();
-        // Heuristic: if memory mentions "interest", "hobby", "love", "enjoy" → interests
         if (/interest|hobby|hobbies|love|enjoy|passion|like doing/i.test(text)) {
           interestWords.push(m.memory || m.content);
         }
-        // Heuristic: if memory mentions "live in", "based in", "located", city names
         if (/live in|based in|located|city|town|neighborhood|address/i.test(text)) {
           locationWords.push(m.memory || m.content);
         }
@@ -281,29 +280,71 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
   }
 }
 
-// Send email via Composio Gmail
-async function sendEmail(connId: string, to: string, subject: string, bodyText: string) {
-  const res = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEND_EMAIL", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": COMPOSIO_API_KEY,
-    },
-    body: JSON.stringify({
-      connected_account_id: connId,
-      auth_config_id: "ac_IlbziSKZknmH",
-      arguments: {
-        recipient_email: to,
-        subject,
-        message_body: bodyText,
+// Send email via Composio Gmail — with full response inspection
+async function sendEmail(connId: string, to: string, subject: string, bodyText: string): Promise<boolean> {
+  try {
+    const res = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEND_EMAIL", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": COMPOSIO_API_KEY,
       },
-    }),
-  });
+      body: JSON.stringify({
+        connected_account_id: connId,
+        auth_config_id: "ac_IlbziSKZknmH",
+        arguments: {
+          recipient_email: to,
+          subject,
+          message_body: bodyText,
+        },
+      }),
+    });
 
-  if (!res.ok) {
-    console.error("Gmail send failed:", res.status, await res.text());
+    const data = await res.json();
+    console.log("[EventFinder] Gmail send response:", res.status, JSON.stringify(data).slice(0, 1000));
+
+    if (!res.ok) {
+      console.error("[EventFinder] Gmail send HTTP error:", res.status, JSON.stringify(data));
+      return false;
+    }
+
+    if (data?.successful === false || data?.error) {
+      console.error("[EventFinder] Gmail send logical failure:", JSON.stringify(data));
+      return false;
+    }
+
+    console.log("[EventFinder] Gmail send succeeded to:", to);
+    return true;
+  } catch (e) {
+    console.error("[EventFinder] Gmail send exception:", e);
+    return false;
   }
-  return res.ok;
+}
+
+// Send SMS via weave-mcp-server gateway
+async function sendSms(to: string, body: string): Promise<boolean> {
+  try {
+    const res = await fetch("https://weave-mcp-server.onrender.com/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": SMS_API_KEY,
+      },
+      body: JSON.stringify({ to, body }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("[EventFinder] SMS send failed:", res.status, errText);
+      return false;
+    }
+
+    console.log("[EventFinder] SMS sent to:", to);
+    return true;
+  } catch (e) {
+    console.error("[EventFinder] SMS send exception:", e);
+    return false;
+  }
 }
 
 serve(async (req: Request) => {
@@ -347,7 +388,7 @@ serve(async (req: Request) => {
       }
 
       case "update-config": {
-        const { interests, location, frequency, deliveryMethod, email } = params;
+        const { interests, location, frequency, deliveryMethod, email, phoneNumber } = params;
         await sb
           .from("weekly_event_finder_config")
           .update({
@@ -356,6 +397,7 @@ serve(async (req: Request) => {
             frequency,
             delivery_method: deliveryMethod,
             email,
+            phone_number: phoneNumber ?? null,
           })
           .eq("user_id", userId);
 
@@ -442,12 +484,13 @@ serve(async (req: Request) => {
             );
             if (sent) delivered = newEvents.length;
           } else {
-            console.warn("No Gmail connection found for email delivery");
+            console.warn("[EventFinder] No Gmail connection found for email delivery");
           }
+        } else if (cfg.delivery_method === "text" && cfg.phone_number) {
+          const sent = await sendSms(cfg.phone_number, emailBody);
+          if (sent) delivered = newEvents.length;
         } else {
-          // Text delivery — stubbed
-          console.log("[TEXT DELIVERY STUB]", emailBody);
-          delivered = newEvents.length;
+          console.warn("[EventFinder] No valid delivery target configured — method:", cfg.delivery_method, "email:", cfg.email, "phone:", cfg.phone_number);
         }
 
         // Record processed events

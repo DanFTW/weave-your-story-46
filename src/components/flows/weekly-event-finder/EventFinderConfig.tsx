@@ -5,7 +5,7 @@ import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
   onActivate: () => Promise<void>;
-  onUpdateConfig: (interests: string, location: string, frequency: string, deliveryMethod: string, email: string) => Promise<void>;
+  onUpdateConfig: (interests: string, location: string, frequency: string, deliveryMethod: string, email: string, phoneNumber: string) => Promise<void>;
   isActivating: boolean;
   onPrefill: () => Promise<{ interests: string; location: string } | null>;
 }
@@ -16,6 +16,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   const [frequency, setFrequency] = useState<"weekly" | "daily">(config.frequency ?? "weekly");
   const [deliveryMethod, setDeliveryMethod] = useState<"email" | "text">(config.deliveryMethod ?? "email");
   const [email, setEmail] = useState(config.email ?? "");
+  const [phoneNumber, setPhoneNumber] = useState(config.phoneNumber ?? "");
   const [isPrefilling, setIsPrefilling] = useState(false);
 
   useEffect(() => {
@@ -31,10 +32,10 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   }, []);
 
   const canActivate = interests.trim().length > 0 && location.trim().length > 0 &&
-    (deliveryMethod === "text" || email.trim().length > 0);
+    (deliveryMethod === "email" ? email.trim().length > 0 : phoneNumber.trim().length > 0);
 
   const handleActivate = async () => {
-    await onUpdateConfig(interests.trim(), location.trim(), frequency, deliveryMethod, email.trim());
+    await onUpdateConfig(interests.trim(), location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim());
     await onActivate();
   };
 
@@ -157,6 +158,23 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         </div>
       )}
 
+      {/* Phone number input (shown only for text delivery) */}
+      {deliveryMethod === "text" && (
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Phone className="w-4 h-4 text-muted-foreground" />
+            Phone number
+          </label>
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="e.g. +1 (555) 123-4567"
+            className="w-full h-[52px] px-4 bg-muted rounded-[20px] text-foreground placeholder:text-muted-foreground/60 text-base outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+      )}
+
       {/* Activate button */}
       <button
         onClick={handleActivate}
@@ -168,7 +186,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
 
       {!canActivate && (
         <p className="text-xs text-muted-foreground text-center">
-          Add your interests, location{deliveryMethod === "email" ? ", and email" : ""} to activate
+          Add your interests, location{deliveryMethod === "email" ? ", and email" : ", and phone number"} to activate
         </p>
       )}
     </div>

@@ -1,0 +1,1 @@
+ALTER TABLE public.weekly_event_finder_config ADD COLUMN phone_number text DEFAULT null;
