@@ -1,48 +1,80 @@
 
+Goal: fix the weekly-event-finder curation 404 by making its LLM call match the project’s existing, working pattern instead of using a different endpoint/provider style.
 
-## Fix: Event extraction path and location parameter
+What I found:
+- `supabase/functions/weekly-event-finder/index.ts` is the outlier.
+- Its curation code calls:
+  - URL: `https://lovable.dev/api/v1/chat`
+  - model: `gemini-2.5-flash-preview-05-20`
+- Other working edge functions in this project consistently use:
+  - URL: `https://ai.gateway.lovable.dev/v1/chat/completions`
+  - auth header: `Authorization: Bearer ${LOVABLE_API_KEY}`
+  - model: `google/gemini-3-flash-preview`
+- Examples already working in this repo:
+  - `generate-memories`
+  - `generate-tags`
+  - `calendar-event-sync`
+  - `email-text-alert`
+  - `spotify-music-finder`
+  - `birthday-reminder`
 
-### Problem
+Why the 404 happens:
+- `weekly-event-finder` is using a different, non-matching endpoint than the rest of the codebase.
+- The current model name also does not match the repo’s established provider/model format.
 
-From the logs, the actual Composio response structure is:
-```json
-{
-  "data": {
-    "results": {
-      "events_results": [{ "title": "...", ... }]
-    }
+Implementation plan:
+1. Update `curateEvents` in `supabase/functions/weekly-event-finder/index.ts` to use the same Lovable AI Gateway endpoint as the other working functions:
+   - `https://ai.gateway.lovable.dev/v1/chat/completions`
+
+2. Change the request body to the project-standard model:
+   - `google/gemini-3-flash-preview`
+
+3. Keep the existing backend-only auth pattern:
+   - read `LOVABLE_API_KEY` from env
+   - send `Authorization: Bearer ...`
+   - keep `Content-Type: application/json`
+
+4. Improve curation output handling to follow existing best practices in this repo:
+   - preferred: use tool calling for structured curated results instead of regex-parsing freeform JSON
+   - define a tool like `select_events` returning an array of up to 5 curated events with:
+     - `title`
+     - `date`
+     - `description`
+     - `reason`
+   - parse `message.tool_calls[0].function.arguments`
+   - fallback to current top-5 raw events if parsing fails
+
+5. Preserve current resilience behavior:
+   - if `LOVABLE_API_KEY` is missing, return the first 5 events
+   - if the AI call fails, log status/text and fall back to basic filtering
+   - optionally add explicit handling for `429` and `402`, matching the style used elsewhere
+
+Technical details:
+- File to change:
+  - `supabase/functions/weekly-event-finder/index.ts`
+
+- Exact alignment target from other functions:
+```text
+fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${LOVABLE_API_KEY}`,
+    "Content-Type": "application/json",
   },
-  "successful": true
-}
+  body: JSON.stringify({
+    model: "google/gemini-3-flash-preview",
+    ...
+  }),
+})
 ```
 
-But the extraction candidates list checks `data.response_data.events_results`, `data.response_data.results`, etc. — it never checks `data.results.events_results`, which is where the events actually live. That's why events are visible in the raw log but extraction returns nothing.
-
-Additionally, the COMPOSIO_SEARCH_EVENT_SEARCH tool accepts a separate `location` parameter in `arguments`, so we should pass it there instead of appending to the query string.
-
-### Changes — `supabase/functions/weekly-event-finder/index.ts`
-
-**1. Pass location as a separate argument** (lines 93-100):
-```typescript
-async function searchEventsSingle(interest: string, location: string): Promise<any[]> {
-  const searchQuery = `${interest.trim()} events`;
-  const url = "https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT_SEARCH";
-  const body = {
-    appName: "composio_search",
-    entity_id: "default",
-    arguments: { query: searchQuery, location: location.trim() },
-  };
+- Best-practice improvement:
+```text
+Use tools + tool_choice for structured event selection
+instead of asking for JSON in plain text and regex-parsing it.
 ```
 
-**2. Add the correct extraction path** to the candidates array (line 130). Add `data.results.events_results` as the first candidate since that's the confirmed structure:
-```typescript
-const candidates = [
-  data?.data?.results?.events_results,   // ← actual path from logs
-  data?.data?.response_data?.events_results,
-  data?.data?.response_data?.results,
-  // ... rest unchanged
-];
-```
-
-**3. Redeploy** the edge function.
-
+Expected result:
+- The 404 should disappear.
+- Weekly event curation will use the same LLM provider/call pattern already proven elsewhere in the project.
+- The curation step will become more reliable because structured output parsing will match the established edge-function approach.
