@@ -1,63 +1,48 @@
 
 
-## Fix: Event search query format
+## Fix: Event extraction path and location parameter
 
 ### Problem
 
-The current query is built as:
+From the logs, the actual Composio response structure is:
+```json
+{
+  "data": {
+    "results": {
+      "events_results": [{ "title": "...", ... }]
+    }
+  },
+  "successful": true
+}
 ```
-"tech,food,numismatics events near Miami,FL"
+
+But the extraction candidates list checks `data.response_data.events_results`, `data.response_data.results`, etc. — it never checks `data.results.events_results`, which is where the events actually live. That's why events are visible in the raw log but extraction returns nothing.
+
+Additionally, the COMPOSIO_SEARCH_EVENT_SEARCH tool accepts a separate `location` parameter in `arguments`, so we should pass it there instead of appending to the query string.
+
+### Changes — `supabase/functions/weekly-event-finder/index.ts`
+
+**1. Pass location as a separate argument** (lines 93-100):
+```typescript
+async function searchEventsSingle(interest: string, location: string): Promise<any[]> {
+  const searchQuery = `${interest.trim()} events`;
+  const url = "https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT_SEARCH";
+  const body = {
+    appName: "composio_search",
+    entity_id: "default",
+    arguments: { query: searchQuery, location: location.trim() },
+  };
 ```
 
-Google Events search treats this as a single literal string and returns nothing. A clean natural-language query like `"tech events in Miami"` works perfectly. Two issues:
+**2. Add the correct extraction path** to the candidates array (line 130). Add `data.results.events_results` as the first candidate since that's the confirmed structure:
+```typescript
+const candidates = [
+  data?.data?.results?.events_results,   // ← actual path from logs
+  data?.data?.response_data?.events_results,
+  data?.data?.response_data?.results,
+  // ... rest unchanged
+];
+```
 
-1. **Comma-separated interests crammed into one query** — Google can't parse `"tech,food,numismatics"` as meaningful search terms.
-2. **Single search for all interests** — even with better formatting, a broad multi-topic query produces worse results than individual focused searches.
-
-### Solution
-
-Instead of one combined query, split interests by comma and run a separate search per interest (up to 5), then merge and deduplicate results before curation.
-
-### Changes — single file
-
-**`supabase/functions/weekly-event-finder/index.ts`**
-
-1. **Rename `searchEvents` to `searchEventsSingle`** and simplify the query template:
-   ```typescript
-   async function searchEventsSingle(interest: string, location: string): Promise<any[]> {
-     const searchQuery = `${interest.trim()} events in ${location.trim()}`;
-     // ... rest unchanged
-   }
-   ```
-   - Uses `"in"` instead of `"near"` (matches the working curl test).
-   - Takes a single interest string, not the full comma list.
-
-2. **Add a new `searchEvents` wrapper** that splits interests and merges results:
-   ```typescript
-   async function searchEvents(interests: string, location: string): Promise<any[]> {
-     const terms = interests.split(",").map(s => s.trim()).filter(Boolean).slice(0, 5);
-     const allResults: any[] = [];
-     const seenTitles = new Set<string>();
-     
-     for (const term of terms) {
-       const results = await searchEventsSingle(term, location);
-       for (const r of results) {
-         const key = (r.title || r.name || "").toLowerCase();
-         if (!seenTitles.has(key)) {
-           seenTitles.add(key);
-           allResults.push(r);
-         }
-       }
-     }
-     return allResults;
-   }
-   ```
-   - Searches are sequential to avoid rate-limiting from Composio.
-   - Deduplicates by title before returning.
-
-3. **No changes to the `manual-sync` handler** — it already calls `searchEvents(interests, location)` which will now use the new wrapper.
-
-### Why this works
-
-The logs show the Composio tool returns `events_results_state: "Fully empty"` for the combined query. Splitting into clean single-topic queries like `"tech events in Miami"` matches the format that returns results via curl.
+**3. Redeploy** the edge function.
 
