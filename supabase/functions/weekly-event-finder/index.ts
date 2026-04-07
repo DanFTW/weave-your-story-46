@@ -193,7 +193,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
 
   const eventSummaries = events
     .slice(0, 15)
-    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — ${e.date || e.start_date || ""}`)
+    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — ${e.date || e.start_date || ""} — ${e.link || e.url || e.event_url || ""}`)
     .join("\n");
 
   try {
@@ -229,6 +229,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
                         date: { type: "string" },
                         description: { type: "string" },
                         reason: { type: "string" },
+                        link: { type: "string" },
                       },
                       required: ["title", "date", "description", "reason"],
                       additionalProperties: false,
@@ -466,7 +467,7 @@ serve(async (req: Request) => {
 
         // Build delivery content
         const eventList = newEvents
-          .map((e: any, i: number) => `${i + 1}. ${e.title || e.name}\n   ${e.date || ""}\n   ${e.description || ""}\n   ${e.reason || ""}`)
+          .map((e: any, i: number) => `${i + 1}. ${e.title || e.name}\n   ${e.date || ""}\n   ${e.description || ""}\n   ${e.reason || ""}${e.link ? `\n   ${e.link}` : ""}`)
           .join("\n\n");
 
         const emailBody = `Hi! Here are events we found matching your interests:\n\n${eventList}\n\n— Weave Event Finder`;
