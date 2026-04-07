@@ -181,9 +181,29 @@ async function searchEvents(interests: string, location: string): Promise<any[]>
   return allResults;
 }
 
+// Safely coerce any date field value (string, object, Date) into a string
+function extractDateString(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    const v = value as Record<string, any>;
+    if (v.dateTime) return String(v.dateTime);
+    if (v.date) return extractDateString(v.date);
+    if (v.year && v.month && v.day) {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      let s = `${v.year}-${pad(v.month)}-${pad(v.day)}`;
+      if (v.hour != null) s += `T${pad(v.hour)}:${pad(v.minute || 0)}:00`;
+      return s;
+    }
+    try { return JSON.stringify(value); } catch { return ""; }
+  }
+  return String(value);
+}
+
 // Filter out events with dates in the past
 function isUpcomingEvent(event: any): boolean {
-  const dateStr = event.date || event.start_date || event.when || "";
+  const dateStr = extractDateString(event.date) || extractDateString(event.start_date) || extractDateString(event.when);
   if (!dateStr) return true;
   try {
     const eventDate = new Date(dateStr);
