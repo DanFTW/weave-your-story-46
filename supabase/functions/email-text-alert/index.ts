@@ -183,12 +183,16 @@ async function summarizeEmail(emailBody: string): Promise<string> {
 }
 
 async function sendSms(to: string, body: string): Promise<boolean> {
+  // Normalize to E.164: strip non-digits, ensure + prefix
+  const digits = to.replace(/\D/g, "");
+  const normalized = digits.startsWith("+") ? digits : `+${digits}`;
+
   const url = "https://weave-fabric-sms.onrender.com/send";
   const headers = {
     "Content-Type": "application/json",
     "x-api-key": SMS_API_KEY,
   };
-  const payload = JSON.stringify({ to, body });
+  const payload = JSON.stringify({ to: normalized, body });
 
   try {
     let res = await fetch(url, { method: "POST", headers, body: payload });
