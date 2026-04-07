@@ -198,37 +198,77 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
     .join("\n");
 
   try {
-    const res = await fetch("https://lovable.dev/api/v1/chat", {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gemini-2.5-flash-preview-05-20",
+        model: "google/gemini-3-flash-preview",
         messages: [
           {
             role: "user",
-            content: `You are an event curator. Given a user's interests and a list of events, pick the top 5 most relevant events. Return ONLY a JSON array of objects with "title", "date", "description", and "reason" (why it matches). No markdown, just JSON.
-
-User interests: ${interests}
-
-Events:
-${eventSummaries}`,
+            content: `You are an event curator. Given a user's interests and a list of events, pick the top 5 most relevant events.\n\nUser interests: ${interests}\n\nEvents:\n${eventSummaries}`,
           },
         ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "select_events",
+              description: "Return the top 5 most relevant events for the user.",
+              parameters: {
+                type: "object",
+                properties: {
+                  events: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        date: { type: "string" },
+                        description: { type: "string" },
+                        reason: { type: "string" },
+                      },
+                      required: ["title", "date", "description", "reason"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["events"],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+        tool_choice: { type: "function", function: { name: "select_events" } },
       }),
     });
 
     if (!res.ok) {
-      console.error("LLM curation failed:", res.status);
+      const errText = await res.text();
+      if (res.status === 429) {
+        console.error("LLM curation rate limited (429):", errText);
+      } else if (res.status === 402) {
+        console.error("LLM curation payment required (402):", errText);
+      } else {
+        console.error("LLM curation failed:", res.status, errText);
+      }
       return events.slice(0, 5);
     }
 
     const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content || "";
+    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
+    if (toolCall?.function?.arguments) {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      if (Array.isArray(parsed.events) && parsed.events.length > 0) {
+        return parsed.events;
+      }
+    }
 
-    // Extract JSON from response
+    // Fallback: try content field for backwards compat
+    const content = data?.choices?.[0]?.message?.content || "";
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
