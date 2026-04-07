@@ -210,7 +210,7 @@ async function sendSms(to: string, body: string): Promise<boolean> {
       return false;
     }
 
-    console.log(`[TextAlert] SMS sent to ${to}`);
+    console.log(`[TextAlert] SMS sent to ${normalized}`);
     return true;
   } catch (e) {
     console.error("[TextAlert] SMS send error:", e);
