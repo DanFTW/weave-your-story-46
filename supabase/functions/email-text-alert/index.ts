@@ -284,8 +284,8 @@ serve(async (req) => {
           summary,
         });
 
-        // Log the would-be SMS
-        console.log(`[TextAlert] Would send SMS to ${configData.phone_number}: ${summary}`);
+        // Send SMS alert
+        await sendSms(configData.phone_number, summary);
         alertCount++;
       }
 
