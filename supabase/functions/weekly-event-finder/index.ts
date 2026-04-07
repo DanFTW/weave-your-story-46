@@ -229,6 +229,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
                         date: { type: "string" },
                         description: { type: "string" },
                         reason: { type: "string" },
+                        link: { type: "string" },
                       },
                       required: ["title", "date", "description", "reason"],
                       additionalProperties: false,
