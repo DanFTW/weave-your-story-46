@@ -316,9 +316,9 @@ serve(async (req) => {
           summary,
         });
 
-        // Send SMS alert
-        await sendSms(configData.phone_number, summary);
-        alertCount++;
+        // Send SMS alert — only count if delivered
+        const sent = await sendSms(configData.phone_number, summary);
+        if (sent) alertCount++;
       }
 
       // 6. Update alerts_sent counter
