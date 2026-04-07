@@ -295,7 +295,7 @@ async function sendEmail(connId: string, to: string, subject: string, bodyText: 
         arguments: {
           recipient_email: to,
           subject,
-          message_body: bodyText,
+          body: bodyText,
         },
       }),
     });
