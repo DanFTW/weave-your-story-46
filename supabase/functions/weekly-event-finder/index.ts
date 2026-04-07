@@ -188,14 +188,22 @@ function extractDateString(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "object") {
     const v = value as Record<string, any>;
-    if (v.dateTime) return String(v.dateTime);
-    if (v.date) return extractDateString(v.date);
+    // Prioritize human-readable 'when' field from Composio
+    if (v.when && typeof v.when === "string") return v.when;
+    if (v.dateTime && typeof v.dateTime === "string") return String(v.dateTime);
+    if (v.start_date && typeof v.start_date === "string") return v.start_date;
+    if (v.date && typeof v.date === "string") return String(v.date);
     if (v.year && v.month && v.day) {
       const pad = (n: number) => String(n).padStart(2, "0");
       let s = `${v.year}-${pad(v.month)}-${pad(v.day)}`;
       if (v.hour != null) s += `T${pad(v.hour)}:${pad(v.minute || 0)}:00`;
       return s;
     }
+    // Recurse into nested objects for known date keys
+    if (v.when) return extractDateString(v.when);
+    if (v.dateTime) return extractDateString(v.dateTime);
+    if (v.date) return extractDateString(v.date);
+    if (v.start_date) return extractDateString(v.start_date);
     try { return JSON.stringify(value); } catch { return ""; }
   }
   return String(value);
