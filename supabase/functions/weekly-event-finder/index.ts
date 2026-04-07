@@ -92,7 +92,7 @@ async function fetchLiamMemories(): Promise<{ interests: string; location: strin
 // Search events via Composio (no auth required)
 async function searchEvents(query: string, location: string): Promise<any[]> {
   const searchQuery = `${query} events near ${location}`;
-  const url = "https://backend.composio.dev/api/v3/actions/COMPOSIO_SEARCH_EVENT/execute";
+  const url = "https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT";
   const body = {
     entity_id: "default",
     arguments: { query: searchQuery },
