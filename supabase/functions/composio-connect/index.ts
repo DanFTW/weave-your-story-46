@@ -515,10 +515,23 @@ serve(async (req) => {
     const connectionId = composioData.connected_account_id || composioData.id;
     let redirectUrl = composioData.redirect_url || composioData.redirectUrl;
 
-    // Spotify requires show_dialog=true to force account selection on reconnect
+    // Spotify requires show_dialog=true on its actual authorize URL to force account selection.
+    // The Composio redirectUrl points to connect.composio.dev which 302-redirects to Spotify.
+    // We resolve that redirect server-side and append show_dialog=true to the real Spotify URL.
     if (toolkitLower === "spotify" && forceReauth && redirectUrl) {
-      const separator = redirectUrl.includes("?") ? "&" : "?";
-      redirectUrl = `${redirectUrl}${separator}show_dialog=true`;
+      try {
+        const probeRes = await fetch(redirectUrl, { redirect: "manual" });
+        const location = probeRes.headers.get("location");
+        if (location && location.includes("accounts.spotify.com")) {
+          const sep = location.includes("?") ? "&" : "?";
+          redirectUrl = `${location}${sep}show_dialog=true`;
+          console.log("Resolved Spotify auth URL with show_dialog=true");
+        } else {
+          console.warn("Composio redirect did not resolve to accounts.spotify.com, using original URL. Location:", location);
+        }
+      } catch (e) {
+        console.warn("Failed to resolve Spotify redirect, using original URL", e);
+      }
     }
     
     console.log(`Connection ID: ${connectionId}`);
