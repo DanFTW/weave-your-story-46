@@ -92,7 +92,7 @@ async function fetchLiamMemories(): Promise<{ interests: string; location: strin
 // Search events via Composio (no auth required)
 async function searchEvents(query: string, location: string): Promise<any[]> {
   const searchQuery = `${query} events near ${location}`;
-  const url = "https://backend.composio.dev/api/v3/actions/COMPOSIO_SEARCH_EVENT/execute";
+  const url = "https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT";
   const body = {
     entity_id: "default",
     arguments: { query: searchQuery },
@@ -221,7 +221,7 @@ ${eventSummaries}`,
 
 // Send email via Composio Gmail
 async function sendEmail(connId: string, to: string, subject: string, body: string) {
-  const res = await fetch("https://backend.composio.dev/api/v3/actions/GMAIL_SEND_EMAIL/execute", {
+  const res = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEND_EMAIL", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
