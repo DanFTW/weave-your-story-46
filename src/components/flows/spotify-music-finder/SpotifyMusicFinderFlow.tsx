@@ -44,7 +44,7 @@ export function SpotifyMusicFinderFlow() {
       sessionStorage.removeItem("returnAfterSpotifyConnect");
       sessionStorage.removeItem("spotifyConnectIntent");
       loadConfig();
-    } else if (!isCheckingAuth && !isConnected && !connecting) {
+    } else if (!isCheckingAuth && !isConnected && !connecting && !isReconnecting) {
       // Set intent guard so IntegrationDetail knows this redirect is deliberate
       sessionStorage.setItem("spotifyConnectIntent", "music-finder");
       sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
