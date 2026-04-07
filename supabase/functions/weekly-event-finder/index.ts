@@ -94,6 +94,7 @@ async function searchEvents(query: string, location: string): Promise<any[]> {
   const searchQuery = `${query} events near ${location}`;
   const url = "https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT";
   const body = {
+    appName: "composio_search",
     entity_id: "default",
     arguments: { query: searchQuery },
   };
@@ -220,7 +221,7 @@ ${eventSummaries}`,
 }
 
 // Send email via Composio Gmail
-async function sendEmail(connId: string, to: string, subject: string, body: string) {
+async function sendEmail(connId: string, to: string, subject: string, bodyText: string) {
   const res = await fetch("https://backend.composio.dev/api/v3/tools/execute/GMAIL_SEND_EMAIL", {
     method: "POST",
     headers: {
@@ -228,12 +229,12 @@ async function sendEmail(connId: string, to: string, subject: string, body: stri
       "x-api-key": COMPOSIO_API_KEY,
     },
     body: JSON.stringify({
-      connectedAccountId: connId,
-      authConfig: { parameters: [{ name: "auth_config_id", value: "ac_IlbziSKZknmH" }] },
-      input: {
+      connected_account_id: connId,
+      auth_config_id: "ac_IlbziSKZknmH",
+      arguments: {
         recipient_email: to,
         subject,
-        message_body: body,
+        message_body: bodyText,
       },
     }),
   });
