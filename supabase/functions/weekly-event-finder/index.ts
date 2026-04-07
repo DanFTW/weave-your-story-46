@@ -456,11 +456,13 @@ serve(async (req: Request) => {
 
         // Search events
         const rawEvents = await searchEvents(interests, location);
-        console.log(`Found ${rawEvents.length} raw events`);
+        const upcomingRaw = rawEvents.filter(isUpcomingEvent);
+        console.log(`Found ${rawEvents.length} raw events, ${upcomingRaw.length} upcoming`);
 
         // Curate via LLM
-        const curated = await curateEvents(rawEvents, interests);
-        console.log(`Curated to ${curated.length} events`);
+        const curated = await curateEvents(upcomingRaw, interests);
+        const upcomingCurated = curated.filter(isUpcomingEvent);
+        console.log(`Curated to ${curated.length} events, ${upcomingCurated.length} upcoming`);
 
         // Filter out already-processed events
         const { data: processed } = await sb
