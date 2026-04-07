@@ -542,9 +542,10 @@ serve(async (req: Request) => {
         const eventList = newEvents
           .map((e: any, i: number) => {
             const title = e.title || e.name || "Untitled Event";
-            const dateStr = extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when);
+            const dateStr = extractDateString(e.when) || extractDateString(e.date) || extractDateString(e.start_date);
             let formattedDate = dateStr;
-            if (dateStr) {
+            // Only reformat if it looks like an ISO date; human-readable strings (e.g. "Sat, May 16, 4 – 8 PM EDT") pass through as-is
+            if (dateStr && /^\d{4}-\d{2}/.test(dateStr)) {
               try {
                 const d = new Date(dateStr);
                 if (!isNaN(d.getTime())) {
