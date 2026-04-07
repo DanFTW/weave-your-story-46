@@ -181,6 +181,21 @@ async function searchEvents(interests: string, location: string): Promise<any[]>
   return allResults;
 }
 
+// Filter out events with dates in the past
+function isUpcomingEvent(event: any): boolean {
+  const dateStr = event.date || event.start_date || event.when || "";
+  if (!dateStr) return true;
+  try {
+    const eventDate = new Date(dateStr);
+    if (isNaN(eventDate.getTime())) return true;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return eventDate >= today;
+  } catch {
+    return true;
+  }
+}
+
 // Curate events via LLM
 async function curateEvents(events: any[], interests: string): Promise<any[]> {
   if (events.length === 0) return [];
