@@ -1262,6 +1262,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "email-text-alert": {
+    id: "email-text-alert",
+    title: "Email to Text Alert",
+    subtitle: "SMS summaries for emails",
+    description: "Monitor Gmail for emails matching your sender and keyword rules, then get a text message summary on your phone.",
+    gradient: "orange",
+    icon: Bell,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to your emails",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Configure Alert Rules",
+        description: "Set sender filter, keywords, and phone number",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Monitoring",
+        description: "Alerts sent automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
 };
 
 export function getThreadConfig(threadId: string): ThreadConfig | undefined {

@@ -374,6 +374,12 @@ export default function FlowPage() {
     return <EmailReceiptSheetFlow />;
   }
 
+  // === EMAIL TEXT ALERT FLOW RENDER ===
+
+  if (config.isEmailTextAlertFlow) {
+    return <EmailTextAlertFlow />;
+  }
+
   // === GROCERY SHEET SYNC FLOW RENDER ===
 
   if (config.isGrocerySheetSyncFlow) {
