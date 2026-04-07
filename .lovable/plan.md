@@ -1,37 +1,42 @@
 
 
-## Fix: COMPOSIO_SEARCH_EVENT "Tool not found" — wrong API endpoint
+## Fix: COMPOSIO_SEARCH_EVENT 400 "Validation error" — wrong request body format
 
 ### Root Cause
 
-The logs show `"Tool COMPOSIO_SEARCH_EVENT not found"` because the function calls `/api/v2/actions/COMPOSIO_SEARCH_EVENT/execute` — the **actions** endpoint. But `COMPOSIO_SEARCH_EVENT` is registered as a **tool** under the `COMPOSIO_SEARCH` toolkit. Every other Composio tool execution in the codebase (Gmail, Google Drive, Twitter, Spotify, Calendar, etc.) uses the **v3 tools** endpoint: `/api/v3/tools/execute/{TOOL_SLUG}`.
+The Composio v3 `/api/v3/tools/execute/` endpoint expects `arguments` for tool parameters, not `input`. Every other Composio tool call in the codebase (28 functions) uses this format:
+
+```typescript
+{ connected_account_id: "...", arguments: { ... } }
+```
+
+The current weekly-event-finder sends `{ appName, entityId, input }` which the endpoint doesn't recognize, causing `"Only one of 'text' or 'arguments' must be provided"`.
+
+Since `COMPOSIO_SEARCH_EVENT` doesn't require user OAuth, we use `entity_id` with `"default"` instead of `connected_account_id`.
 
 ### Change (single file)
 
-**`supabase/functions/weekly-event-finder/index.ts`** — `searchEvents` function:
+**`supabase/functions/weekly-event-finder/index.ts`** — `searchEvents` function, lines 96-100:
 
-1. Change the URL from:
-   ```
-   https://backend.composio.dev/api/v2/actions/COMPOSIO_SEARCH_EVENT/execute
-   ```
-   to:
-   ```
-   https://backend.composio.dev/api/v3/tools/execute/COMPOSIO_SEARCH_EVENT
-   ```
+Change the request body from:
+```typescript
+const body = {
+  appName: "composio_search",
+  entityId: "default",
+  input: { query: searchQuery },
+};
+```
+to:
+```typescript
+const body = {
+  entity_id: "default",
+  arguments: { query: searchQuery },
+};
+```
 
-2. Update the request body to match the v3 tools format used everywhere else in the codebase:
-   ```typescript
-   const body = {
-     connectedAccountId: undefined,  // not needed for Composio-native tools
-     appName: "composio_search",
-     entityId: "default",
-     input: { query: searchQuery },
-   };
-   ```
+This matches the v3 tools endpoint contract used by all other edge functions. `entity_id` tells Composio to resolve the tool without a specific connected account. `arguments` is the correct key for passing tool parameters.
 
-No other changes — logging, extraction, curation, and delivery logic stay the same.
-
-### Why this is correct
-
-All 37 other edge functions in this project use `/api/v3/tools/execute/` for tool execution. The v2 actions endpoint is for a different class of Composio resources and does not resolve tool slugs like `COMPOSIO_SEARCH_EVENT`.
+### After deployment
+- Redeploy the edge function
+- Trigger "Find events now" and check logs for a 200 response
 
