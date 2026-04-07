@@ -4,6 +4,11 @@ export type EmailTextAlertPhase =
   | "activating"
   | "active";
 
+export interface SenderRule {
+  email: string;
+  keywords: string[];
+}
+
 export interface EmailTextAlertConfig {
   id: string;
   userId: string;
