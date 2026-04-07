@@ -181,6 +181,21 @@ async function searchEvents(interests: string, location: string): Promise<any[]>
   return allResults;
 }
 
+// Filter out events with dates in the past
+function isUpcomingEvent(event: any): boolean {
+  const dateStr = event.date || event.start_date || event.when || "";
+  if (!dateStr) return true;
+  try {
+    const eventDate = new Date(dateStr);
+    if (isNaN(eventDate.getTime())) return true;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return eventDate >= today;
+  } catch {
+    return true;
+  }
+}
+
 // Curate events via LLM
 async function curateEvents(events: any[], interests: string): Promise<any[]> {
   if (events.length === 0) return [];
@@ -441,11 +456,13 @@ serve(async (req: Request) => {
 
         // Search events
         const rawEvents = await searchEvents(interests, location);
-        console.log(`Found ${rawEvents.length} raw events`);
+        const upcomingRaw = rawEvents.filter(isUpcomingEvent);
+        console.log(`Found ${rawEvents.length} raw events, ${upcomingRaw.length} upcoming`);
 
         // Curate via LLM
-        const curated = await curateEvents(rawEvents, interests);
-        console.log(`Curated to ${curated.length} events`);
+        const curated = await curateEvents(upcomingRaw, interests);
+        const upcomingCurated = curated.filter(isUpcomingEvent);
+        console.log(`Curated to ${curated.length} events, ${upcomingCurated.length} upcoming`);
 
         // Filter out already-processed events
         const { data: processed } = await sb
@@ -454,7 +471,7 @@ serve(async (req: Request) => {
           .eq("user_id", userId);
 
         const processedIds = new Set((processed || []).map((p: any) => p.event_id));
-        const newEvents = curated.filter((e: any) => {
+        const newEvents = upcomingCurated.filter((e: any) => {
           const eventId = e.title || e.name || JSON.stringify(e);
           return !processedIds.has(eventId);
         });
