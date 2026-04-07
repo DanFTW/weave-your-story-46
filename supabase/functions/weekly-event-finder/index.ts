@@ -93,7 +93,11 @@ async function fetchLiamMemories(): Promise<{ interests: string; location: strin
 async function searchEvents(query: string, location: string): Promise<any[]> {
   const searchQuery = `${query} events near ${location}`;
   const url = "https://backend.composio.dev/api/v2/actions/COMPOSIO_SEARCH_EVENT/execute";
-  const body = { input: { query: searchQuery } };
+  const body = {
+    appName: "composio",
+    entityId: "default",
+    input: { query: searchQuery },
+  };
 
   console.log("[EventSearch] URL:", url);
   console.log("[EventSearch] Body:", JSON.stringify(body));
