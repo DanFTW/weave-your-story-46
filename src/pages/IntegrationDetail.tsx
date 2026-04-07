@@ -72,10 +72,8 @@ export default function IntegrationDetail() {
       const returnPathKey = `returnAfter${capitalizedId}Connect`;
       const intentKey = `${integrationId}ConnectIntent`;
       const returnPath = sessionStorage.getItem(returnPathKey);
-      const hasIntent = sessionStorage.getItem(intentKey);
       
-      // Only redirect if there's both a return path AND an active intent guard
-      if (returnPath && hasIntent) {
+      if (returnPath) {
         hasHandledReturn.current = true;
         sessionStorage.removeItem(returnPathKey);
         sessionStorage.removeItem(intentKey);
