@@ -122,6 +122,9 @@ import { EmailReceiptSheetFlow } from "@/components/flows/email-receipt-sheet";
 // Email Text Alert components
 import { EmailTextAlertFlow } from "@/components/flows/email-text-alert";
 
+// Weekly Event Finder components
+import { WeeklyEventFinderFlow } from "@/components/flows/weekly-event-finder";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
