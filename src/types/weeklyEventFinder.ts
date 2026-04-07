@@ -13,6 +13,7 @@ export interface WeeklyEventFinderConfig {
   frequency: "weekly" | "daily";
   deliveryMethod: "email" | "text";
   email: string | null;
+  phoneNumber: string | null;
   eventsFound: number;
   createdAt: string;
   updatedAt: string;
