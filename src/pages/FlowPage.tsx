@@ -119,6 +119,9 @@ import { SpotifyMusicFinderFlow } from "@/components/flows/spotify-music-finder"
 // Email Receipt Sheet components
 import { EmailReceiptSheetFlow } from "@/components/flows/email-receipt-sheet";
 
+// Email Text Alert components
+import { EmailTextAlertFlow } from "@/components/flows/email-text-alert";
+
 // Gradient class mapping
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -369,6 +372,12 @@ export default function FlowPage() {
 
   if (config.isEmailReceiptSheetFlow) {
     return <EmailReceiptSheetFlow />;
+  }
+
+  // === EMAIL TEXT ALERT FLOW RENDER ===
+
+  if (config.isEmailTextAlertFlow) {
+    return <EmailTextAlertFlow />;
   }
 
   // === GROCERY SHEET SYNC FLOW RENDER ===

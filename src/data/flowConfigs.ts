@@ -1,4 +1,4 @@
-import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare } from "lucide-react";
+import { Users, Utensils, Music, Briefcase, Film, Receipt, Heart, MessageSquare, Inbox, Mail, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare, Bell } from "lucide-react";
 import { FlowConfig } from "@/types/flows";
 
 export const flowConfigs: Record<string, FlowConfig> = {
@@ -675,6 +675,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     memoryTag: "SLACK",
     fields: [],
     isSlackMessagesSyncFlow: true,
+  },
+  "email-text-alert": {
+    id: "email-text-alert",
+    title: "Email to Text Alert",
+    subtitle: "SMS summaries for important emails",
+    description: "Monitor Gmail for matching emails and send text alert summaries to your phone.",
+    gradient: "orange",
+    icon: Bell,
+    entryName: "alert",
+    entryNamePlural: "alerts",
+    memoryTag: "EMAIL_ALERT",
+    fields: [],
+    isEmailTextAlertFlow: true,
   },
 };
 

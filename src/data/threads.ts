@@ -1,4 +1,4 @@
-import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare, Music } from "lucide-react";
+import { Mail, Users, Utensils, Receipt, Heart, MessageSquare, Inbox, Camera, Instagram, Twitter, Youtube, Zap, UserPlus, ClipboardList, Contact, Target, CheckSquare, Mic, FileText, Hash, Gift, Calendar, MapPin, ShoppingCart, ArrowRightLeft, BarChart3, Facebook, Globe, MessagesSquare, Music, Bell } from "lucide-react";
 import { Thread } from "@/types/threads";
 
 // Threads moved to bottom: Twitter-related, LinkedIn-related, Coinbase-related, Google Photos
@@ -39,6 +39,19 @@ const mainThreads: Thread[] = [
     type: "automation",
     category: "personal",
     integrations: ["gmail", "googlesheets"],
+    triggerType: "automatic",
+    flowMode: "thread",
+  },
+  {
+    id: "email-text-alert",
+    title: "Email to Text Alert",
+    description: "Get text message summaries when important emails arrive, filtered by sender and keywords",
+    icon: Bell,
+    gradient: "orange",
+    status: "active",
+    type: "automation",
+    category: "email",
+    integrations: ["gmail"],
     triggerType: "automatic",
     flowMode: "thread",
   },

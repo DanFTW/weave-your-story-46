@@ -407,6 +407,66 @@ export type Database = {
         }
         Relationships: []
       }
+      email_text_alert_config: {
+        Row: {
+          alerts_sent: number
+          created_at: string
+          id: string
+          is_active: boolean
+          keyword_filter: string | null
+          phone_number: string | null
+          sender_filter: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alerts_sent?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          keyword_filter?: string | null
+          phone_number?: string | null
+          sender_filter?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alerts_sent?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          keyword_filter?: string | null
+          phone_number?: string | null
+          sender_filter?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_text_alert_processed: {
+        Row: {
+          created_at: string
+          email_message_id: string
+          id: string
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_message_id: string
+          id?: string
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email_message_id?: string
+          id?: string
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       facebook_page_posts_config: {
         Row: {
           created_at: string
