@@ -61,6 +61,7 @@ export function SpotifyMusicFinderFlow() {
 
   const handleReconnect = useCallback(async () => {
     setIsReconnecting(true);
+    sessionStorage.setItem("spotifyConnectIntent", "music-finder");
     sessionStorage.setItem("returnAfterSpotifyConnect", "/flow/spotify-music-finder");
     await disconnect();
     await new Promise((resolve) => setTimeout(resolve, 500));
