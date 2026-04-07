@@ -2,49 +2,38 @@
 
 ## Investigation Results
 
-The edge function logs confirm the issue clearly:
+The edge function logs show exactly what's happening. Two bugs are causing zero posted rows:
 
+### Bug 1: `.onConflict()` crashes every email (PRIMARY CAUSE)
+
+Every single email processing throws the same error:
 ```
-Connection ca_128a9PQLg_HC: auth_config=ac_P0DYB0XdGLn3, status=ACTIVE
-Raw Gmail response: {"data":{"messages":[],...},"successful":true,"error":null}
-Fetched 0 candidate emails
-```
-
-**The Gmail connection is valid, ACTIVE, and the API call succeeds.** The problem is the search query returns zero results.
-
-### Root Cause
-
-The `fetchReceiptEmails` function (line 317) uses this Gmail query:
-
-```
-subject:(receipt OR order confirmation OR purchase OR invoice OR payment) newer_than:7d
+TypeError: sb.from(...).insert(...).onConflict is not a function
 ```
 
-Two issues:
-1. **Overly narrow query** — it only searches the `subject:` field. A Lovable purchase confirmation email may have a subject like "Your Lovable Pro plan is active" or "Subscription confirmed" which matches none of the keywords.
-2. **Missing common keywords** — "subscription", "billing", "charge", "confirmation", "thank you for your order" are not included.
+The Supabase JS v2 client does not have an `.onConflict()` method on `.insert()`. The correct method is `.upsert()` with `onConflict` as an option. This crash happens at line 635 — after the LLM call returns but before the result can be acted upon. Every email hits the `catch` block, so `totalPosted` stays at 0.
 
-Additionally, the function uses the **Gmail** connection (`integration_id: "gmail"`) for `GMAIL_FETCH_EMAILS`, which is correct. But there's no logging of which connection ID or query was actually used, making it hard to debug without code changes.
+### Bug 2: Email body field name mismatch
 
-### Plan
+The log shows the Gmail response uses `messageText` as the body field:
+```
+"messageText":"Lovable Labs Incorporated ... Receipt #2148-7756 ..."
+```
 
-**File: `supabase/functions/email-receipt-sheet/index.ts`** — changes to `fetchReceiptEmails` only:
+But line 605 tries: `e.body ?? e.snippet ?? e.text ?? e.content ?? e.data ?? ""`
 
-1. **Broaden the search query** — remove the `subject:` restriction so Gmail searches the full email body/headers, and add missing keywords:
-   ```
-   (receipt OR order OR purchase OR invoice OR payment OR subscription OR billing OR charge OR confirmation) newer_than:7d
-   ```
+None of these match `messageText`, so the LLM receives an empty string for every email. Even if Bug 1 were fixed, the LLM would see no content and return `isReceipt: false`.
 
-2. **Add diagnostic logging** — log the Gmail connection ID, the exact query sent, and the full raw response (first 2000 chars) so future debugging doesn't require code changes:
-   ```
-   [ReceiptSheet] Gmail connection: ca_xxx
-   [ReceiptSheet] Gmail query: ...
-   [ReceiptSheet] Raw response (2000 chars): ...
-   [ReceiptSheet] Messages found: N
-   [ReceiptSheet] First message sample: { id, subject, snippet... }
-   ```
+### Plan — single file change: `supabase/functions/email-receipt-sheet/index.ts`
 
-3. **Increase `max_results`** from 20 to 50 to catch more candidates within the 7-day window.
+1. **Fix body extraction** (line 605): Add `e.messageText` to the fallback chain, placing it first since that's the field Composio actually returns.
 
-No other files or features are changed.
+2. **Fix `.onConflict()` crash** (lines 629-635): Replace `.insert({...}).onConflict("user_id,email_message_id")` with `.upsert({...}, { onConflict: "user_id,email_message_id" })`.
+
+3. **Add diagnostic logging** in the processing loop:
+   - Log the email body length and first 200 chars being sent to the LLM
+   - Log the LLM's parsed result (`isReceipt`, `vendor`, `amount`)
+   - This surfaces what the LLM receives and returns without needing code changes next time
+
+No other files or features changed. Redeploy after edit.
 
