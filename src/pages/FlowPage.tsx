@@ -383,6 +383,12 @@ export default function FlowPage() {
     return <EmailTextAlertFlow />;
   }
 
+  // === WEEKLY EVENT FINDER FLOW RENDER ===
+
+  if (config.isWeeklyEventFinderFlow) {
+    return <WeeklyEventFinderFlow />;
+  }
+
   // === GROCERY SHEET SYNC FLOW RENDER ===
 
   if (config.isGrocerySheetSyncFlow) {

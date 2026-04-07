@@ -689,6 +689,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     fields: [],
     isEmailTextAlertFlow: true,
   },
+  "weekly-event-finder": {
+    id: "weekly-event-finder",
+    title: "Weekly Event Finder",
+    subtitle: "Personalized event discovery",
+    description: "Find local events matching your interests and location.",
+    gradient: "purple",
+    icon: Calendar,
+    entryName: "event",
+    entryNamePlural: "events",
+    memoryTag: "EVENT",
+    fields: [],
+    isWeeklyEventFinderFlow: true,
+  },
 };
 
 export function getFlowConfig(flowId: string): FlowConfig | undefined {
