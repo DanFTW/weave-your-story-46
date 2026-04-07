@@ -534,7 +534,7 @@ serve(async (req: Request) => {
         const eventList = newEvents
           .map((e: any, i: number) => {
             const title = e.title || e.name || "Untitled Event";
-            const dateStr = e.date || e.start_date || e.when || "";
+            const dateStr = extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when);
             let formattedDate = dateStr;
             if (dateStr) {
               try {
@@ -546,13 +546,14 @@ serve(async (req: Request) => {
                     day: "numeric",
                     year: "numeric",
                   });
-                  const timeStr = d.toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                  });
                   if (d.getHours() !== 0 || d.getMinutes() !== 0) {
-                    formattedDate += ` at ${timeStr}`;
+                    const timeStr = d.toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      hour12: true,
+                      timeZoneName: "short",
+                    });
+                    formattedDate += ` @ ${timeStr}`;
                   }
                 }
               } catch {
