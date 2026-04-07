@@ -228,7 +228,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
 
   const eventSummaries = events
     .slice(0, 15)
-    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — Date: ${e.date || e.start_date || e.when || "unknown"} — ${e.link || e.url || e.event_url || ""}`)
+    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — Date: ${extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when) || "unknown"} — ${e.link || e.url || e.event_url || ""}`)
     .join("\n");
 
   let curated: any[];
