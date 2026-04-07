@@ -211,7 +211,7 @@ function extractDateString(value: unknown): string {
 
 // Filter out events with dates in the past
 function isUpcomingEvent(event: any): boolean {
-  const dateStr = extractDateString(event.date) || extractDateString(event.start_date) || extractDateString(event.when);
+  const dateStr = extractDateString(event.when) || extractDateString(event.date) || extractDateString(event.start_date);
   if (!dateStr) return true;
   try {
     const eventDate = new Date(dateStr);
