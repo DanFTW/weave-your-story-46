@@ -1,6 +1,6 @@
 import { Mail, Phone, Pause, RefreshCw, Loader2, Bell } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { EmailTextAlertStats, EmailTextAlertConfig } from "@/types/emailTextAlert";
+import { EmailTextAlertStats, EmailTextAlertConfig, SenderRule } from "@/types/emailTextAlert";
 
 interface ActiveMonitoringProps {
   stats: EmailTextAlertStats;
@@ -8,6 +8,34 @@ interface ActiveMonitoringProps {
   onPause: () => Promise<boolean>;
   onManualSync: () => Promise<void>;
   isSyncing: boolean;
+}
+
+function parseSenderRules(senderFilter: string | null): SenderRule[] {
+  if (!senderFilter) return [];
+  const trimmed = senderFilter.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((r: any) => r.email).map((r: any) => ({
+          email: String(r.email),
+          keywords: Array.isArray(r.keywords) ? r.keywords.map(String) : [],
+        }));
+      }
+    } catch { /* fallback */ }
+  }
+  // Legacy: show raw
+  return [];
+}
+
+function formatRulesSummary(config: EmailTextAlertConfig): string {
+  const rules = parseSenderRules(config.senderFilter);
+  if (rules.length > 0) {
+    return rules
+      .map((r) => `${r.email}${r.keywords.length > 0 ? ` (${r.keywords.length} keyword${r.keywords.length !== 1 ? "s" : ""})` : ""}`)
+      .join(", ");
+  }
+  return config.senderFilter || "Any sender";
 }
 
 export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing }: ActiveMonitoringProps) {
@@ -44,8 +72,8 @@ export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSynci
           </div>
           <div className="min-w-0">
             <p className="text-sm text-muted-foreground">Monitoring</p>
-            <p className="text-sm font-semibold text-foreground truncate">
-              {config.senderFilter || "Any sender"} · {config.keywordFilter || "Any keyword"}
+            <p className="text-sm font-semibold text-foreground">
+              {formatRulesSummary(config)}
             </p>
           </div>
         </div>

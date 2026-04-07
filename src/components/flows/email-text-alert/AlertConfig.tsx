@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Mail, Filter, Phone, Zap, X, Plus } from "lucide-react";
-import { EmailTextAlertConfig } from "@/types/emailTextAlert";
+import { Mail, Filter, Phone, Zap, X, Plus, Trash2 } from "lucide-react";
+import { EmailTextAlertConfig, SenderRule } from "@/types/emailTextAlert";
 import { Button } from "@/components/ui/button";
 
 interface AlertConfigProps {
@@ -10,46 +10,83 @@ interface AlertConfigProps {
   isActivating: boolean;
 }
 
-function parseItems(value: string | null): string[] {
-  if (!value) return [];
-  return value.split(/\|\|\||,/).map((s) => s.trim()).filter(Boolean);
+function parseRules(senderFilter: string | null, keywordFilter: string | null): SenderRule[] {
+  if (!senderFilter) return [];
+  const trimmed = senderFilter.trim();
+
+  // JSON format
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((r: any) => r.email)
+          .map((r: any) => ({
+            email: String(r.email).trim(),
+            keywords: Array.isArray(r.keywords) ? r.keywords.map(String) : [],
+          }));
+      }
+    } catch { /* fall through to legacy */ }
+  }
+
+  // Legacy: flat sender list with global keywords
+  const senders = trimmed.split(/\|\|\||,/).map((s) => s.trim()).filter(Boolean);
+  const keywords = keywordFilter
+    ? keywordFilter.split(/\|\|\||,/).map((k) => k.trim()).filter(Boolean)
+    : [];
+
+  return senders.map((email) => ({ email, keywords: [...keywords] }));
 }
 
 export function AlertConfig({ config, onActivate, onUpdateConfig, isActivating }: AlertConfigProps) {
-  const [senders, setSenders] = useState<string[]>(() => parseItems(config.senderFilter));
-  const [keywords, setKeywords] = useState<string[]>(() => parseItems(config.keywordFilter));
-  const [senderInput, setSenderInput] = useState("");
-  const [keywordInput, setKeywordInput] = useState("");
+  const [rules, setRules] = useState<SenderRule[]>(() => parseRules(config.senderFilter, config.keywordFilter));
+  const [newSenderInput, setNewSenderInput] = useState("");
+  const [keywordInputs, setKeywordInputs] = useState<Record<number, string>>({});
   const [phoneNumber, setPhoneNumber] = useState(config.phoneNumber ?? "");
 
   const addSender = () => {
-    const val = senderInput.trim();
-    if (val && !senders.includes(val)) {
-      setSenders((prev) => [...prev, val]);
+    const val = newSenderInput.trim();
+    if (val && !rules.some((r) => r.email === val)) {
+      setRules((prev) => [...prev, { email: val, keywords: [] }]);
     }
-    setSenderInput("");
+    setNewSenderInput("");
   };
 
-  const removeSender = (item: string) => {
-    setSenders((prev) => prev.filter((s) => s !== item));
+  const removeRule = (index: number) => {
+    setRules((prev) => prev.filter((_, i) => i !== index));
+    setKeywordInputs((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
   };
 
-  const addKeyword = () => {
-    const val = keywordInput.trim();
-    if (val && !keywords.includes(val)) {
-      setKeywords((prev) => [...prev, val]);
-    }
-    setKeywordInput("");
+  const addKeyword = (ruleIndex: number) => {
+    const val = (keywordInputs[ruleIndex] ?? "").trim();
+    if (!val) return;
+    setRules((prev) =>
+      prev.map((r, i) =>
+        i === ruleIndex && !r.keywords.includes(val)
+          ? { ...r, keywords: [...r.keywords, val] }
+          : r
+      )
+    );
+    setKeywordInputs((prev) => ({ ...prev, [ruleIndex]: "" }));
   };
 
-  const removeKeyword = (item: string) => {
-    setKeywords((prev) => prev.filter((k) => k !== item));
+  const removeKeyword = (ruleIndex: number, keyword: string) => {
+    setRules((prev) =>
+      prev.map((r, i) =>
+        i === ruleIndex ? { ...r, keywords: r.keywords.filter((k) => k !== keyword) } : r
+      )
+    );
   };
 
-  const canActivate = phoneNumber.trim().length > 0 && (senders.length > 0 || keywords.length > 0);
+  const canActivate = phoneNumber.trim().length > 0 && rules.length > 0;
 
   const handleActivate = async () => {
-    await onUpdateConfig(senders.join("|||"), keywords.join("|||"), phoneNumber.trim());
+    const serialized = JSON.stringify(rules);
+    await onUpdateConfig(serialized, "", phoneNumber.trim());
     await onActivate();
   };
 
@@ -64,84 +101,106 @@ export function AlertConfig({ config, onActivate, onUpdateConfig, isActivating }
           <h3 className="font-semibold text-foreground text-base">How it works</h3>
         </div>
         <ul className="space-y-2 text-sm text-muted-foreground">
-          <li>• Monitors your Gmail for emails matching your rules</li>
-          <li>• Generates a short AI summary of each matching email</li>
-          <li>• Sends the summary as a text alert to your phone</li>
+          <li>• Add sender emails you want to monitor</li>
+          <li>• Add keywords for each sender to filter by</li>
+          <li>• Matching emails are summarized and sent as text alerts</li>
         </ul>
       </div>
 
-      {/* Sender filter */}
+      {/* Sender rules */}
       <div className="space-y-3">
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Mail className="w-4 h-4 text-muted-foreground" />
-          Sender filter
+          Sender rules
         </label>
-        {senders.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {senders.map((sender) => (
-              <span
-                key={sender}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium"
+
+        {rules.map((rule, ruleIndex) => (
+          <div key={ruleIndex} className="bg-card rounded-2xl border border-border p-5 space-y-3">
+            {/* Sender header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <Mail className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-sm font-semibold text-foreground truncate">{rule.email}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeRule(ruleIndex)}
+                className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
               >
-                {sender}
-                <button type="button" onClick={() => removeSender(sender)} className="ml-0.5 hover:text-destructive transition-colors">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </span>
-            ))}
+                <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive transition-colors" />
+              </button>
+            </div>
+
+            {/* Keyword chips */}
+            {rule.keywords.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {rule.keywords.map((kw) => (
+                  <span
+                    key={kw}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium"
+                  >
+                    {kw}
+                    <button
+                      type="button"
+                      onClick={() => removeKeyword(ruleIndex, kw)}
+                      className="ml-0.5 hover:text-destructive transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Add keyword input */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={keywordInputs[ruleIndex] ?? ""}
+                onChange={(e) => setKeywordInputs((prev) => ({ ...prev, [ruleIndex]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(ruleIndex); } }}
+                placeholder="Add keyword…"
+                className="flex-1 h-10 px-3 bg-muted rounded-[14px] text-foreground placeholder:text-muted-foreground/60 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={() => addKeyword(ruleIndex)}
+                disabled={!(keywordInputs[ruleIndex] ?? "").trim()}
+                className="shrink-0 h-8 w-8 rounded-full"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            {rule.keywords.length === 0 && (
+              <p className="text-xs text-muted-foreground">No keywords — all emails from this sender will match</p>
+            )}
           </div>
-        )}
+        ))}
+
+        {/* Add new sender */}
         <div className="flex items-center gap-2">
           <input
             type="text"
-            value={senderInput}
-            onChange={(e) => setSenderInput(e.target.value)}
+            value={newSenderInput}
+            onChange={(e) => setNewSenderInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSender(); } }}
             placeholder="e.g. boss@company.com"
             className="flex-1 h-[52px] px-4 bg-muted rounded-[20px] text-foreground placeholder:text-muted-foreground/60 text-base outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <Button type="button" size="icon" variant="ghost" onClick={addSender} disabled={!senderInput.trim()} className="shrink-0 h-10 w-10 rounded-full">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={addSender}
+            disabled={!newSenderInput.trim()}
+            className="shrink-0 h-10 w-10 rounded-full"
+          >
             <Plus className="w-5 h-5" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Email addresses or domains to monitor</p>
-      </div>
-
-      {/* Keyword filter */}
-      <div className="space-y-3">
-        <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Filter className="w-4 h-4 text-muted-foreground" />
-          Keyword filter
-        </label>
-        {keywords.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {keywords.map((kw) => (
-              <span
-                key={kw}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium"
-              >
-                {kw}
-                <button type="button" onClick={() => removeKeyword(kw)} className="ml-0.5 hover:text-destructive transition-colors">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(); } }}
-            placeholder="e.g. urgent, invoice"
-            className="flex-1 h-[52px] px-4 bg-muted rounded-[20px] text-foreground placeholder:text-muted-foreground/60 text-base outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <Button type="button" size="icon" variant="ghost" onClick={addKeyword} disabled={!keywordInput.trim()} className="shrink-0 h-10 w-10 rounded-full">
-            <Plus className="w-5 h-5" />
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">Keywords to match in subject or body</p>
+        <p className="text-xs text-muted-foreground">Add sender emails to monitor, then add keywords for each</p>
       </div>
 
       {/* Phone number */}
@@ -170,7 +229,7 @@ export function AlertConfig({ config, onActivate, onUpdateConfig, isActivating }
 
       {!canActivate && (
         <p className="text-xs text-muted-foreground text-center">
-          Enter a phone number and at least one sender or keyword filter to activate
+          Add at least one sender email and enter your phone number to activate
         </p>
       )}
     </div>
