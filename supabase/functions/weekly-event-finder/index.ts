@@ -188,14 +188,22 @@ function extractDateString(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "object") {
     const v = value as Record<string, any>;
-    if (v.dateTime) return String(v.dateTime);
-    if (v.date) return extractDateString(v.date);
+    // Prioritize human-readable 'when' field from Composio
+    if (v.when && typeof v.when === "string") return v.when;
+    if (v.dateTime && typeof v.dateTime === "string") return String(v.dateTime);
+    if (v.start_date && typeof v.start_date === "string") return v.start_date;
+    if (v.date && typeof v.date === "string") return String(v.date);
     if (v.year && v.month && v.day) {
       const pad = (n: number) => String(n).padStart(2, "0");
       let s = `${v.year}-${pad(v.month)}-${pad(v.day)}`;
       if (v.hour != null) s += `T${pad(v.hour)}:${pad(v.minute || 0)}:00`;
       return s;
     }
+    // Recurse into nested objects for known date keys
+    if (v.when) return extractDateString(v.when);
+    if (v.dateTime) return extractDateString(v.dateTime);
+    if (v.date) return extractDateString(v.date);
+    if (v.start_date) return extractDateString(v.start_date);
     try { return JSON.stringify(value); } catch { return ""; }
   }
   return String(value);
@@ -203,7 +211,7 @@ function extractDateString(value: unknown): string {
 
 // Filter out events with dates in the past
 function isUpcomingEvent(event: any): boolean {
-  const dateStr = extractDateString(event.date) || extractDateString(event.start_date) || extractDateString(event.when);
+  const dateStr = extractDateString(event.when) || extractDateString(event.date) || extractDateString(event.start_date);
   if (!dateStr) return true;
   try {
     const eventDate = new Date(dateStr);
@@ -228,7 +236,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
 
   const eventSummaries = events
     .slice(0, 15)
-    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — Date: ${extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when) || "unknown"} — ${e.link || e.url || e.event_url || ""}`)
+    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — Date: ${extractDateString(e.when) || extractDateString(e.date) || extractDateString(e.start_date) || "unknown"} — ${e.link || e.url || e.event_url || ""}`)
     .join("\n");
 
   let curated: any[];
@@ -324,7 +332,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
   const titleToRawDate = new Map<string, string>();
   for (const e of events) {
     const key = (e.title || e.name || "").toLowerCase().trim();
-    const rawDate = extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when);
+    const rawDate = extractDateString(e.when) || extractDateString(e.date) || extractDateString(e.start_date);
     if (key && rawDate) {
       titleToRawDate.set(key, rawDate);
     }
@@ -534,9 +542,10 @@ serve(async (req: Request) => {
         const eventList = newEvents
           .map((e: any, i: number) => {
             const title = e.title || e.name || "Untitled Event";
-            const dateStr = extractDateString(e.date) || extractDateString(e.start_date) || extractDateString(e.when);
+            const dateStr = extractDateString(e.when) || extractDateString(e.date) || extractDateString(e.start_date);
             let formattedDate = dateStr;
-            if (dateStr) {
+            // Only reformat if it looks like an ISO date; human-readable strings (e.g. "Sat, May 16, 4 – 8 PM EDT") pass through as-is
+            if (dateStr && /^\d{4}-\d{2}/.test(dateStr)) {
               try {
                 const d = new Date(dateStr);
                 if (!isNaN(d.getTime())) {
