@@ -484,7 +484,39 @@ serve(async (req: Request) => {
 
         // Build delivery content
         const eventList = newEvents
-          .map((e: any, i: number) => `${i + 1}. ${e.title || e.name}\n   ${e.date || ""}\n   ${e.description || ""}\n   ${e.reason || ""}${e.link ? `\n   ${e.link}` : ""}`)
+          .map((e: any, i: number) => {
+            const title = e.title || e.name || "Untitled Event";
+            const dateStr = e.date || e.start_date || e.when || "";
+            let formattedDate = dateStr;
+            if (dateStr) {
+              try {
+                const d = new Date(dateStr);
+                if (!isNaN(d.getTime())) {
+                  formattedDate = d.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  });
+                  const timeStr = d.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  });
+                  if (d.getHours() !== 0 || d.getMinutes() !== 0) {
+                    formattedDate += ` at ${timeStr}`;
+                  }
+                }
+              } catch {
+                // keep raw dateStr
+              }
+            }
+            const dateLine = formattedDate ? `\n   📅 ${formattedDate}` : "";
+            const desc = e.description ? `\n   ${e.description}` : "";
+            const reason = e.reason ? `\n   Why: ${e.reason}` : "";
+            const link = e.link ? `\n   🔗 ${e.link}` : "";
+            return `${i + 1}. ${title}${dateLine}${desc}${reason}${link}`;
+          })
           .join("\n\n");
 
         const emailBody = `Hi! Here are events we found matching your interests:\n\n${eventList}\n\n— Weave Event Finder`;
