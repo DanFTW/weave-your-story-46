@@ -1,33 +1,71 @@
 
 
-## Multi-item inputs for sender emails and keywords in AlertConfig
+# Per-Sender Keywords for Email Text Alert
 
-### Problem
-The sender filter and keyword filter fields are plain text inputs that accept only a single comma-separated string. Users should be able to add and remove individual items, matching the multitext chip pattern used in `FlowEntryForm`.
+## Overview
 
-### Solution
-Refactor both fields in `AlertConfig.tsx` to use the same add/remove chip pattern from `FlowEntryForm`:
-- Items displayed as removable pills (`rounded-full bg-primary/10 text-primary`)
-- Text input + "+" button to add items
-- Enter key to add
-- X button on each pill to remove
-- Store items as arrays internally, join with `|||` delimiter when passing to `onUpdateConfig`
+Change the alert configuration from two flat lists (senders, keywords) to a structured model where each sender email has its own set of keywords. Stored as JSON in the existing `sender_filter` column — no database migration needed.
 
-### Changes
+## Data Model
 
-**`src/components/flows/email-text-alert/AlertConfig.tsx`** (only file changed)
+New serialization format for `sender_filter` column:
 
-1. Replace `senderFilter` string state with `senders: string[]` array (parsed from `config.senderFilter` split on `|||` or `,`)
-2. Replace `keywordFilter` string state with `keywords: string[]` array (same parsing)
-3. Add `senderInput` and `keywordInput` string states for the text inputs
-4. Add helper functions: `addSender`, `removeSender`, `addKeyword`, `removeKeyword`
-5. Replace the sender `<input>` with:
-   - Chip list showing each sender as a removable pill
-   - Input + Plus button row (matching FlowEntryForm multitext style)
-6. Replace the keyword `<input>` with the same chip + input pattern
-7. Update `canActivate` to check `senders.length > 0 || keywords.length > 0`
-8. Update `handleActivate` to join arrays with `|||` before calling `onUpdateConfig`
-9. Import `X`, `Plus` from lucide-react and `Button` from `@/components/ui/button`
+```text
+[
+  { "email": "boss@company.com", "keywords": ["urgent", "invoice"] },
+  { "email": "hr@company.com",   "keywords": ["benefits"] }
+]
+```
 
-Phone number remains a single text input — no change needed there.
+The `keyword_filter` column becomes unused (left null for backward compat).
+
+## New Type
+
+Add to `src/types/emailTextAlert.ts`:
+
+```ts
+export interface SenderRule {
+  email: string;
+  keywords: string[];
+}
+```
+
+## Files Changed
+
+### 1. `src/types/emailTextAlert.ts`
+- Add `SenderRule` interface
+
+### 2. `src/components/flows/email-text-alert/AlertConfig.tsx` (full rewrite of form body)
+- State becomes `rules: SenderRule[]` parsed from `config.senderFilter` (JSON) with fallback to legacy comma format
+- UI: each rule rendered as a card (`bg-card rounded-2xl border`) showing the email as a header, keyword chips underneath, an inline input to add keywords, and a remove-rule button
+- Bottom section: "Add sender" input + button to append a new `SenderRule` with empty keywords
+- `handleActivate` serializes `rules` as JSON into the `senderFilter` param, passes empty string for `keywordFilter`
+- `canActivate` checks `rules.length > 0 && phoneNumber`
+
+### 3. `src/components/flows/email-text-alert/ActiveMonitoring.tsx`
+- Update config summary to parse JSON from `config.senderFilter` and display each sender with its keyword count (e.g., "boss@co.com (3 keywords)")
+
+### 4. `src/hooks/useEmailTextAlert.ts`
+- No signature change needed — `updateConfig(senderFilter, keywordFilter, phoneNumber)` already accepts strings; AlertConfig will pass JSON as the `senderFilter` string
+
+### 5. `supabase/functions/email-text-alert/index.ts`
+- Update `buildGmailQuery` to detect JSON format (starts with `[`) and parse `SenderRule[]`
+- Build query: for each rule, create `(from:email AND ("kw1" OR "kw2"))`, join all rules with ` OR `
+- Fallback to legacy comma-separated parsing for backward compat
+
+### 6. Edge function redeployment
+- Redeploy `email-text-alert` after code change
+
+## UI Layout (per sender card)
+
+```text
+┌─────────────────────────────────────┐
+│ ✉ boss@company.com              [×] │
+│                                     │
+│  [urgent ×] [invoice ×]            │
+│  [+ add keyword input        ] [+] │
+└─────────────────────────────────────┘
+```
+
+Cards use the same `bg-card rounded-2xl border border-border p-5` pattern used throughout the flow. Keyword chips use the existing `rounded-full bg-primary/10 text-primary` style. Remove buttons use `X` icon with `hover:text-destructive`.
 
