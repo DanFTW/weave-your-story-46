@@ -513,7 +513,13 @@ serve(async (req) => {
 
     const composioData = JSON.parse(responseText);
     const connectionId = composioData.connected_account_id || composioData.id;
-    const redirectUrl = composioData.redirect_url || composioData.redirectUrl;
+    let redirectUrl = composioData.redirect_url || composioData.redirectUrl;
+
+    // Spotify requires show_dialog=true to force account selection on reconnect
+    if (toolkitLower === "spotify" && forceReauth && redirectUrl) {
+      const separator = redirectUrl.includes("?") ? "&" : "?";
+      redirectUrl = `${redirectUrl}${separator}show_dialog=true`;
+    }
     
     console.log(`Connection ID: ${connectionId}`);
     console.log(`Redirect URL: ${redirectUrl}`);
