@@ -196,7 +196,7 @@ function isUpcomingEvent(event: any): boolean {
   }
 }
 
-// Curate events via LLM
+// Curate events via LLM, then recover any dates the LLM dropped
 async function curateEvents(events: any[], interests: string): Promise<any[]> {
   if (events.length === 0) return [];
 
@@ -208,8 +208,10 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
 
   const eventSummaries = events
     .slice(0, 15)
-    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — ${e.date || e.start_date || ""} — ${e.link || e.url || e.event_url || ""}`)
+    .map((e, i) => `${i + 1}. ${e.title || e.name || "Untitled"} — ${e.description || e.summary || ""} — Date: ${e.date || e.start_date || e.when || "unknown"} — ${e.link || e.url || e.event_url || ""}`)
     .join("\n");
+
+  let curated: any[];
 
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -223,7 +225,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
         messages: [
           {
             role: "user",
-            content: `You are an event curator. Given a user's interests and a list of events, pick the top 5 most relevant events.\n\nUser interests: ${interests}\n\nEvents:\n${eventSummaries}`,
+            content: `You are an event curator. Given a user's interests and a list of events, pick the top 5 most relevant events.\n\nIMPORTANT: For each event, copy the EXACT date string from the input into the "date" field. Do not rephrase, summarize, or omit dates. If the input says "Date: Sat, Apr 12, 7 PM", return exactly that.\n\nUser interests: ${interests}\n\nEvents:\n${eventSummaries}`,
           },
         ],
         tools: [
@@ -241,7 +243,7 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
                       type: "object",
                       properties: {
                         title: { type: "string" },
-                        date: { type: "string" },
+                        date: { type: "string", description: "The exact date string copied verbatim from the input" },
                         description: { type: "string" },
                         reason: { type: "string" },
                         link: { type: "string" },
@@ -278,22 +280,48 @@ async function curateEvents(events: any[], interests: string): Promise<any[]> {
     if (toolCall?.function?.arguments) {
       const parsed = JSON.parse(toolCall.function.arguments);
       if (Array.isArray(parsed.events) && parsed.events.length > 0) {
-        return parsed.events;
+        curated = parsed.events;
+      } else {
+        curated = events.slice(0, 5);
+      }
+    } else {
+      // Fallback: try content field for backwards compat
+      const content = data?.choices?.[0]?.message?.content || "";
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        curated = JSON.parse(jsonMatch[0]);
+      } else {
+        curated = events.slice(0, 5);
       }
     }
-
-    // Fallback: try content field for backwards compat
-    const content = data?.choices?.[0]?.message?.content || "";
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    return events.slice(0, 5);
   } catch (e) {
     console.error("LLM error:", e);
     return events.slice(0, 5);
   }
+
+  // Post-curation date recovery: if the LLM dropped or mangled a date,
+  // recover it from the original raw event data by matching on title.
+  const titleToRawDate = new Map<string, string>();
+  for (const e of events) {
+    const key = (e.title || e.name || "").toLowerCase().trim();
+    const rawDate = e.date || e.start_date || e.when || "";
+    if (key && rawDate) {
+      titleToRawDate.set(key, rawDate);
+    }
+  }
+
+  for (const c of curated) {
+    if (!c.date || c.date === "unknown" || c.date.trim() === "") {
+      const key = (c.title || c.name || "").toLowerCase().trim();
+      const recovered = titleToRawDate.get(key);
+      if (recovered) {
+        console.log(`[EventCurate] Recovered date for "${c.title}": ${recovered}`);
+        c.date = recovered;
+      }
+    }
+  }
+
+  return curated;
 }
 
 // Send email via Composio Gmail — with full response inspection
