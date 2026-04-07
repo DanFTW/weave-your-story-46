@@ -91,39 +91,68 @@ async function fetchLiamMemories(): Promise<{ interests: string; location: strin
 
 // Search events via Composio (no auth required)
 async function searchEvents(query: string, location: string): Promise<any[]> {
+  const searchQuery = `${query} events near ${location}`;
+  const url = "https://backend.composio.dev/api/v2/actions/COMPOSIO_SEARCH_EVENT/execute";
+  const body = { input: { query: searchQuery } };
+
+  console.log("[EventSearch] URL:", url);
+  console.log("[EventSearch] Body:", JSON.stringify(body));
+
   try {
-    const res = await fetch("https://backend.composio.dev/api/v3/actions/COMPOSIO_SEARCH_EVENT/execute", {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": COMPOSIO_API_KEY,
       },
-      body: JSON.stringify({
-        input: {
-          query: `${query} events near ${location}`,
-          limit: 20,
-        },
-      }),
+      body: JSON.stringify(body),
     });
 
+    const rawText = await res.text();
+    console.log("[EventSearch] Status:", res.status);
+    console.log("[EventSearch] Response (first 2000 chars):", rawText.slice(0, 2000));
+
     if (!res.ok) {
-      console.error("Composio search failed:", res.status, await res.text());
+      console.error("[EventSearch] Non-OK status:", res.status);
       return [];
     }
 
-    const data = await res.json();
+    const data = JSON.parse(rawText);
 
-    // Extract events from nested Composio response
-    const items =
-      data?.data?.response_data?.data?.items ||
-      data?.data?.response_data?.items ||
-      data?.data?.items ||
-      data?.items ||
-      [];
+    // Check Composio successful flag
+    if (data?.successful === false || data?.error) {
+      console.error("[EventSearch] Composio error:", JSON.stringify(data.error || data));
+      return [];
+    }
 
-    return Array.isArray(items) ? items : [];
+    // Try multiple extraction paths — Composio nests data unpredictably
+    const candidates = [
+      data?.data?.response_data?.events_results,
+      data?.data?.response_data?.results,
+      data?.data?.response_data?.data?.items,
+      data?.data?.response_data?.items,
+      data?.data?.response_data,
+      data?.data?.items,
+      data?.response_data?.events_results,
+      data?.response_data?.results,
+      data?.response_data,
+      data?.items,
+      data?.events_results,
+      data?.results,
+    ];
+
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      if (Array.isArray(c) && c.length > 0) {
+        console.log(`[EventSearch] Found ${c.length} events at extraction path index ${i}`);
+        return c;
+      }
+    }
+
+    console.warn("[EventSearch] No events found in any extraction path");
+    return [];
   } catch (e) {
-    console.error("Event search error:", e);
+    console.error("[EventSearch] Error:", e);
     return [];
   }
 }
