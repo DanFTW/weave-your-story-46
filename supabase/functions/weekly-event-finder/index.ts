@@ -11,8 +11,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-const LIAM_API_KEY = Deno.env.get("LIAM_API_KEY")!;
-const LIAM_USER_KEY = Deno.env.get("LIAM_USER_KEY")!;
+// LIAM_API_KEY and LIAM_USER_KEY removed — prefill now routes through the
+// per-user liam-memory proxy which handles its own auth.
 const SMS_API_KEY = Deno.env.get("SMS_API_KEY")!;
 
 function getUserId(req: Request): string | null {
@@ -42,49 +42,178 @@ async function getGmailConnectionId(sb: any, userId: string): Promise<string | n
   return data?.composio_connection_id ?? null;
 }
 
-// Fetch LIAM memories to pre-fill interests & location
-async function fetchLiamMemories(): Promise<{ interests: string; location: string }> {
-  let interests = "";
-  let location = "";
+// ── Memory extraction helpers ──────────────────────────────────────────
+
+/** Tags that strongly indicate an interest/hobby memory */
+const INTEREST_TAGS = new Set([
+  "INTEREST", "HOBBY", "INTEREST/HOBBY", "INTERESTS", "HOBBIES",
+  "LIFESTYLE", "PERSONAL", "ENTERTAINMENT", "SPORTS", "MUSIC",
+  "FOOD", "COOKING", "TRAVEL", "FITNESS", "GAMING", "ART",
+]);
+
+/** Tags that strongly indicate a location memory */
+const LOCATION_TAGS = new Set([
+  "LOCATION", "ADDRESS", "HOME", "CITY", "TRAVEL",
+]);
+
+/** Regex patterns that signal interest-bearing text */
+const INTEREST_PATTERNS = [
+  /my interests and hobbies include[:\s]*/i,
+  /\b(?:i love|i enjoy|i like|i'm into|i am into|passionate about|obsessed with|hobbies include|interested in|fan of)\b/i,
+  /\b(?:interest|hobby|hobbies|passion|favorite)\b/i,
+];
+
+/** Regex patterns that signal location-bearing text */
+const LOCATION_PATTERNS = [
+  /\b(?:live[sd]? in|based in|located in|from|residing in|moved to|my city is|my town is)\b/i,
+  /\b(?:neighborhood|zip code|address)\b/i,
+];
+
+/**
+ * Parse the "My interests and hobbies include: X, Y, Z" format
+ * into individual tag strings.
+ */
+function parseInterestStatement(text: string): string[] {
+  const prefixMatch = text.match(/my interests and hobbies include[:\s]*(.*)/i);
+  if (prefixMatch) {
+    return prefixMatch[1]
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.length < 80);
+  }
+  return [];
+}
+
+/**
+ * Normalize a tag string: trim, collapse whitespace, title-case.
+ */
+function normalizeTag(tag: string): string {
+  return tag
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Deduplicate tags case-insensitively, preserving first occurrence order.
+ */
+function deduplicateTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const t of tags) {
+    const key = t.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(t);
+    }
+  }
+  return result;
+}
+
+/**
+ * Extract a clean location string from memory text.
+ */
+function extractLocationFromText(text: string): string | null {
+  // "I live in Miami" → "Miami"
+  const match = text.match(
+    /(?:live[sd]? in|based in|located in|from|moved to|residing in)\s+([A-Z][A-Za-z\s,]+)/i
+  );
+  if (match) return match[1].replace(/[.,;!]+$/, "").trim();
+  return null;
+}
+
+// ── Fetch memories via internal liam-memory proxy ──────────────────────
+
+async function fetchLiamMemories(userId: string): Promise<{ interests: string; location: string }> {
+  const interestTags: string[] = [];
+  let locationCandidate = "";
 
   try {
-    const res = await fetch("https://web.askbuddy.ai/devspacexdb/api/memory/list", {
+    // Call the existing liam-memory edge function internally using
+    // the service role key + x-supabase-user-id header (trusted path).
+    const liamUrl = `${SUPABASE_URL}/functions/v1/liam-memory`;
+    console.log("[Prefill] Calling liam-memory proxy for user:", userId);
+
+    const res = await fetch(liamUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apiKey: LIAM_API_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "x-supabase-user-id": userId,
       },
-      body: JSON.stringify({ userKey: LIAM_USER_KEY }),
+      body: JSON.stringify({ action: "list" }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      const memories = data?.memories || data?.data || [];
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "(unreadable)");
+      console.error(`[Prefill] liam-memory returned ${res.status}:`, errBody.slice(0, 500));
+      return { interests: "", location: "" };
+    }
 
-      const interestWords: string[] = [];
-      const locationWords: string[] = [];
+    const data = await res.json();
+    // The liam-memory proxy returns the LIAM API response directly.
+    // Shape: { data: { memories: [...] } } or { memories: [...] } or array
+    const memories: any[] =
+      data?.data?.memories || data?.memories || (Array.isArray(data) ? data : []);
 
-      for (const m of memories) {
-        const text = (m.memory || m.content || "").toLowerCase();
-        if (/interest|hobby|hobbies|love|enjoy|passion|like doing/i.test(text)) {
-          interestWords.push(m.memory || m.content);
-        }
-        if (/live in|based in|located|city|town|neighborhood|address/i.test(text)) {
-          locationWords.push(m.memory || m.content);
-        }
+    console.log(`[Prefill] Retrieved ${memories.length} memories from LIAM`);
+
+    for (const m of memories) {
+      const text: string = m.memory || m.content || "";
+      const tag: string = (m.tag || m.notesKey || "").toUpperCase().replace(/\s+/g, "_");
+
+      // ── Interest extraction (tag-first, then text patterns) ──
+
+      // 1. Check tag
+      const isInterestTag = INTEREST_TAGS.has(tag) || tag.includes("INTEREST") || tag.includes("HOBBY");
+
+      // 2. Parse structured "My interests and hobbies include: ..." statement
+      const parsedFromStatement = parseInterestStatement(text);
+      if (parsedFromStatement.length > 0) {
+        interestTags.push(...parsedFromStatement.map(normalizeTag));
+        continue; // already extracted granularly
       }
 
-      if (interestWords.length > 0) {
-        interests = interestWords.slice(0, 5).join("; ");
+      // 3. Tag-based match — use the full text as an interest description
+      if (isInterestTag && text.length > 2 && text.length < 200) {
+        interestTags.push(normalizeTag(text));
+        continue;
       }
-      if (locationWords.length > 0) {
-        location = locationWords[0];
+
+      // 4. Text-pattern match on broader memories
+      const matchesInterestPattern = INTEREST_PATTERNS.some((p) => p.test(text));
+      if (matchesInterestPattern && text.length > 2 && text.length < 200) {
+        interestTags.push(normalizeTag(text));
+      }
+
+      // ── Location extraction (tag-first, then text patterns) ──
+
+      const isLocationTag = LOCATION_TAGS.has(tag) || tag.includes("LOCATION");
+
+      if (isLocationTag && text.length > 2 && !locationCandidate) {
+        // Try to extract a clean city/place, fall back to full text
+        locationCandidate = extractLocationFromText(text) || text.trim();
+        continue;
+      }
+
+      if (!locationCandidate) {
+        const matchesLocationPattern = LOCATION_PATTERNS.some((p) => p.test(text));
+        if (matchesLocationPattern) {
+          const extracted = extractLocationFromText(text);
+          if (extracted) locationCandidate = extracted;
+        }
       }
     }
   } catch (e) {
-    console.error("Failed to fetch LIAM memories:", e);
+    console.error("[Prefill] Failed to fetch LIAM memories:", e);
   }
 
+  const dedupedInterests = deduplicateTags(interestTags);
+  const interests = dedupedInterests.slice(0, 15).join(", ");
+  const location = locationCandidate;
+
+  console.log(`[Prefill] Extracted ${dedupedInterests.length} interest tags, location: "${location}"`);
   return { interests, location };
 }
 
@@ -479,7 +608,7 @@ serve(async (req: Request) => {
       }
 
       case "prefill": {
-        const result = await fetchLiamMemories();
+        const result = await fetchLiamMemories(userId);
         return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
