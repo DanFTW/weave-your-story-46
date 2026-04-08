@@ -159,6 +159,8 @@ export function WeeklyEventFinderFlow() {
             onPause={deactivate}
             onManualSync={manualSync}
             isSyncing={isSyncing}
+            onSyncInterests={handleSyncInterests}
+            isSyncingInterests={isSyncingInterests}
           />
         )}
       </div>
