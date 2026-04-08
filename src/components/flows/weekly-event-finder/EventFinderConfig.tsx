@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2, RefreshCw } from "lucide-react";
 import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 import { useInterestSync } from "@/hooks/useInterestSync";
+import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
 
@@ -22,7 +23,8 @@ function parseInterestsToTags(raw: string): string[] {
 }
 
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
-  const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory } = useInterestSync();
+  const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory, forgetInterestMemory } = useInterestSync();
+  const { filterRemoved, addRemovedTag, undoRemoval } = useRemovedInterestTags();
   const { phone: prefillPhone, isLoading: isPhoneLoading } = usePhonePrefill(config.phoneNumber);
   const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
 
@@ -46,7 +48,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
       const result = await onPrefill();
       if (!result) return;
       if (result.interests) {
-        const memoryTags = parseInterestsToTags(result.interests);
+        const memoryTags = filterRemoved(parseInterestsToTags(result.interests));
         setInterestTags(prev => {
           const lowerSet = new Set(prev.map(t => t.toLowerCase()));
           const newTags = memoryTags.filter(t => !lowerSet.has(t.toLowerCase()));
@@ -72,12 +74,14 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
 
   const handleAddTag = (tag: string) => {
     setInterestTags(prev => [...prev, tag]);
-    // Fire-and-forget: sync new tag to LIAM
+    undoRemoval(tag); // In case the user re-adds a previously removed tag
     syncNewInterestTag(tag);
   };
 
   const handleRemoveTag = (tag: string) => {
     setInterestTags(prev => prev.filter(t => t !== tag));
+    addRemovedTag(tag);
+    forgetInterestMemory(tag); // Fire-and-forget: delete from LIAM
   };
 
   const handleActivate = async () => {
