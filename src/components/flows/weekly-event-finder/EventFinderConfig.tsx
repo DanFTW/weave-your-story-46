@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2, RefreshCw } from "lucide-react";
 import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 import { useInterestSync } from "@/hooks/useInterestSync";
+import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
 
 interface EventFinderConfigProps {
@@ -22,6 +23,7 @@ function parseInterestsToTags(raw: string): string[] {
 
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
   const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory } = useInterestSync();
+  const { phone: prefillPhone, isLoading: isPhoneLoading } = usePhonePrefill(config.phoneNumber);
   const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
 
   const [interestTags, setInterestTags] = useState<string[]>(() =>
@@ -33,6 +35,10 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   const [email, setEmail] = useState(config.email ?? "");
   const [phoneNumber, setPhoneNumber] = useState(config.phoneNumber ?? "");
   const [isPrefilling, setIsPrefilling] = useState(false);
+
+  useEffect(() => {
+    if (prefillPhone && !phoneNumber) setPhoneNumber(prefillPhone);
+  }, [prefillPhone]);
 
   const refreshFromMemories = useCallback(async () => {
     setIsPrefilling(true);
