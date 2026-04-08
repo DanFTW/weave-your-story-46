@@ -43,6 +43,10 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     (deliveryMethod === "email" ? email.trim().length > 0 : phoneNumber.trim().length > 0);
 
   const handleActivate = async () => {
+    // Fire-and-forget: sync changed interests/location back to LIAM
+    syncInterestsToMemory(interests, prefillRef.current.interests);
+    syncLocationToMemory(location, prefillRef.current.location);
+
     await onUpdateConfig(interests.trim(), location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim());
     await onActivate();
   };
