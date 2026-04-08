@@ -30,6 +30,10 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         if (result) {
           if (result.interests) setInterests(result.interests);
           if (result.location) setLocation(result.location);
+          prefillRef.current = {
+            interests: result.interests ?? "",
+            location: result.location ?? "",
+          };
         }
       }).finally(() => setIsPrefilling(false));
     }
