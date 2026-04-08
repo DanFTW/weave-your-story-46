@@ -1,4 +1,5 @@
 import { Heart, MapPin, Clock, Mail, Phone, Pause, RefreshCw, Loader2, Calendar } from "lucide-react";
+import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 import { Switch } from "@/components/ui/switch";
 import { WeeklyEventFinderStats, WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 
