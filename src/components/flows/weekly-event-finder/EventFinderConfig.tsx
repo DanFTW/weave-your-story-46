@@ -74,12 +74,14 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
 
   const handleAddTag = (tag: string) => {
     setInterestTags(prev => [...prev, tag]);
-    // Fire-and-forget: sync new tag to LIAM
+    undoRemoval(tag); // In case the user re-adds a previously removed tag
     syncNewInterestTag(tag);
   };
 
   const handleRemoveTag = (tag: string) => {
     setInterestTags(prev => prev.filter(t => t !== tag));
+    addRemovedTag(tag);
+    forgetInterestMemory(tag); // Fire-and-forget: delete from LIAM
   };
 
   const handleActivate = async () => {
