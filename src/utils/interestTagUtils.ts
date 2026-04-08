@@ -13,6 +13,10 @@ const CONVERSATIONAL_PREFIXES: RegExp[] = [
   /^(?:passionate about|interested in|fan of|obsessed with)\s+/i,
 ];
 
+const CONVERSATIONAL_SUFFIXES: RegExp[] = [
+  /\s+is\s+(?:one\s+of\s+)?(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s*$/i,
+];
+
 const MAX_TAG_LENGTH = 60;
 
 /**
@@ -23,6 +27,9 @@ export function cleanInterestTag(raw: string): string {
   let cleaned = raw.trim();
   for (const prefix of CONVERSATIONAL_PREFIXES) {
     cleaned = cleaned.replace(prefix, "");
+  }
+  for (const suffix of CONVERSATIONAL_SUFFIXES) {
+    cleaned = cleaned.replace(suffix, "");
   }
   cleaned = cleaned
     .replace(/[.,;!]+$/, "")       // trailing punctuation

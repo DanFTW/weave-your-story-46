@@ -95,10 +95,17 @@ const STRIP_PREFIXES: RegExp[] = [
   /^(?:passionate about|interested in|fan of|obsessed with)\s+/i,
 ];
 
+const STRIP_SUFFIXES: RegExp[] = [
+  /\s+is\s+(?:one\s+of\s+)?(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s*$/i,
+];
+
 function stripInterestPrefixes(text: string): string {
   let cleaned = text.trim();
   for (const p of STRIP_PREFIXES) {
     cleaned = cleaned.replace(p, "");
+  }
+  for (const s of STRIP_SUFFIXES) {
+    cleaned = cleaned.replace(s, "");
   }
   return cleaned.replace(/[.,;!]+$/, "").trim();
 }
