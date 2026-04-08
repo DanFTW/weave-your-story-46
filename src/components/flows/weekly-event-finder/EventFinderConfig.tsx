@@ -56,7 +56,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     } finally {
       setIsPrefilling(false);
     }
-  }, [onPrefill, location]);
+  }, [onPrefill, location, filterRemoved]);
 
   useEffect(() => {
     refreshFromMemories();
