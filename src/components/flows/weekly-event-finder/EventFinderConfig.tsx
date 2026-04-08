@@ -106,7 +106,18 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Heart className="w-4 h-4 text-muted-foreground" />
           Your interests
-          {isPrefilling && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+          {isPrefilling ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground ml-auto" />
+          ) : (
+            <button
+              onClick={refreshFromMemories}
+              type="button"
+              className="ml-auto p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              title="Refresh from memories"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          )}
         </label>
         <InterestTagInput
           tags={interestTags}
@@ -115,7 +126,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
           isPrefilling={isPrefilling}
         />
         <p className="text-xs text-muted-foreground">
-          {isPrefilling ? "Loading from your memories…" : "Pre-filled from your memories if available"}
+          {isPrefilling ? "Syncing from your memories…" : "Synced from your memories"}
         </p>
       </div>
 
