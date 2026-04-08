@@ -23,7 +23,8 @@ function parseInterestsToTags(raw: string): string[] {
 }
 
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
-  const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory } = useInterestSync();
+  const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory, forgetInterestMemory } = useInterestSync();
+  const { filterRemoved, addRemovedTag, undoRemoval } = useRemovedInterestTags();
   const { phone: prefillPhone, isLoading: isPhoneLoading } = usePhonePrefill(config.phoneNumber);
   const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
 
