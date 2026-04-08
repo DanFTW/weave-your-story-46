@@ -7,8 +7,7 @@
  */
 
 const CONVERSATIONAL_PREFIXES: RegExp[] = [
-  /^my interests and hobbies include:?\s*/i,
-  /^(?:hobbies|interests)\s+include:?\s*/i,
+  /^(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s+include\s*:?\s*/i,
   /^i(?:'m|\s+am)\s+into\s+/i,
   /^i\s+(?:love|enjoy|like)\s+/i,
   /^(?:passionate about|interested in|fan of|obsessed with)\s+/i,

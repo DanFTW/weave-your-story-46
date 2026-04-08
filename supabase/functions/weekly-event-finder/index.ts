@@ -74,7 +74,7 @@ const LOCATION_PATTERNS = [
  * into individual tag strings.
  */
 function parseInterestStatement(text: string): string[] {
-  const prefixMatch = text.match(/my interests and hobbies include[:\s]*(.*)/i);
+  const prefixMatch = text.match(/^(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s+include\s*:?\s*(.*)/i);
   if (prefixMatch) {
     return prefixMatch[1]
       .split(/[,;]/)
@@ -89,8 +89,7 @@ function parseInterestStatement(text: string): string[] {
  * "My interests and hobbies include: tech" becomes "tech".
  */
 const STRIP_PREFIXES: RegExp[] = [
-  /^my interests and hobbies include:?\s*/i,
-  /^(?:hobbies|interests)\s+include:?\s*/i,
+  /^(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s+include\s*:?\s*/i,
   /^i(?:'m|\s+am)\s+into\s+/i,
   /^i\s+(?:love|enjoy|like)\s+/i,
   /^(?:passionate about|interested in|fan of|obsessed with)\s+/i,

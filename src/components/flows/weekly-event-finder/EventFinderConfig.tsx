@@ -5,7 +5,7 @@ import { useInterestSync } from "@/hooks/useInterestSync";
 import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
-import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
+import { cleanInterestTag, parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
