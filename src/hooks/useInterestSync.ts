@@ -41,5 +41,40 @@ export function useInterestSync() {
     );
   };
 
-  return { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory, isSyncing: isCreating };
+  /**
+   * Fire-and-forget: find and permanently delete LIAM memories matching a tag.
+   * Searches for memories containing "interests and hobbies include: {tag}".
+   */
+  const forgetInterestMemory = async (tag: string): Promise<void> => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+
+    try {
+      const memories = await listMemories();
+      if (!memories) return;
+
+      const needle = trimmed.toLowerCase();
+      const matches = memories.filter(m => {
+        const c = m.content.toLowerCase();
+        return (
+          c.includes(`interests and hobbies include: ${needle}`) ||
+          c.includes(`interests and hobbies include:${needle}`)
+        );
+      });
+
+      for (const m of matches) {
+        forgetMemory(m.id, true).catch(err =>
+          console.error('[forgetInterestMemory] Failed to forget:', m.id, err),
+        );
+      }
+
+      if (matches.length > 0) {
+        console.log(`[forgetInterestMemory] Deleting ${matches.length} memories for tag "${trimmed}"`);
+      }
+    } catch (err) {
+      console.error('[forgetInterestMemory] Error:', err);
+    }
+  };
+
+  return { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory, forgetInterestMemory, isSyncing: isCreating };
 }
