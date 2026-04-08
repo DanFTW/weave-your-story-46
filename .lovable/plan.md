@@ -1,60 +1,47 @@
 
 
-## Full RLS Audit — All Public Tables
+## Fix: Removed Interest Tags Reappear After Sync
 
-### Summary
+### Problem
 
-RLS is **enabled** on all 60 public tables. No table is missing RLS entirely. However, several tables are missing policies for specific operations, and one table (`app_settings`) has **zero policies** — meaning RLS is on but nothing can be read or written through the client at all.
+When a user removes an interest tag and then refreshes/syncs, the tag reappears because `handleRemoveTag` only updates local React state. The underlying LIAM memory is untouched, so `refreshFromMemories` pulls it right back.
 
-### Categorized Findings
+### Solution — Two-pronged defense
 
-#### 1. `app_settings` — NO POLICIES AT ALL
-This table has no `user_id` column (just `key`, `value`, `created_at`). It's a global settings table. With RLS on and zero policies, it's effectively locked from the client. This is likely intentional (service-role only access). **No action needed** unless client-side reads are required.
+**1. Track removed tags locally (immediate, resilient)**
 
-#### 2. Config tables missing DELETE policy
-Per the thread-gate-pattern architecture, config tables need DELETE for `resetConfig`. These are missing it:
+Create a `useRemovedInterestTags` hook following the existing `useDeletedMemories` pattern — a localStorage-backed Set of removed tag strings (lowercased) with 7-day expiry. When `refreshFromMemories` merges tags from LIAM, it filters out any tag present in the removed set. This handles LIAM's eventual consistency and ensures removed tags stay gone across page reloads.
 
-| Table | Has S | Has I | Has U | Missing |
-|---|---|---|---|---|
-| `birthday_reminder_config` | Y | Y | Y | **DELETE** |
-| `calendar_event_sync_config` | Y | Y | Y | **DELETE** |
-| `coinbase_trades_config` | Y | Y | Y | **DELETE** |
-| `email_receipt_sheet_config` | Y | Y | Y | **DELETE** |
-| `email_text_alert_config` | Y | Y | Y | **DELETE** |
-| `facebook_page_posts_config` | Y | Y | Y | **DELETE** |
-| `fireflies_automation_config` | Y | Y | Y | **DELETE** |
-| `googledrive_automation_config` | Y | Y | Y | **DELETE** |
-| `grocery_sheet_config` | Y | Y | Y | **DELETE** |
-| `instagram_analytics_config` | Y | Y | Y | **DELETE** |
-| `profiles` | Y | Y | Y | **DELETE** |
-| `restaurant_bookmark_config` | Y | Y | Y | **DELETE** |
-| `spotify_music_finder_config` | Y | Y | Y | **DELETE** |
-| `todoist_automation_config` | Y | Y | Y | **DELETE** |
-| `user_api_keys` | Y | Y | Y | **DELETE** |
-| `weekly_event_finder_config` | Y | Y | Y | **DELETE** |
+**2. Delete the LIAM memory on removal (permanent cleanup)**
 
-#### 3. Processed/log tables missing INSERT (edge-function only)
-- `fireflies_processed_transcripts` — only has SELECT. INSERT is done by edge function with service role. **By design, no fix needed.**
+When a user removes a tag, fire-and-forget: list the user's LIAM memories, find any whose content matches the tag (e.g., `"My interests and hobbies include: tech"`), and call `forgetMemory` on each match. This cleans up the source of truth so the tag won't return even after the localStorage entry expires.
 
-#### 4. Tables that are fully covered (all 4 ops or intentionally append-only)
-All remaining tables have the appropriate policies for their use case. Processed/log tables intentionally lack UPDATE/DELETE.
+### Files Changed
 
-### Plan
+| File | Change |
+|---|---|
+| `src/hooks/useRemovedInterestTags.ts` | **New** — localStorage-backed Set of removed tag strings with expiry, modeled after `useDeletedMemories` |
+| `src/hooks/useInterestSync.ts` | Add `forgetInterestMemory(tag)` — lists memories, finds matches by content, calls `forgetMemory` on each |
+| `src/components/flows/weekly-event-finder/EventFinderConfig.tsx` | Wire up: `handleRemoveTag` adds tag to removed set + calls `forgetInterestMemory`; `refreshFromMemories` filters out removed tags before merging |
 
-Run a single migration adding DELETE policies to the 16 config tables listed above. Each policy follows the standard pattern:
+### Detail
 
-```sql
-CREATE POLICY "Users can delete own <table>" 
-ON public.<table> FOR DELETE 
-TO authenticated USING (auth.uid() = user_id);
-```
+**`useRemovedInterestTags` hook:**
+- `removedTags: Set<string>` (lowercased)
+- `addRemovedTag(tag: string)` — adds to Set + persists to localStorage
+- `isRemoved(tag: string): boolean` — case-insensitive check
+- `filterRemoved(tags: string[]): string[]` — filters an array of tags
+- localStorage key: `weekly_event_finder_removed_tags`, 7-day expiry per entry
 
-For `profiles`, the column is `id` not `user_id`, so its policy uses `auth.uid() = id`.
+**`useInterestSync` additions:**
+- New `forgetInterestMemory(tag: string)` function that:
+  1. Calls `listMemories()` silently
+  2. Finds memories where content matches `"My interests and hobbies include: {tag}"` (case-insensitive)
+  3. Calls `forgetMemory(id, true)` for each match (permanent delete)
+  4. Fire-and-forget — errors are logged but don't block the UI
 
-No code changes needed — this is purely a database migration.
-
-### Tables intentionally left without changes
-- `app_settings` — no `user_id`, global config, service-role only access
-- `fireflies_processed_transcripts` — INSERT done by service role only
-- All `_processed` / `_sent` / `_synced` tables — append-only by design, no client DELETE/UPDATE needed
+**`EventFinderConfig` changes:**
+- Import and use `useRemovedInterestTags`
+- `handleRemoveTag`: add tag to removed set, fire `forgetInterestMemory(tag)`
+- `refreshFromMemories`: after parsing memory tags, run `filterRemoved()` before merging into state
 
