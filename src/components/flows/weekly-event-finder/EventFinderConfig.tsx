@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2, RefreshCw } from "lucide-react";
 import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 import { useInterestSync } from "@/hooks/useInterestSync";
+import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
 
