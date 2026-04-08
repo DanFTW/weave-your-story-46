@@ -41,8 +41,8 @@ export function WeeklyEventFinderFlow() {
       const result = await prefill();
       if (!result?.interests) return;
 
-      const memoryTags = filterRemoved(parseInterestsToTags(result.interests));
-      const existingTags = config.interests ? parseInterestsToTags(config.interests) : [];
+      const memoryTags = filterRemoved(parseAndDeduplicateInterestTags(result.interests));
+      const existingTags = config.interests ? parseAndDeduplicateInterestTags(config.interests) : [];
       const lowerSet = new Set(existingTags.map(t => t.toLowerCase()));
       const merged = [...existingTags];
       for (const tag of memoryTags) {
