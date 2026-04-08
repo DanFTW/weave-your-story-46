@@ -52,7 +52,7 @@ export function WeeklyEventFinderFlow() {
         }
       }
 
-      const mergedStr = merged.join(", ");
+      const mergedStr = parseAndDeduplicateInterestTags(merged.join(", ")).join(", ");
       if (mergedStr !== config.interests) {
         await updateConfig(
           mergedStr,
