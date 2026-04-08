@@ -13,6 +13,10 @@ const CONVERSATIONAL_PREFIXES: RegExp[] = [
   /^(?:passionate about|interested in|fan of|obsessed with)\s+/i,
 ];
 
+const CONVERSATIONAL_SUFFIXES: RegExp[] = [
+  /\s+is\s+(?:one\s+of\s+)?(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s*$/i,
+];
+
 const MAX_TAG_LENGTH = 60;
 
 /**
