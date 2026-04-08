@@ -1,73 +1,40 @@
 
-Goal
 
-- Ensure every variant of the “interests and hobbies include” prefix normalizes to the same clean tag before it reaches UI state or gets rendered.
+## Fix: Strip Suffix Patterns from Interest Tags
 
-What I found
+### Problem
+Tags like `"Cooking Is One Of My Interests And Hobbies"` pass through prefix stripping unchanged because the conversational phrase is a **suffix**, not a prefix.
 
-- `src/utils/interestTagUtils.ts` currently strips:
-  - `my interests and hobbies include`
-  - `interests include`
-  - `hobbies include`
-- It does not strip the dirty variants now showing in the UI, such as:
-  - `Interests And Hobbies Include Web`
-  - `Interests And Hobbies Include: Tech`
-- The edge function has the same gap:
-  - `STRIP_PREFIXES` is too narrow
-  - `parseInterestStatement` only recognizes the `my ...` form
-- One raw client entry path still bypasses normalization entirely:
-  - manual tag add in `EventFinderConfig.tsx`
+### Solution
+Add a `CONVERSATIONAL_SUFFIXES` array alongside the existing `CONVERSATIONAL_PREFIXES` in both the client utility and the edge function, then apply them in the cleaning logic.
 
-Implementation
+### Suffix pattern to add
+```
+/\s+is\s+(?:one\s+of\s+)?(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)/i
+```
+This handles: `"X is one of my interests and hobbies"`, `"X is my interest"`, `"X is one of my hobbies"`, etc.
 
-1. Broaden the canonical prefix matcher in `src/utils/interestTagUtils.ts`
-   - Replace the narrow prefix rules with one broader anchored family that covers:
-     - `My interests and hobbies include`
-     - `Interests and hobbies include`
-     - `Interests and hobbies include:`
-     - `Interests include`
-     - `Hobbies include`
-   - Keep optional `my`, optional colon, and flexible whitespace.
+### Files to update
 
-2. Mirror that exact prefix family in `supabase/functions/weekly-event-finder/index.ts`
-   - Update `STRIP_PREFIXES` so prefill strips these variants at the source.
-   - Broaden `parseInterestStatement` so values like `Interests and hobbies include: web, tech` split into separate tags instead of leaking a long dirty string.
+| File | Change |
+|---|---|
+| `src/utils/interestTagUtils.ts` | Add `CONVERSATIONAL_SUFFIXES` array; apply them in `cleanInterestTag` after prefix stripping |
+| `supabase/functions/weekly-event-finder/index.ts` | Add same suffix array to `STRIP_PREFIXES` section; apply in `stripInterestPrefixes` |
 
-3. Close the last raw client path in `EventFinderConfig.tsx`
-   - Run manually added tags through `cleanInterestTag` before adding them to local state or syncing them back to memory.
-   - Ignore empty results and dedupe against existing normalized tags.
+### Implementation detail
 
-4. Keep the already-correct consumer paths
-   - Continue using `parseAndDeduplicateInterestTags` for:
-     - initial config hydration
-     - refresh-from-memories merge
-     - active-view rendering
-     - active sync merge
-   - This preserves defense-in-depth and immediately cleans legacy stored values on display.
+In `cleanInterestTag` and `stripInterestPrefixes`, after stripping prefixes, iterate over suffixes and strip them:
 
-Files to update
+```typescript
+const CONVERSATIONAL_SUFFIXES: RegExp[] = [
+  /\s+is\s+(?:one\s+of\s+)?(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s*$/i,
+];
 
-- `src/utils/interestTagUtils.ts`
-- `src/components/flows/weekly-event-finder/EventFinderConfig.tsx`
-- `supabase/functions/weekly-event-finder/index.ts`
+// Applied after prefix stripping, before punctuation/whitespace cleanup
+for (const suffix of CONVERSATIONAL_SUFFIXES) {
+  cleaned = cleaned.replace(suffix, "");
+}
+```
 
-Verification
+No other files need changes — all consumer paths already use `cleanInterestTag` / `parseAndDeduplicateInterestTags`.
 
-- All of these should render as only `Tech`:
-  - `My interests and hobbies include: tech`
-  - `Interests and hobbies include tech`
-  - `Interests and hobbies include: tech`
-  - `Interests include tech`
-- `Interests and hobbies include: web, tech` should become two tags: `Web`, `Tech`
-- `Making Music` should still appear only once when it exists in saved config, prefill data, or manual input
-
-Technical details
-
-- Use one regex shape in both client and edge-function code, for example:
-  - `^(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s+include\s*:?\s*`
-- Preserve the existing:
-  - 60-character cap
-  - whitespace collapse
-  - title-casing
-  - case-insensitive deduplication
-- Do not change unrelated UI, delivery, or thread logic.
