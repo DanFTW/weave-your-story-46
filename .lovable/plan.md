@@ -1,106 +1,104 @@
 
 
-## Bidirectional interests sync with LIAM memories
-
-### Current state
-
-- **Read path**: When the config page opens with no saved interests, `onPrefill` calls the edge function's `prefill` action, which reads LIAM memories server-side using global LIAM keys and regex-matches interest/location content.
-- **Write path**: None. When users edit interests and activate, changes are saved only to `weekly_event_finder_config` in Supabase — never written back to LIAM.
+## Rework interests input to tag/chip-based UI with bidirectional LIAM sync
 
 ### What changes
 
-Make the interests field bidirectional: read from LIAM on open (existing), write back to LIAM on save (new). Use the existing `useLiamMemory` hook's `createMemory` for the write path — it already handles auth, signing, retries, and the `liam-memory` edge function proxy. No new edge function or API endpoint needed.
+Replace the interests textarea with a tag-based input that displays interests as removable chips, prefills from LIAM memories as discrete tags, and syncs new tags back to LIAM.
 
-### Technical plan
+### Files
 
-#### 1. New utility hook: `src/hooks/useInterestSync.ts`
+#### 1. New: `src/components/flows/weekly-event-finder/InterestTagInput.tsx`
 
-A small, reusable hook that encapsulates the bidirectional sync logic, keeping `EventFinderConfig` clean:
+A self-contained chip input component following the existing pattern from `AlertConfig.tsx` keyword chips and `FlowEntryForm.tsx` chips fields.
 
+**Behavior:**
+- Renders an array of interest strings as removable pills (`rounded-full`, `bg-primary/10 text-primary`, with `X` button — matching `AlertConfig.tsx` line 138-151)
+- Text input + "Add" button at the bottom (matching `AlertConfig.tsx` line 156-175 pattern)
+- Enter key adds tag, input clears after add
+- Deduplicates tags (case-insensitive)
+- Exposes `tags: string[]`, `onTagsChange: (tags: string[]) => void`, `isPrefilling: boolean`
+
+**Styling** — follows existing chip patterns:
+```tsx
+// Each tag chip (from AlertConfig pattern)
+<span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
+  {tag}
+  <button onClick={() => onRemove(tag)} className="ml-0.5 hover:text-destructive transition-colors">
+    <X className="w-3.5 h-3.5" />
+  </button>
+</span>
+
+// Input row (from AlertConfig pattern)
+<input className="flex-1 h-10 px-3 bg-muted rounded-[14px] text-foreground placeholder:text-muted-foreground/60 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
+```
+
+#### 2. Update: `src/components/flows/weekly-event-finder/EventFinderConfig.tsx`
+
+- Replace `interests` state from `string` → `string[]`
+- Parse prefilled interests string into tags: split on `;` or `,`, then extract topic phrases (strip "My interests and hobbies include:" prefix, trim)
+- Replace the `<textarea>` block (lines 72-88) with `<InterestTagInput>`
+- Update `canActivate` to check `interestTags.length > 0`
+- In `handleActivate`, join tags back to comma-separated string for `onUpdateConfig` (DB schema stays the same)
+- Update `syncInterestsToMemory` call to pass joined tags string
+
+**Tag extraction logic** (utility function in the component or a small helper):
 ```typescript
-import { useLiamMemory } from "@/hooks/useLiamMemory";
-
-export function useInterestSync() {
-  const { createMemory, isCreating } = useLiamMemory();
-
-  /**
-   * Saves user interests back to LIAM as a memory tagged "INTEREST/HOBBY".
-   * Compares previous vs current to avoid redundant writes.
-   * Fires silently — no toast on success.
-   */
-  const syncInterestsToMemory = async (
-    currentInterests: string,
-    previousInterests: string | null
-  ): Promise<void> => {
-    const trimmed = currentInterests.trim();
-    if (!trimmed || trimmed === (previousInterests ?? "").trim()) return;
-
-    await createMemory(
-      `My interests and hobbies include: ${trimmed}`,
-      "INTEREST/HOBBY",
-      { silent: true }
-    );
-  };
-
-  return { syncInterestsToMemory, isSyncing: isCreating };
+function parseInterestsToTags(raw: string): string[] {
+  return raw
+    .replace(/my interests and hobbies include:/i, "")
+    .split(/[;,]/)
+    .map(s => s.trim())
+    .filter(Boolean);
 }
 ```
 
-Key decisions:
-- **Tag**: `INTEREST/HOBBY` — matches the regex the `fetchLiamMemories` function already uses to read interests back (`/interest|hobby/i`).
-- **Silent**: Uses `{ silent: true }` to avoid a toast for the background sync.
-- **Deduplication**: Compares current vs previous to skip no-op writes.
-- **Content format**: `"My interests and hobbies include: ..."` — natural language so the LIAM regex picks it up on next prefill.
+#### 3. Update: `src/hooks/useInterestSync.ts`
 
-#### 2. Update `EventFinderConfig.tsx`
-
-- Import and use `useInterestSync`.
-- Store the original prefilled interests in a ref (`prefillRef`) so we can diff on save.
-- In `handleActivate`, call `syncInterestsToMemory(interests, prefillRef.current)` before (or in parallel with) the existing `onUpdateConfig` + `onActivate`.
-- Also sync location the same way with tag `LOCATION`.
+Add a new method `syncNewInterestTag` that creates a single LIAM memory for a newly added tag (rather than bulk-replacing all interests). This is more granular — each tag becomes its own memory.
 
 ```typescript
-// Inside EventFinderConfig
-const { syncInterestsToMemory } = useInterestSync();
-const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
-
-// In the prefill useEffect, after setting state:
-prefillRef.current = { interests: result.interests, location: result.location };
-
-// In handleActivate:
-const handleActivate = async () => {
-  // Fire-and-forget: sync changed interests/location back to LIAM
-  syncInterestsToMemory(interests, prefillRef.current.interests);
-  syncLocationToMemory(location, prefillRef.current.location);
-  
-  await onUpdateConfig(interests.trim(), location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim());
-  await onActivate();
+const syncNewInterestTag = async (tag: string): Promise<void> => {
+  const trimmed = tag.trim();
+  if (!trimmed) return;
+  await createMemory(
+    `My interests and hobbies include: ${trimmed}`,
+    "INTEREST/HOBBY",
+    { silent: true }
+  );
 };
 ```
 
-#### 3. Extend `useInterestSync` for location too
+Keep the existing `syncInterestsToMemory` for the bulk save on activate.
 
-Add a `syncLocationToMemory` method with tag `LOCATION` and content like `"I am based in: {location}"`, matching the existing `/live in|based in|located|city/i` regex.
+#### 4. Wire it together in `EventFinderConfig`
 
-### Files changed
+- On prefill: parse the semicolon-joined string into tags array
+- On add tag: append to local state, fire-and-forget `syncNewInterestTag(newTag)` immediately
+- On remove tag: remove from local state only (no LIAM delete — memories persist)
+- On activate: join tags, call `onUpdateConfig` with comma-separated string
 
-| File | Change |
-|---|---|
-| `src/hooks/useInterestSync.ts` | **New** — reusable bidirectional sync hook |
-| `src/components/flows/weekly-event-finder/EventFinderConfig.tsx` | Use `useInterestSync`, add ref for previous values, call sync in `handleActivate` |
+### Data flow
+
+```text
+Open config → prefill() → "art; live music; hiking"
+                              ↓ parseInterestsToTags()
+                        ["art", "live music", "hiking"]
+                              ↓ render as chips
+
+User adds "yoga" → tags = [..., "yoga"]
+                   → syncNewInterestTag("yoga") // fire-and-forget to LIAM
+
+User removes "art" → tags = ["live music", "hiking", "yoga"]
+
+Activate → onUpdateConfig("live music, hiking, yoga", ...)
+         → syncInterestsToMemory("live music, hiking, yoga", prefillRef)
+```
 
 ### What stays the same
-
-- Edge function `weekly-event-finder` — no changes needed. The `prefill` action already reads from LIAM. Writes go through the existing `liam-memory` edge function.
-- `useLiamMemory` hook — used as-is.
-- `useWeeklyEventFinder` hook — unchanged.
-- All other files — untouched.
-
-### Why this approach
-
-- **Reuses existing patterns**: `useLiamMemory.createMemory` already handles auth, signing, retries, and error toasts.
-- **Separation of concerns**: Sync logic lives in its own hook, not embedded in the config component.
-- **Reusable**: Any future flow that needs interest/location sync can import `useInterestSync`.
-- **No redundant writes**: Diffs against prefilled values before saving.
-- **Non-blocking**: Sync is fire-and-forget so it doesn't slow down activation.
+- Edge function `weekly-event-finder` — no changes
+- `useWeeklyEventFinder` hook — no changes
+- DB schema (`interests` column stays as text string)
+- Location field — unchanged
+- All other config fields — unchanged
 
