@@ -17,6 +17,16 @@ export function useInterestSync() {
     );
   };
 
+  const syncNewInterestTag = async (tag: string): Promise<void> => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    await createMemory(
+      `My interests and hobbies include: ${trimmed}`,
+      "INTEREST/HOBBY",
+      { silent: true }
+    );
+  };
+
   const syncLocationToMemory = async (
     currentLocation: string,
     previousLocation: string | null
@@ -31,5 +41,5 @@ export function useInterestSync() {
     );
   };
 
-  return { syncInterestsToMemory, syncLocationToMemory, isSyncing: isCreating };
+  return { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory, isSyncing: isCreating };
 }

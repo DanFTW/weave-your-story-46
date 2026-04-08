@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2 } from "lucide-react";
 import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 import { useInterestSync } from "@/hooks/useInterestSync";
+import { InterestTagInput } from "./InterestTagInput";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
@@ -11,11 +12,21 @@ interface EventFinderConfigProps {
   onPrefill: () => Promise<{ interests: string; location: string } | null>;
 }
 
+function parseInterestsToTags(raw: string): string[] {
+  return raw
+    .replace(/my interests and hobbies include:/i, "")
+    .split(/[;,]/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
-  const { syncInterestsToMemory, syncLocationToMemory } = useInterestSync();
+  const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory } = useInterestSync();
   const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
 
-  const [interests, setInterests] = useState(config.interests ?? "");
+  const [interestTags, setInterestTags] = useState<string[]>(() =>
+    config.interests ? parseInterestsToTags(config.interests) : []
+  );
   const [location, setLocation] = useState(config.location ?? "");
   const [frequency, setFrequency] = useState<"weekly" | "daily">(config.frequency ?? "weekly");
   const [deliveryMethod, setDeliveryMethod] = useState<"email" | "text">(config.deliveryMethod ?? "email");
@@ -28,7 +39,10 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
       setIsPrefilling(true);
       onPrefill().then((result) => {
         if (result) {
-          if (result.interests) setInterests(result.interests);
+          if (result.interests) {
+            const tags = parseInterestsToTags(result.interests);
+            setInterestTags(tags);
+          }
           if (result.location) setLocation(result.location);
           prefillRef.current = {
             interests: result.interests ?? "",
@@ -39,15 +53,26 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     }
   }, []);
 
-  const canActivate = interests.trim().length > 0 && location.trim().length > 0 &&
+  const canActivate = interestTags.length > 0 && location.trim().length > 0 &&
     (deliveryMethod === "email" ? email.trim().length > 0 : phoneNumber.trim().length > 0);
 
+  const handleAddTag = (tag: string) => {
+    setInterestTags(prev => [...prev, tag]);
+    // Fire-and-forget: sync new tag to LIAM
+    syncNewInterestTag(tag);
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setInterestTags(prev => prev.filter(t => t !== tag));
+  };
+
   const handleActivate = async () => {
+    const joinedInterests = interestTags.join(", ");
     // Fire-and-forget: sync changed interests/location back to LIAM
-    syncInterestsToMemory(interests, prefillRef.current.interests);
+    syncInterestsToMemory(joinedInterests, prefillRef.current.interests);
     syncLocationToMemory(location, prefillRef.current.location);
 
-    await onUpdateConfig(interests.trim(), location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim());
+    await onUpdateConfig(joinedInterests, location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim());
     await onActivate();
   };
 
@@ -75,12 +100,11 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
           Your interests
           {isPrefilling && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
         </label>
-        <textarea
-          value={interests}
-          onChange={(e) => setInterests(e.target.value)}
-          placeholder="e.g. live music, tech meetups, art galleries, hiking…"
-          rows={3}
-          className="w-full px-4 py-3 bg-muted rounded-[20px] text-foreground placeholder:text-muted-foreground/60 text-base outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+        <InterestTagInput
+          tags={interestTags}
+          onAddTag={handleAddTag}
+          onRemoveTag={handleRemoveTag}
+          isPrefilling={isPrefilling}
         />
         <p className="text-xs text-muted-foreground">
           {isPrefilling ? "Loading from your memories…" : "Pre-filled from your memories if available"}
