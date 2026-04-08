@@ -608,7 +608,7 @@ serve(async (req: Request) => {
       }
 
       case "prefill": {
-        const result = await fetchLiamMemories();
+        const result = await fetchLiamMemories(userId);
         return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
