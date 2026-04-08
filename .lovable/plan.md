@@ -1,29 +1,73 @@
 
+Goal
 
-## Fix: Clean All Code Paths Where Interest Tags Enter the UI
+- Ensure every variant of the “interests and hobbies include” prefix normalizes to the same clean tag before it reaches UI state or gets rendered.
 
-### Problem
+What I found
 
-The `cleanInterestTag` / `parseAndDeduplicateInterestTags` utility exists but two code paths still consume raw `config.interests` without cleaning:
+- `src/utils/interestTagUtils.ts` currently strips:
+  - `my interests and hobbies include`
+  - `interests include`
+  - `hobbies include`
+- It does not strip the dirty variants now showing in the UI, such as:
+  - `Interests And Hobbies Include Web`
+  - `Interests And Hobbies Include: Tech`
+- The edge function has the same gap:
+  - `STRIP_PREFIXES` is too narrow
+  - `parseInterestStatement` only recognizes the `my ...` form
+- One raw client entry path still bypasses normalization entirely:
+  - manual tag add in `EventFinderConfig.tsx`
 
-1. **`ActiveMonitoring.tsx` line 50** — displays `config.interests` verbatim as text, so dirty DB values like `"Interests And Hobbies Include Tech, Tech, Making Music, Making Music"` render as-is.
-2. **`WeeklyEventFinderFlow.tsx` line 45** — `handleSyncInterests` builds `existingTags` from raw `config.interests`, preserving dirty entries, then merges clean memory tags on top — duplicates survive.
+Implementation
 
-### Fix
+1. Broaden the canonical prefix matcher in `src/utils/interestTagUtils.ts`
+   - Replace the narrow prefix rules with one broader anchored family that covers:
+     - `My interests and hobbies include`
+     - `Interests and hobbies include`
+     - `Interests and hobbies include:`
+     - `Interests include`
+     - `Hobbies include`
+   - Keep optional `my`, optional colon, and flexible whitespace.
 
-Two surgical changes, both under 5 lines each:
+2. Mirror that exact prefix family in `supabase/functions/weekly-event-finder/index.ts`
+   - Update `STRIP_PREFIXES` so prefill strips these variants at the source.
+   - Broaden `parseInterestStatement` so values like `Interests and hobbies include: web, tech` split into separate tags instead of leaking a long dirty string.
 
-| File | Line(s) | Change |
-|---|---|---|
-| `ActiveMonitoring.tsx` | 49-51 | Clean `config.interests` through `parseAndDeduplicateInterestTags` before display, joining with `", "` |
-| `WeeklyEventFinderFlow.tsx` | 45 | Already imports `parseAndDeduplicateInterestTags` — just confirm it's applied to `config.interests` when building `existingTags` (it is, but the result is never re-cleaned after merge; the merged string on line 55 should be run through `parseAndDeduplicateInterestTags` then re-joined to guarantee no dupes survive the round-trip) |
+3. Close the last raw client path in `EventFinderConfig.tsx`
+   - Run manually added tags through `cleanInterestTag` before adding them to local state or syncing them back to memory.
+   - Ignore empty results and dedupe against existing normalized tags.
 
-**`ActiveMonitoring.tsx`:**
-- Import `parseAndDeduplicateInterestTags` from `@/utils/interestTagUtils`
-- Replace `{config.interests || "Not set"}` with `{config.interests ? parseAndDeduplicateInterestTags(config.interests).join(", ") : "Not set"}`
+4. Keep the already-correct consumer paths
+   - Continue using `parseAndDeduplicateInterestTags` for:
+     - initial config hydration
+     - refresh-from-memories merge
+     - active-view rendering
+     - active sync merge
+   - This preserves defense-in-depth and immediately cleans legacy stored values on display.
 
-**`WeeklyEventFinderFlow.tsx`:**
-- The existing `handleSyncInterests` already calls `parseAndDeduplicateInterestTags` on both `result.interests` and `config.interests`, but the final `merged.join(", ")` could still contain dirty tags from `existingTags` if the DB was written before the utility existed. Wrap the final merge: `const mergedStr = parseAndDeduplicateInterestTags(merged.join(", ")).join(", ")` — this is a safety net that re-cleans the combined output.
+Files to update
 
-No other files need changes. The configure screen already initializes from `parseAndDeduplicateInterestTags(config.interests)` on line 25 of `EventFinderConfig.tsx`.
+- `src/utils/interestTagUtils.ts`
+- `src/components/flows/weekly-event-finder/EventFinderConfig.tsx`
+- `supabase/functions/weekly-event-finder/index.ts`
 
+Verification
+
+- All of these should render as only `Tech`:
+  - `My interests and hobbies include: tech`
+  - `Interests and hobbies include tech`
+  - `Interests and hobbies include: tech`
+  - `Interests include tech`
+- `Interests and hobbies include: web, tech` should become two tags: `Web`, `Tech`
+- `Making Music` should still appear only once when it exists in saved config, prefill data, or manual input
+
+Technical details
+
+- Use one regex shape in both client and edge-function code, for example:
+  - `^(?:my\s+)?(?:interests?(?:\s+and\s+hobbies?)?|hobbies?)\s+include\s*:?\s*`
+- Preserve the existing:
+  - 60-character cap
+  - whitespace collapse
+  - title-casing
+  - case-insensitive deduplication
+- Do not change unrelated UI, delivery, or thread logic.
