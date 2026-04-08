@@ -48,7 +48,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
       const result = await onPrefill();
       if (!result) return;
       if (result.interests) {
-        const memoryTags = parseInterestsToTags(result.interests);
+        const memoryTags = filterRemoved(parseInterestsToTags(result.interests));
         setInterestTags(prev => {
           const lowerSet = new Set(prev.map(t => t.toLowerCase()));
           const newTags = memoryTags.filter(t => !lowerSet.has(t.toLowerCase()));
