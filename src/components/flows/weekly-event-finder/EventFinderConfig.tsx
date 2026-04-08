@@ -22,7 +22,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
 
   const [interestTags, setInterestTags] = useState<string[]>(() =>
-    config.interests ? parseInterestsToTags(config.interests) : []
+    config.interests ? parseAndDeduplicateInterestTags(config.interests) : []
   );
   const [location, setLocation] = useState(config.location ?? "");
   const [frequency, setFrequency] = useState<"weekly" | "daily">(config.frequency ?? "weekly");
