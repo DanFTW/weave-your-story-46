@@ -5,7 +5,7 @@ import { useInterestSync } from "@/hooks/useInterestSync";
 import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
-import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
+import { cleanInterestTag, parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
@@ -66,9 +66,12 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     (deliveryMethod === "email" ? email.trim().length > 0 : phoneNumber.trim().length > 0);
 
   const handleAddTag = (tag: string) => {
-    setInterestTags(prev => [...prev, tag]);
-    undoRemoval(tag); // In case the user re-adds a previously removed tag
-    syncNewInterestTag(tag);
+    const cleaned = cleanInterestTag(tag);
+    if (!cleaned) return;
+    if (interestTags.some(t => t.toLowerCase() === cleaned.toLowerCase())) return;
+    setInterestTags(prev => [...prev, cleaned]);
+    undoRemoval(cleaned);
+    syncNewInterestTag(cleaned);
   };
 
   const handleRemoveTag = (tag: string) => {
