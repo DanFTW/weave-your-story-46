@@ -28,6 +28,9 @@ export function cleanInterestTag(raw: string): string {
   for (const prefix of CONVERSATIONAL_PREFIXES) {
     cleaned = cleaned.replace(prefix, "");
   }
+  for (const suffix of CONVERSATIONAL_SUFFIXES) {
+    cleaned = cleaned.replace(suffix, "");
+  }
   cleaned = cleaned
     .replace(/[.,;!]+$/, "")       // trailing punctuation
     .replace(/\s+/g, " ")          // collapse whitespace
