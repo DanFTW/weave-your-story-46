@@ -195,16 +195,22 @@ async function fetchLiamMemories(userId: string): Promise<{ interests: string; l
         continue; // already extracted granularly
       }
 
-      // 3. Tag-based match — use the full text as an interest description
+      // 3. Tag-based match — strip prefixes then use as interest
       if (isInterestTag && text.length > 2 && text.length < 200) {
-        interestTags.push(normalizeTag(text));
+        const stripped = stripInterestPrefixes(text);
+        if (stripped.length > 1 && stripped.length <= 60) {
+          interestTags.push(normalizeTag(stripped));
+        }
         continue;
       }
 
       // 4. Text-pattern match on broader memories
       const matchesInterestPattern = INTEREST_PATTERNS.some((p) => p.test(text));
       if (matchesInterestPattern && text.length > 2 && text.length < 200) {
-        interestTags.push(normalizeTag(text));
+        const stripped = stripInterestPrefixes(text);
+        if (stripped.length > 1 && stripped.length <= 60) {
+          interestTags.push(normalizeTag(stripped));
+        }
       }
 
       // ── Location extraction (tag-first, then text patterns) ──
