@@ -1,12 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useWeeklyEventFinder } from "@/hooks/useWeeklyEventFinder";
+import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { EventFinderConfig } from "./EventFinderConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
 import { cn } from "@/lib/utils";
+
+function parseInterestsToTags(raw: string): string[] {
+  return raw
+    .replace(/my interests and hobbies include:/i, "")
+    .split(",")
+    .map(t => t.trim())
+    .filter(Boolean);
+}
 
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
