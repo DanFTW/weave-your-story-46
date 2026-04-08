@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Mail, Filter, Phone, Zap, X, Plus, Trash2 } from "lucide-react";
 import { EmailTextAlertConfig, SenderRule } from "@/types/emailTextAlert";
 import { Button } from "@/components/ui/button";
+import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 
 interface AlertConfigProps {
   config: EmailTextAlertConfig;
