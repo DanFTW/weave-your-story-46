@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2 } from "lucide-react";
 import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
+import { useInterestSync } from "@/hooks/useInterestSync";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
@@ -11,6 +12,9 @@ interface EventFinderConfigProps {
 }
 
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
+  const { syncInterestsToMemory, syncLocationToMemory } = useInterestSync();
+  const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
+
   const [interests, setInterests] = useState(config.interests ?? "");
   const [location, setLocation] = useState(config.location ?? "");
   const [frequency, setFrequency] = useState<"weekly" | "daily">(config.frequency ?? "weekly");
@@ -26,6 +30,10 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         if (result) {
           if (result.interests) setInterests(result.interests);
           if (result.location) setLocation(result.location);
+          prefillRef.current = {
+            interests: result.interests ?? "",
+            location: result.location ?? "",
+          };
         }
       }).finally(() => setIsPrefilling(false));
     }
@@ -35,6 +43,10 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     (deliveryMethod === "email" ? email.trim().length > 0 : phoneNumber.trim().length > 0);
 
   const handleActivate = async () => {
+    // Fire-and-forget: sync changed interests/location back to LIAM
+    syncInterestsToMemory(interests, prefillRef.current.interests);
+    syncLocationToMemory(location, prefillRef.current.location);
+
     await onUpdateConfig(interests.trim(), location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim());
     await onActivate();
   };
