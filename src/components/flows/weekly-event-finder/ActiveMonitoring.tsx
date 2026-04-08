@@ -1,4 +1,5 @@
 import { Heart, MapPin, Clock, Mail, Phone, Pause, RefreshCw, Loader2, Calendar } from "lucide-react";
+import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 import { Switch } from "@/components/ui/switch";
 import { WeeklyEventFinderStats, WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 
@@ -47,7 +48,7 @@ export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSynci
           <div className="min-w-0 flex-1">
             <p className="text-sm text-muted-foreground">Interests</p>
             <p className="text-sm font-semibold text-foreground line-clamp-2">
-              {config.interests || "Not set"}
+              {config.interests ? parseAndDeduplicateInterestTags(config.interests).join(", ") : "Not set"}
             </p>
           </div>
           <button
