@@ -56,7 +56,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     } finally {
       setIsPrefilling(false);
     }
-  }, [onPrefill, location]);
+  }, [onPrefill, location, filterRemoved]);
 
   useEffect(() => {
     refreshFromMemories();
@@ -65,13 +65,13 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   const canActivate = interestTags.length > 0 && location.trim().length > 0 &&
     (deliveryMethod === "email" ? email.trim().length > 0 : phoneNumber.trim().length > 0);
 
-  const handleAddTag = (tag: string) => {
+  const handleAddTag = async (tag: string) => {
     const cleaned = cleanInterestTag(tag);
     if (!cleaned) return;
     if (interestTags.some(t => t.toLowerCase() === cleaned.toLowerCase())) return;
     setInterestTags(prev => [...prev, cleaned]);
     undoRemoval(cleaned);
-    syncNewInterestTag(cleaned);
+    await syncNewInterestTag(cleaned);
   };
 
   const handleRemoveTag = (tag: string) => {
