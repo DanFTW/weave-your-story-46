@@ -7,15 +7,8 @@ import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { EventFinderConfig } from "./EventFinderConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
+import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 import { cn } from "@/lib/utils";
-
-function parseInterestsToTags(raw: string): string[] {
-  return raw
-    .replace(/my interests and hobbies include:/i, "")
-    .split(",")
-    .map(t => t.trim())
-    .filter(Boolean);
-}
 
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
