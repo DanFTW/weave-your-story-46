@@ -85,6 +85,26 @@ function parseInterestStatement(text: string): string[] {
 }
 
 /**
+ * Strip conversational prefixes from a raw memory string so that
+ * "My interests and hobbies include: tech" becomes "tech".
+ */
+const STRIP_PREFIXES: RegExp[] = [
+  /^my interests and hobbies include:?\s*/i,
+  /^(?:hobbies|interests)\s+include:?\s*/i,
+  /^i(?:'m|\s+am)\s+into\s+/i,
+  /^i\s+(?:love|enjoy|like)\s+/i,
+  /^(?:passionate about|interested in|fan of|obsessed with)\s+/i,
+];
+
+function stripInterestPrefixes(text: string): string {
+  let cleaned = text.trim();
+  for (const p of STRIP_PREFIXES) {
+    cleaned = cleaned.replace(p, "");
+  }
+  return cleaned.replace(/[.,;!]+$/, "").trim();
+}
+
+/**
  * Normalize a tag string: trim, collapse whitespace, title-case.
  */
 function normalizeTag(tag: string): string {
