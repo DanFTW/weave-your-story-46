@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2 } from "lucide-react";
 import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
+import { useInterestSync } from "@/hooks/useInterestSync";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
