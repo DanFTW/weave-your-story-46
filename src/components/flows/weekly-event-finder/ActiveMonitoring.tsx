@@ -8,9 +8,11 @@ interface ActiveMonitoringProps {
   onPause: () => Promise<boolean>;
   onManualSync: () => Promise<void>;
   isSyncing: boolean;
+  onSyncInterests: () => Promise<void>;
+  isSyncingInterests: boolean;
 }
 
-export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
   return (
     <div className="space-y-6">
       {/* Toggle card */}
