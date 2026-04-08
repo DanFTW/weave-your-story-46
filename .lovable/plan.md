@@ -1,43 +1,29 @@
 
 
-## Fix: Duplicate and Malformed Interest Tags
+## Fix: Clean All Code Paths Where Interest Tags Enter the UI
 
-### Root Cause
+### Problem
 
-Two places produce malformed tags:
+The `cleanInterestTag` / `parseAndDeduplicateInterestTags` utility exists but two code paths still consume raw `config.interests` without cleaning:
 
-1. **Server (`fetchLiamMemories`, lines 178-188)**: Steps 3 and 4 push `normalizeTag(text)` where `text` is the *full memory content* (e.g., `"My interests and hobbies include: tech"`). `normalizeTag` only trims and title-cases — it doesn't strip conversational prefixes. Result: `"My Interests And Hobbies Include Tech"` becomes a tag.
+1. **`ActiveMonitoring.tsx` line 50** — displays `config.interests` verbatim as text, so dirty DB values like `"Interests And Hobbies Include Tech, Tech, Making Music, Making Music"` render as-is.
+2. **`WeeklyEventFinderFlow.tsx` line 45** — `handleSyncInterests` builds `existingTags` from raw `config.interests`, preserving dirty entries, then merges clean memory tags on top — duplicates survive.
 
-2. **Client (`parseInterestsToTags`)**: Only strips one exact prefix (`/my interests and hobbies include:/i`), missing variations. No deduplication after normalization.
+### Fix
 
-### Solution
+Two surgical changes, both under 5 lines each:
 
-**A. New client utility** — `src/utils/interestTagUtils.ts`
-- `cleanInterestTag(raw: string): string` — strips all known conversational prefixes (case-insensitive), trims, collapses whitespace, title-cases. Rejects results over 60 chars (full sentences, not tags).
-- `parseAndDeduplicateInterestTags(raw: string): string[]` — splits on `,` or `;`, runs each through `cleanInterestTag`, filters empties, deduplicates case-insensitively.
+| File | Line(s) | Change |
+|---|---|---|
+| `ActiveMonitoring.tsx` | 49-51 | Clean `config.interests` through `parseAndDeduplicateInterestTags` before display, joining with `", "` |
+| `WeeklyEventFinderFlow.tsx` | 45 | Already imports `parseAndDeduplicateInterestTags` — just confirm it's applied to `config.interests` when building `existingTags` (it is, but the result is never re-cleaned after merge; the merged string on line 55 should be run through `parseAndDeduplicateInterestTags` then re-joined to guarantee no dupes survive the round-trip) |
 
-Prefixes stripped:
-```
-my interests and hobbies include:
-i love | i enjoy | i like | i'm into | i am into
-passionate about | interested in | fan of | obsessed with
-hobbies include | interests include
-```
+**`ActiveMonitoring.tsx`:**
+- Import `parseAndDeduplicateInterestTags` from `@/utils/interestTagUtils`
+- Replace `{config.interests || "Not set"}` with `{config.interests ? parseAndDeduplicateInterestTags(config.interests).join(", ") : "Not set"}`
 
-**B. Refactor client consumers** — Replace inline `parseInterestsToTags` in `EventFinderConfig.tsx` and `WeeklyEventFinderFlow.tsx` with imports from the new utility.
+**`WeeklyEventFinderFlow.tsx`:**
+- The existing `handleSyncInterests` already calls `parseAndDeduplicateInterestTags` on both `result.interests` and `config.interests`, but the final `merged.join(", ")` could still contain dirty tags from `existingTags` if the DB was written before the utility existed. Wrap the final merge: `const mergedStr = parseAndDeduplicateInterestTags(merged.join(", ")).join(", ")` — this is a safety net that re-cleans the combined output.
 
-**C. Fix server** — In `supabase/functions/weekly-event-finder/index.ts`:
-- Add a `stripInterestPrefixes(text)` function (same prefix list).
-- Steps 3 and 4 in `fetchLiamMemories`: run text through `stripInterestPrefixes` before `normalizeTag`. Discard results over 60 chars after stripping.
-
-### Files Changed
-
-| File | Change |
-|---|---|
-| `src/utils/interestTagUtils.ts` | **New** — `cleanInterestTag`, `parseAndDeduplicateInterestTags` |
-| `src/components/flows/weekly-event-finder/EventFinderConfig.tsx` | Replace inline `parseInterestsToTags` with import from utility |
-| `src/components/flows/weekly-event-finder/WeeklyEventFinderFlow.tsx` | Replace inline `parseInterestsToTags` with import from utility |
-| `supabase/functions/weekly-event-finder/index.ts` | Add `stripInterestPrefixes`; apply in steps 3/4 of `fetchLiamMemories` + add 60-char cap |
-
-Defense-in-depth: the server produces clean tags, and the client normalizes anything it receives as a safety net.
+No other files need changes. The configure screen already initializes from `parseAndDeduplicateInterestTags(config.interests)` on line 25 of `EventFinderConfig.tsx`.
 
