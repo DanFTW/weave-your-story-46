@@ -5,6 +5,7 @@ import { useInterestSync } from "@/hooks/useInterestSync";
 import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
+import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
@@ -14,14 +15,6 @@ interface EventFinderConfigProps {
   onPrefill: () => Promise<{ interests: string; location: string } | null>;
 }
 
-function parseInterestsToTags(raw: string): string[] {
-  return raw
-    .replace(/my interests and hobbies include:/i, "")
-    .split(/[;,]/)
-    .map(s => s.trim())
-    .filter(Boolean);
-}
-
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
   const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory, forgetInterestMemory } = useInterestSync();
   const { filterRemoved, addRemovedTag, undoRemoval } = useRemovedInterestTags();
@@ -29,7 +22,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
 
   const [interestTags, setInterestTags] = useState<string[]>(() =>
-    config.interests ? parseInterestsToTags(config.interests) : []
+    config.interests ? parseAndDeduplicateInterestTags(config.interests) : []
   );
   const [location, setLocation] = useState(config.location ?? "");
   const [frequency, setFrequency] = useState<"weekly" | "daily">(config.frequency ?? "weekly");
@@ -48,7 +41,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
       const result = await onPrefill();
       if (!result) return;
       if (result.interests) {
-        const memoryTags = filterRemoved(parseInterestsToTags(result.interests));
+        const memoryTags = filterRemoved(parseAndDeduplicateInterestTags(result.interests));
         setInterestTags(prev => {
           const lowerSet = new Set(prev.map(t => t.toLowerCase()));
           const newTags = memoryTags.filter(t => !lowerSet.has(t.toLowerCase()));

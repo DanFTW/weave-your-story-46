@@ -7,15 +7,8 @@ import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { EventFinderConfig } from "./EventFinderConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
+import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 import { cn } from "@/lib/utils";
-
-function parseInterestsToTags(raw: string): string[] {
-  return raw
-    .replace(/my interests and hobbies include:/i, "")
-    .split(",")
-    .map(t => t.trim())
-    .filter(Boolean);
-}
 
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -48,8 +41,8 @@ export function WeeklyEventFinderFlow() {
       const result = await prefill();
       if (!result?.interests) return;
 
-      const memoryTags = filterRemoved(parseInterestsToTags(result.interests));
-      const existingTags = config.interests ? parseInterestsToTags(config.interests) : [];
+      const memoryTags = filterRemoved(parseAndDeduplicateInterestTags(result.interests));
+      const existingTags = config.interests ? parseAndDeduplicateInterestTags(config.interests) : [];
       const lowerSet = new Set(existingTags.map(t => t.toLowerCase()));
       const merged = [...existingTags];
       for (const tag of memoryTags) {

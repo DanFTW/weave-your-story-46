@@ -85,6 +85,26 @@ function parseInterestStatement(text: string): string[] {
 }
 
 /**
+ * Strip conversational prefixes from a raw memory string so that
+ * "My interests and hobbies include: tech" becomes "tech".
+ */
+const STRIP_PREFIXES: RegExp[] = [
+  /^my interests and hobbies include:?\s*/i,
+  /^(?:hobbies|interests)\s+include:?\s*/i,
+  /^i(?:'m|\s+am)\s+into\s+/i,
+  /^i\s+(?:love|enjoy|like)\s+/i,
+  /^(?:passionate about|interested in|fan of|obsessed with)\s+/i,
+];
+
+function stripInterestPrefixes(text: string): string {
+  let cleaned = text.trim();
+  for (const p of STRIP_PREFIXES) {
+    cleaned = cleaned.replace(p, "");
+  }
+  return cleaned.replace(/[.,;!]+$/, "").trim();
+}
+
+/**
  * Normalize a tag string: trim, collapse whitespace, title-case.
  */
 function normalizeTag(tag: string): string {
@@ -175,16 +195,22 @@ async function fetchLiamMemories(userId: string): Promise<{ interests: string; l
         continue; // already extracted granularly
       }
 
-      // 3. Tag-based match — use the full text as an interest description
+      // 3. Tag-based match — strip prefixes then use as interest
       if (isInterestTag && text.length > 2 && text.length < 200) {
-        interestTags.push(normalizeTag(text));
+        const stripped = stripInterestPrefixes(text);
+        if (stripped.length > 1 && stripped.length <= 60) {
+          interestTags.push(normalizeTag(stripped));
+        }
         continue;
       }
 
       // 4. Text-pattern match on broader memories
       const matchesInterestPattern = INTEREST_PATTERNS.some((p) => p.test(text));
       if (matchesInterestPattern && text.length > 2 && text.length < 200) {
-        interestTags.push(normalizeTag(text));
+        const stripped = stripInterestPrefixes(text);
+        if (stripped.length > 1 && stripped.length <= 60) {
+          interestTags.push(normalizeTag(stripped));
+        }
       }
 
       // ── Location extraction (tag-first, then text patterns) ──
