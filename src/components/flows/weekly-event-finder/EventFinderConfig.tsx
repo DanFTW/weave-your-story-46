@@ -5,6 +5,7 @@ import { useInterestSync } from "@/hooks/useInterestSync";
 import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
+import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
@@ -12,14 +13,6 @@ interface EventFinderConfigProps {
   onUpdateConfig: (interests: string, location: string, frequency: string, deliveryMethod: string, email: string, phoneNumber: string) => Promise<void>;
   isActivating: boolean;
   onPrefill: () => Promise<{ interests: string; location: string } | null>;
-}
-
-function parseInterestsToTags(raw: string): string[] {
-  return raw
-    .replace(/my interests and hobbies include:/i, "")
-    .split(/[;,]/)
-    .map(s => s.trim())
-    .filter(Boolean);
 }
 
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
