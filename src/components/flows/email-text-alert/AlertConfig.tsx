@@ -45,6 +45,12 @@ export function AlertConfig({ config, onActivate, onUpdateConfig, isActivating }
   const [keywordInputs, setKeywordInputs] = useState<Record<number, string>>({});
   const [phoneNumber, setPhoneNumber] = useState(config.phoneNumber ?? "");
 
+  const { phone: prefillPhone } = usePhonePrefill(config.phoneNumber);
+
+  useEffect(() => {
+    if (prefillPhone && !phoneNumber) setPhoneNumber(prefillPhone);
+  }, [prefillPhone]);
+
   const addSender = () => {
     const val = newSenderInput.trim();
     if (val && !rules.some((r) => r.email === val)) {
