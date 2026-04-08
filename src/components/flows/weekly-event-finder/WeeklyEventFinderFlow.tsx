@@ -1,12 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useComposio } from "@/hooks/useComposio";
 import { useWeeklyEventFinder } from "@/hooks/useWeeklyEventFinder";
+import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { EventFinderConfig } from "./EventFinderConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
 import { cn } from "@/lib/utils";
+
+function parseInterestsToTags(raw: string): string[] {
+  return raw
+    .replace(/my interests and hobbies include:/i, "")
+    .split(",")
+    .map(t => t.trim())
+    .filter(Boolean);
+}
 
 const gradientClasses: Record<string, string> = {
   blue: "thread-gradient-blue",
@@ -28,6 +37,44 @@ export function WeeklyEventFinderFlow() {
     isLoading, isActivating, isSyncing,
     loadConfig, updateConfig, activate, deactivate, manualSync, prefill,
   } = useWeeklyEventFinder();
+
+  const { filterRemoved } = useRemovedInterestTags();
+  const [isSyncingInterests, setIsSyncingInterests] = useState(false);
+
+  const handleSyncInterests = useCallback(async () => {
+    if (!config) return;
+    setIsSyncingInterests(true);
+    try {
+      const result = await prefill();
+      if (!result?.interests) return;
+
+      const memoryTags = filterRemoved(parseInterestsToTags(result.interests));
+      const existingTags = config.interests ? parseInterestsToTags(config.interests) : [];
+      const lowerSet = new Set(existingTags.map(t => t.toLowerCase()));
+      const merged = [...existingTags];
+      for (const tag of memoryTags) {
+        if (!lowerSet.has(tag.toLowerCase())) {
+          merged.push(tag);
+          lowerSet.add(tag.toLowerCase());
+        }
+      }
+
+      const mergedStr = merged.join(", ");
+      if (mergedStr !== config.interests) {
+        await updateConfig(
+          mergedStr,
+          config.location ?? "",
+          config.frequency,
+          config.deliveryMethod,
+          config.email ?? "",
+          config.phoneNumber ?? "",
+        );
+        await loadConfig();
+      }
+    } finally {
+      setIsSyncingInterests(false);
+    }
+  }, [config, prefill, filterRemoved, updateConfig, loadConfig]);
 
   useEffect(() => {
     const check = async () => {
@@ -112,6 +159,8 @@ export function WeeklyEventFinderFlow() {
             onPause={deactivate}
             onManualSync={manualSync}
             isSyncing={isSyncing}
+            onSyncInterests={handleSyncInterests}
+            isSyncingInterests={isSyncingInterests}
           />
         )}
       </div>

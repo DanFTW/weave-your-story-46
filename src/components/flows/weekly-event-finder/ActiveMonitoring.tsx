@@ -8,9 +8,11 @@ interface ActiveMonitoringProps {
   onPause: () => Promise<boolean>;
   onManualSync: () => Promise<void>;
   isSyncing: boolean;
+  onSyncInterests: () => Promise<void>;
+  isSyncingInterests: boolean;
 }
 
-export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
   return (
     <div className="space-y-6">
       {/* Toggle card */}
@@ -42,12 +44,24 @@ export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSynci
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <Heart className="w-5 h-5 text-primary" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm text-muted-foreground">Interests</p>
             <p className="text-sm font-semibold text-foreground line-clamp-2">
               {config.interests || "Not set"}
             </p>
           </div>
+          <button
+            onClick={onSyncInterests}
+            disabled={isSyncingInterests}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-60 flex-shrink-0"
+            aria-label="Sync interests from memories"
+          >
+            {isSyncingInterests ? (
+              <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
         </div>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
