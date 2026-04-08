@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { MapPin, Heart, Clock, Mail, Phone, Zap, Loader2, RefreshCw } from "lucide-react";
 import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 import { useInterestSync } from "@/hooks/useInterestSync";
 import { InterestTagInput } from "./InterestTagInput";
@@ -34,23 +34,31 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   const [phoneNumber, setPhoneNumber] = useState(config.phoneNumber ?? "");
   const [isPrefilling, setIsPrefilling] = useState(false);
 
-  useEffect(() => {
-    if (!config.interests && !config.location) {
-      setIsPrefilling(true);
-      onPrefill().then((result) => {
-        if (result) {
-          if (result.interests) {
-            const tags = parseInterestsToTags(result.interests);
-            setInterestTags(tags);
-          }
-          if (result.location) setLocation(result.location);
-          prefillRef.current = {
-            interests: result.interests ?? "",
-            location: result.location ?? "",
-          };
-        }
-      }).finally(() => setIsPrefilling(false));
+  const refreshFromMemories = useCallback(async () => {
+    setIsPrefilling(true);
+    try {
+      const result = await onPrefill();
+      if (!result) return;
+      if (result.interests) {
+        const memoryTags = parseInterestsToTags(result.interests);
+        setInterestTags(prev => {
+          const lowerSet = new Set(prev.map(t => t.toLowerCase()));
+          const newTags = memoryTags.filter(t => !lowerSet.has(t.toLowerCase()));
+          return newTags.length > 0 ? [...prev, ...newTags] : prev;
+        });
+      }
+      if (result.location && !location) setLocation(result.location);
+      prefillRef.current = {
+        interests: result.interests ?? "",
+        location: result.location ?? "",
+      };
+    } finally {
+      setIsPrefilling(false);
     }
+  }, [onPrefill, location]);
+
+  useEffect(() => {
+    refreshFromMemories();
   }, []);
 
   const canActivate = interestTags.length > 0 && location.trim().length > 0 &&
