@@ -12,6 +12,9 @@ interface EventFinderConfigProps {
 }
 
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
+  const { syncInterestsToMemory, syncLocationToMemory } = useInterestSync();
+  const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
+
   const [interests, setInterests] = useState(config.interests ?? "");
   const [location, setLocation] = useState(config.location ?? "");
   const [frequency, setFrequency] = useState<"weekly" | "daily">(config.frequency ?? "weekly");
