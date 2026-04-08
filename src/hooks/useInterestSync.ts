@@ -1,7 +1,7 @@
 import { useLiamMemory } from "@/hooks/useLiamMemory";
 
 export function useInterestSync() {
-  const { createMemory, isCreating } = useLiamMemory();
+  const { createMemory, listMemories, forgetMemory, isCreating } = useLiamMemory();
 
   const syncInterestsToMemory = async (
     currentInterests: string,
