@@ -27,4 +27,6 @@ export interface ProcessedBill {
   dueDate: string | null;
   subject: string | null;
   createdAt: string;
+  reminder7dSent: boolean;
+  reminder1dSent: boolean;
 }

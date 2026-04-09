@@ -302,6 +302,79 @@ async function sendSms(to: string, body: string): Promise<boolean> {
   }
 }
 
+// ── Due-date reminder logic ──
+
+function parseDueDate(dueDateStr: string): Date | null {
+  try {
+    const d = new Date(dueDateStr);
+    if (!isNaN(d.getTime())) return d;
+  } catch { /* ignore */ }
+  return null;
+}
+
+function daysBetween(a: Date, b: Date): number {
+  const msPerDay = 86400000;
+  const aDay = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const bDay = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((bDay.getTime() - aDay.getTime()) / msPerDay);
+}
+
+async function checkAndSendReminders(sb: any, userId: string, phoneNumber: string) {
+  const { data: bills } = await sb
+    .from("bill_due_reminder_processed")
+    .select("*")
+    .eq("user_id", userId)
+    .not("due_date", "is", null);
+
+  if (!bills || bills.length === 0) return;
+
+  const today = new Date();
+
+  for (const bill of bills) {
+    const dueDate = parseDueDate(bill.due_date);
+    if (!dueDate) continue;
+
+    const daysUntilDue = daysBetween(today, dueDate);
+    const biller = bill.biller_name || "Unknown";
+    const amount = bill.amount_due || "amount unknown";
+
+    // 7-day reminder
+    if (daysUntilDue <= 7 && daysUntilDue > 1 && !bill.reminder_7d_sent) {
+      const msg = `Reminder: ${biller} — ${amount} is due in ${daysUntilDue} days (${bill.due_date})`;
+      const sent = await sendSms(phoneNumber, msg);
+      if (sent) {
+        await sb.from("bill_due_reminder_processed")
+          .update({ reminder_7d_sent: true })
+          .eq("id", bill.id);
+        console.log(`[BillReminder] 7d reminder sent for bill ${bill.id}`);
+      }
+    }
+
+    // 1-day reminder
+    if (daysUntilDue <= 1 && daysUntilDue >= 0 && !bill.reminder_1d_sent) {
+      const label = daysUntilDue === 0 ? "is due today" : "is due tomorrow";
+      const msg = `Reminder: ${biller} — ${amount} ${label} (${bill.due_date})`;
+      const sent = await sendSms(phoneNumber, msg);
+      if (sent) {
+        await sb.from("bill_due_reminder_processed")
+          .update({ reminder_1d_sent: true })
+          .eq("id", bill.id);
+        console.log(`[BillReminder] 1d reminder sent for bill ${bill.id}`);
+      }
+    }
+  }
+}
+
+// ── Cron authentication ──
+
+async function validateCronRequest(req: Request, sb: any): Promise<boolean> {
+  if (req.headers.get("x-cron-trigger") === "supabase-internal") return true;
+  const secret = req.headers.get("x-cron-secret");
+  if (!secret) return false;
+  const { data } = await sb.from("app_settings").select("value").eq("key", "cron_secret").maybeSingle();
+  return data?.value === secret;
+}
+
 // ── Main handler ──
 
 serve(async (req) => {
@@ -312,6 +385,39 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const { action, phoneNumber } = body;
+
+    const sb = adminClient();
+
+    // ── CRON-POLL ──
+    if (action === "cron-poll") {
+      const isValid = await validateCronRequest(req, sb);
+      if (!isValid) {
+        return new Response(JSON.stringify({ error: "Unauthorized cron" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: activeConfigs } = await sb
+        .from("bill_due_reminder_config")
+        .select("user_id, phone_number")
+        .eq("is_active", true)
+        .not("phone_number", "is", null);
+
+      let remindersSent = 0;
+      for (const config of activeConfigs ?? []) {
+        if (!config.phone_number) continue;
+        await checkAndSendReminders(sb, config.user_id, config.phone_number);
+        remindersSent++;
+      }
+
+      console.log(`[BillReminder] Cron-poll: checked ${remindersSent} active users`);
+      return new Response(JSON.stringify({ checked: remindersSent }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // All other actions require user auth
     const userId = getUserId(req);
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -320,12 +426,9 @@ serve(async (req) => {
       });
     }
 
-    const sb = adminClient();
-
     // ── ACTIVATE ──
     if (action === "activate") {
       const updatePayload: any = { is_active: true };
-      if (phoneNumber) updatePayload.phone_number = phoneNumber;
       if (phoneNumber) updatePayload.phone_number = phoneNumber;
       await sb.from("bill_due_reminder_config").update(updatePayload).eq("user_id", userId);
       return new Response(JSON.stringify({ success: true }), {
@@ -382,15 +485,17 @@ serve(async (req) => {
         .maybeSingle();
 
       let billCount = 0;
+      const newBillSummaries: string[] = [];
+
       for (const email of emails) {
         const messageId = extractMessageId(email);
         if (!messageId || processedIds.has(messageId)) continue;
 
-        const body = extractBody(email);
-        if (!body) continue;
+        const emailBody = extractBody(email);
+        if (!emailBody) continue;
 
         const emailSubject = extractSubject(email);
-        const details = await extractBillDetails(body, emailSubject);
+        const details = await extractBillDetails(emailBody, emailSubject);
 
         // Only save if we could extract at least a biller name or amount
         if (!details.billerName && !details.amountDue && !details.dueDate) continue;
@@ -410,19 +515,27 @@ serve(async (req) => {
           await saveMemoryToLiam(apiKeys.api_key, apiKeys.user_key, apiKeys.private_key, memoryContent, "BILL");
         }
 
-        // Send SMS notification
-        if (configData.phone_number) {
-          const sent = await sendSms(configData.phone_number, memoryContent);
-          if (sent) billCount++;
-        } else {
-          billCount++;
-        }
+        // Collect for summary SMS
+        newBillSummaries.push(`• ${details.billerName || "Unknown"} — ${details.amountDue || "?"}, due ${details.dueDate || "?"}`);
+        billCount++;
+      }
+
+      // Send consolidated summary SMS for all new bills
+      if (newBillSummaries.length > 0 && configData.phone_number) {
+        const summaryMsg = `Your bills summary:\n${newBillSummaries.join("\n")}`;
+        await sendSms(configData.phone_number, summaryMsg);
+        console.log(`[BillReminder] Summary SMS sent with ${newBillSummaries.length} bills`);
       }
 
       if (billCount > 0) {
         await sb.from("bill_due_reminder_config").update({
           bills_found: (configData.bills_found ?? 0) + billCount,
         }).eq("user_id", userId);
+      }
+
+      // Check and send due-date reminders after sync
+      if (configData.phone_number) {
+        await checkAndSendReminders(sb, userId, configData.phone_number);
       }
 
       return new Response(JSON.stringify({ processed: emails.length, bills: billCount }), {
