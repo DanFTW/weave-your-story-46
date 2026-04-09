@@ -1,4 +1,6 @@
-import { Heart, MapPin, Clock, Mail, Phone, Pause, RefreshCw, Loader2, Calendar } from "lucide-react";
+import { useState } from "react";
+import { Heart, MapPin, Clock, Mail, Phone, Pause, RefreshCw, Loader2, Calendar, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 import { Switch } from "@/components/ui/switch";
 import { WeeklyEventFinderStats, WeeklyEventFinderConfig, FoundEvent } from "@/types/weeklyEventFinder";
@@ -16,6 +18,7 @@ interface ActiveMonitoringProps {
 }
 
 export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
+  const [eventsOpen, setEventsOpen] = useState(false);
   return (
     <div className="space-y-6">
       {/* Toggle card */}
@@ -103,26 +106,33 @@ export function ActiveMonitoring({ stats, config, events, onPause, onManualSync,
         </div>
       </div>
 
-      {/* Events list */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-3 px-1">
-          <Calendar className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-foreground text-base">
-            Events found ({stats.eventsFound})
-          </h3>
-        </div>
-        {events.length > 0 ? (
-          events.map((event) => (
-            <FoundEventCard key={event.id} event={event} />
-          ))
-        ) : (
-          <div className="bg-card rounded-2xl border border-border p-5 text-center">
-            <p className="text-sm text-muted-foreground">
-              No events found yet. Tap "Find events now" to search.
-            </p>
-          </div>
-        )}
-      </div>
+      {/* Events list — collapsible */}
+      <Collapsible open={eventsOpen} onOpenChange={setEventsOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full bg-card rounded-2xl border border-border p-5 flex items-center gap-3 hover:bg-accent/50 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-primary" />
+            </div>
+            <h3 className="font-semibold text-foreground text-base flex-1 text-left">
+              Events found ({stats.eventsFound})
+            </h3>
+            <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${eventsOpen ? "rotate-180" : ""}`} />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-3 pt-3">
+          {events.length > 0 ? (
+            events.map((event) => (
+              <FoundEventCard key={event.id} event={event} />
+            ))
+          ) : (
+            <div className="bg-card rounded-2xl border border-border p-5 text-center">
+              <p className="text-sm text-muted-foreground">
+                No events found yet. Tap "Find events now" to search.
+              </p>
+            </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Sync now */}
       <button
