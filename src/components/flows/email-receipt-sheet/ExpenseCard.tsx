@@ -55,12 +55,12 @@ export const ExpenseCard = React.forwardRef<HTMLDivElement, ExpenseCardProps>(
         </div>
 
         <div className="flex items-center justify-between pl-12">
-          {expense.amount && (
-            <p className="text-base font-bold text-foreground">{expense.amount}</p>
-          )}
-          {expense.dateStr && (
-            <p className="text-xs text-muted-foreground">{expense.dateStr}</p>
-          )}
+          <p className={`text-base font-bold ${expense.amount ? "text-foreground" : "text-muted-foreground"}`}>
+            {expense.amount || "No amount"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {expense.dateStr || "No date"}
+          </p>
         </div>
       </div>
     );
