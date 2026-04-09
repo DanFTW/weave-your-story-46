@@ -18,7 +18,7 @@ interface ActiveMonitoringProps {
   onDeleteEvent: (id: string) => Promise<void>;
 }
 
-export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests, onDeleteEvent }: ActiveMonitoringProps) {
   const [eventsOpen, setEventsOpen] = useState(false);
   return (
     <div className="space-y-6">
