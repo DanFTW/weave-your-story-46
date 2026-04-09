@@ -2052,21 +2052,33 @@ export type Database = {
       }
       weekly_event_finder_processed: {
         Row: {
+          event_date: string | null
+          event_description: string | null
           event_id: string
+          event_link: string | null
+          event_reason: string | null
           event_title: string | null
           id: string
           processed_at: string
           user_id: string
         }
         Insert: {
+          event_date?: string | null
+          event_description?: string | null
           event_id: string
+          event_link?: string | null
+          event_reason?: string | null
           event_title?: string | null
           id?: string
           processed_at?: string
           user_id: string
         }
         Update: {
+          event_date?: string | null
+          event_description?: string | null
           event_id?: string
+          event_link?: string | null
+          event_reason?: string | null
           event_title?: string | null
           id?: string
           processed_at?: string
