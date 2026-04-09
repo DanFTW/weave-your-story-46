@@ -70,6 +70,8 @@ export type Database = {
           due_date: string | null
           email_message_id: string
           id: string
+          reminder_1d_sent: boolean
+          reminder_7d_sent: boolean
           subject: string | null
           user_id: string
         }
@@ -80,6 +82,8 @@ export type Database = {
           due_date?: string | null
           email_message_id: string
           id?: string
+          reminder_1d_sent?: boolean
+          reminder_7d_sent?: boolean
           subject?: string | null
           user_id: string
         }
@@ -90,6 +94,8 @@ export type Database = {
           due_date?: string | null
           email_message_id?: string
           id?: string
+          reminder_1d_sent?: boolean
+          reminder_7d_sent?: boolean
           subject?: string | null
           user_id?: string
         }
