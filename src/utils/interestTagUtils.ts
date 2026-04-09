@@ -66,3 +66,32 @@ export function parseAndDeduplicateInterestTags(raw: string): string[] {
   }
   return result;
 }
+
+/**
+ * Filter tags against a comma-separated blocklist.
+ * Blocked terms never reappear from sync/prefill.
+ */
+export function filterBlockedInterests(tags: string[], blocklist: string | null): string[] {
+  if (!blocklist) return tags;
+  const blocked = new Set(
+    blocklist.split(",").map(b => b.trim().toLowerCase()).filter(Boolean)
+  );
+  return tags.filter(t => !blocked.has(t.toLowerCase()));
+}
+  const tags = raw
+    .split(/[,;]/)
+    .map(cleanInterestTag)
+    .filter(Boolean);
+
+  // Case-insensitive dedup, preserving first occurrence
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const tag of tags) {
+    const key = tag.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(tag);
+    }
+  }
+  return result;
+}
