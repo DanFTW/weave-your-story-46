@@ -1,0 +1,1 @@
+ALTER TABLE public.bill_due_reminder_config ADD COLUMN phone_number text;
