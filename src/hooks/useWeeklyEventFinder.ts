@@ -230,6 +230,8 @@ export function useWeeklyEventFinder() {
         description: `Found ${result.eventsFound ?? 0} events — ${result.delivered ?? 0} delivered`,
       });
 
+      await loadEvents();
+
       await loadConfig();
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
