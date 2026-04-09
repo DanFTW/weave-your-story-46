@@ -702,6 +702,19 @@ export const flowConfigs: Record<string, FlowConfig> = {
     fields: [],
     isWeeklyEventFinderFlow: true,
   },
+  "bill-due-reminder": {
+    id: "bill-due-reminder",
+    title: "Bill Due Reminder",
+    subtitle: "Automatic bill tracking",
+    description: "Scan Gmail for bills and payment due dates, track them automatically.",
+    gradient: "orange",
+    icon: Receipt,
+    entryName: "bill",
+    entryNamePlural: "bills",
+    memoryTag: "BILL",
+    fields: [],
+    isBillDueReminderFlow: true,
+  },
 };
 
 export function getFlowConfig(flowId: string): FlowConfig | undefined {
