@@ -32,6 +32,66 @@ export type Database = {
         }
         Relationships: []
       }
+      bill_due_reminder_config: {
+        Row: {
+          bills_found: number
+          created_at: string
+          id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bills_found?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bills_found?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bill_due_reminder_processed: {
+        Row: {
+          amount_due: string | null
+          biller_name: string | null
+          created_at: string
+          due_date: string | null
+          email_message_id: string
+          id: string
+          subject: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_due?: string | null
+          biller_name?: string | null
+          created_at?: string
+          due_date?: string | null
+          email_message_id: string
+          id?: string
+          subject?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_due?: string | null
+          biller_name?: string | null
+          created_at?: string
+          due_date?: string | null
+          email_message_id?: string
+          id?: string
+          subject?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       birthday_reminder_config: {
         Row: {
           created_at: string
