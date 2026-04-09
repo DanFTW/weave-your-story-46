@@ -1,14 +1,27 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Calendar, ExternalLink, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Calendar, ExternalLink, Sparkles, Trash2, Loader2 } from "lucide-react";
 import { FoundEvent } from "@/types/weeklyEventFinder";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface FoundEventCardProps {
   event: FoundEvent;
+  onDelete?: (id: string) => Promise<void>;
 }
 
-export function FoundEventCard({ event }: FoundEventCardProps) {
+export function FoundEventCard({ event, onDelete }: FoundEventCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onDelete || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(event.id);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -53,17 +66,36 @@ export function FoundEventCard({ event }: FoundEventCardProps) {
               </div>
             )}
 
-            {event.eventLink && (
-              <a
-                href={event.eventLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
-              >
-                <ExternalLink className="w-4 h-4" />
-                View event
-              </a>
-            )}
+            <div className="flex items-center justify-between">
+              {event.eventLink ? (
+                <a
+                  href={event.eventLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View event
+                </a>
+              ) : (
+                <span />
+              )}
+
+              {onDelete && (
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="inline-flex items-center gap-1.5 text-sm text-destructive font-medium hover:underline disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </CollapsibleContent>
       </div>

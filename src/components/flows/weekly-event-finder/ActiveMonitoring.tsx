@@ -15,9 +15,10 @@ interface ActiveMonitoringProps {
   isSyncing: boolean;
   onSyncInterests: () => Promise<void>;
   isSyncingInterests: boolean;
+  onDeleteEvent: (id: string) => Promise<void>;
 }
 
-export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests, onDeleteEvent }: ActiveMonitoringProps) {
   const [eventsOpen, setEventsOpen] = useState(false);
   return (
     <div className="space-y-6">
@@ -122,7 +123,7 @@ export function ActiveMonitoring({ stats, config, events, onPause, onManualSync,
         <CollapsibleContent className="space-y-3 pt-3">
           {events.length > 0 ? (
             events.map((event) => (
-              <FoundEventCard key={event.id} event={event} />
+              <FoundEventCard key={event.id} event={event} onDelete={onDeleteEvent} />
             ))
           ) : (
             <div className="bg-card rounded-2xl border border-border p-5 text-center">

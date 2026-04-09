@@ -261,9 +261,43 @@ export function useWeeklyEventFinder() {
     }
   }, []);
 
+  const deleteEvent = useCallback(async (eventId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("weekly_event_finder_processed" as any)
+        .delete()
+        .eq("id", eventId)
+        .eq("user_id", user.id);
+
+      if (error) {
+        toast({ title: "Failed to remove event", variant: "destructive" });
+        return;
+      }
+
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+
+      // Decrement counter on config row
+      if (config?.id) {
+        const newCount = Math.max(0, (config.eventsFound ?? 1) - 1);
+        await supabase
+          .from("weekly_event_finder_config" as any)
+          .update({ events_found: newCount })
+          .eq("id", config.id);
+        setConfig((prev) => prev ? { ...prev, eventsFound: newCount } : null);
+      }
+
+      toast({ title: "Event removed" });
+    } catch {
+      toast({ title: "Failed to remove event", variant: "destructive" });
+    }
+  }, [config, toast]);
+
   return {
     phase, setPhase, config, stats, events,
     isLoading, isActivating, isSyncing,
-    loadConfig, updateConfig, activate, deactivate, manualSync, prefill, loadEvents,
+    loadConfig, updateConfig, activate, deactivate, manualSync, prefill, loadEvents, deleteEvent,
   };
 }
