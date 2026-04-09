@@ -265,6 +265,43 @@ async function saveMemoryToLiam(
   }
 }
 
+// ── SMS ──
+
+async function sendSms(to: string, body: string): Promise<boolean> {
+  const digits = to.replace(/\D/g, "");
+  const normalized = digits.startsWith("+") ? digits : `+${digits}`;
+
+  const url = "https://weave-fabric-sms.onrender.com/send";
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": SMS_API_KEY,
+  };
+  const payload = JSON.stringify({ to: normalized, body });
+
+  try {
+    let res = await fetch(url, { method: "POST", headers, body: payload });
+
+    // Retry once on 502 (Render cold-start)
+    if (res.status === 502) {
+      console.log("[BillReminder] SMS gateway cold start (502), retrying in 3s...");
+      await new Promise((r) => setTimeout(r, 3000));
+      res = await fetch(url, { method: "POST", headers, body: payload });
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[BillReminder] SMS send failed ${res.status}:`, errText);
+      return false;
+    }
+
+    console.log(`[BillReminder] SMS sent to ${normalized}`);
+    return true;
+  } catch (e) {
+    console.error("[BillReminder] SMS send error:", e);
+    return false;
+  }
+}
+
 // ── Main handler ──
 
 serve(async (req) => {
