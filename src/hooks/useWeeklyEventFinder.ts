@@ -5,6 +5,7 @@ import {
   WeeklyEventFinderPhase,
   WeeklyEventFinderConfig,
   WeeklyEventFinderStats,
+  FoundEvent,
 } from "@/types/weeklyEventFinder";
 
 export function useWeeklyEventFinder() {
