@@ -89,6 +89,7 @@ export function useBillDueReminder() {
             userId: d.user_id,
             isActive: false,
             billsFound: 0,
+            phoneNumber: null,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
           });

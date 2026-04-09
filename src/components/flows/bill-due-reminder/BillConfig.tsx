@@ -1,12 +1,29 @@
-import { Receipt, Mail, Zap } from "lucide-react";
+import { Receipt, Mail, Zap, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { usePhonePrefill } from "@/hooks/usePhonePrefill";
+import { useState } from "react";
 
 interface BillConfigProps {
-  onActivate: () => Promise<void>;
+  onActivate: (phoneNumber: string) => Promise<void>;
   isActivating: boolean;
+  currentPhone: string | null;
 }
 
-export function BillConfig({ onActivate, isActivating }: BillConfigProps) {
+export function BillConfig({ onActivate, isActivating, currentPhone }: BillConfigProps) {
+  const { phone, isLoading: phoneLoading } = usePhonePrefill(currentPhone);
+  const [phoneValue, setPhoneValue] = useState(phone);
+
+  // Sync prefill result
+  useState(() => {
+    if (phone && !phoneValue) setPhoneValue(phone);
+  });
+
+  // Keep in sync when prefill resolves
+  if (phone && !phoneValue) {
+    setPhoneValue(phone);
+  }
+
   return (
     <div className="space-y-6">
       {/* How it works */}
@@ -43,19 +60,38 @@ export function BillConfig({ onActivate, isActivating }: BillConfigProps) {
               <Zap className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="font-medium text-foreground text-sm">Saves to memory</p>
+              <p className="font-medium text-foreground text-sm">Texts you a summary</p>
               <p className="text-muted-foreground text-sm">
-                Each bill is saved as a memory so you never miss a payment
+                Each bill found is sent to your phone as a text message so you never miss a payment
               </p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Phone number */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium text-foreground flex items-center gap-2">
+          <Phone className="w-4 h-4" />
+          Phone number for bill alerts
+        </label>
+        <Input
+          type="tel"
+          placeholder={phoneLoading ? "Looking up your number…" : "+1 (555) 123-4567"}
+          value={phoneValue}
+          onChange={(e) => setPhoneValue(e.target.value)}
+          className="h-[52px] rounded-2xl"
+          disabled={phoneLoading}
+        />
+        <p className="text-xs text-muted-foreground">
+          You'll receive a text for each bill detected in your Gmail
+        </p>
+      </div>
+
       {/* Activate */}
       <Button
-        onClick={onActivate}
-        disabled={isActivating}
+        onClick={() => onActivate(phoneValue)}
+        disabled={isActivating || !phoneValue.trim() || phoneLoading}
         className="w-full h-14 rounded-2xl text-base font-bold"
       >
         {isActivating ? "Activating…" : "Activate Bill Scanner"}
