@@ -323,7 +323,10 @@ serve(async (req) => {
 
     // ── ACTIVATE ──
     if (action === "activate") {
-      await sb.from("bill_due_reminder_config").update({ is_active: true }).eq("user_id", userId);
+      const { phoneNumber } = await req.json().catch(() => ({}));
+      const updatePayload: any = { is_active: true };
+      if (phoneNumber) updatePayload.phone_number = phoneNumber;
+      await sb.from("bill_due_reminder_config").update(updatePayload).eq("user_id", userId);
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
