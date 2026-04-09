@@ -1,71 +1,86 @@
 
 
-## Add Event List to Active Monitoring
+## Add Interest Blocklist & Confirm-Delete on Tag Removal
 
-### Problem
-The active monitoring page only shows an event count. Users have no way to see what events were actually found.
+### Overview
+When a user removes an interest tag, show a confirmation dialog offering to also permanently delete the LIAM memory. Add a blocklist (stored in the DB config) so blocked words never reappear during sync/prefill.
 
-### Approach
-1. **Expand the database** — add columns to `weekly_event_finder_processed` for `event_date`, `event_description`, `event_reason`, and `event_link` so event details persist.
-2. **Store full event data** — update the edge function's `manual-sync` to write these fields when recording processed events.
-3. **Fetch events client-side** — add a `loadEvents` function in the hook that queries `weekly_event_finder_processed` directly via Supabase client, ordered by `processed_at desc`.
-4. **Build an expandable event card** — new `FoundEventCard` component following the same expand/collapse pattern as `PendingEventCard` (chevron toggle, `bg-card rounded-2xl border` styling).
-5. **Render the list in `ActiveMonitoring`** — replace the static count card with a section showing the count header and a list of `FoundEventCard` items.
+### Database Change
 
-### Files
+Add a `blocked_interests` text column to `weekly_event_finder_config`:
+
+```sql
+ALTER TABLE public.weekly_event_finder_config
+  ADD COLUMN IF NOT EXISTS blocked_interests text;
+```
+
+Stored as comma-separated lowercase strings (consistent with the `interests` column pattern).
+
+### Files to Change
 
 | File | Change |
 |---|---|
-| `supabase/migrations/new.sql` | `ALTER TABLE` to add `event_date`, `event_description`, `event_reason`, `event_link` columns |
-| `supabase/functions/weekly-event-finder/index.ts` | Store the new fields in the `upsert` call when recording processed events |
-| `src/types/weeklyEventFinder.ts` | Add `FoundEvent` interface |
-| `src/hooks/useWeeklyEventFinder.ts` | Add `events` state + `loadEvents` query from `weekly_event_finder_processed`; call it on load and after sync |
-| `src/components/flows/weekly-event-finder/FoundEventCard.tsx` | New expandable card component (title + date collapsed; description, reason, link expanded) |
-| `src/components/flows/weekly-event-finder/ActiveMonitoring.tsx` | Accept `events` prop, render list of `FoundEventCard` below the stats section |
-| `src/components/flows/weekly-event-finder/WeeklyEventFinderFlow.tsx` | Pass `events` from hook to `ActiveMonitoring` |
+| `supabase/migrations/new.sql` | Add `blocked_interests` column |
+| `src/types/weeklyEventFinder.ts` | Add `blockedInterests: string | null` to `WeeklyEventFinderConfig` |
+| `src/hooks/useWeeklyEventFinder.ts` | Map `blocked_interests` from DB to config; pass it through `updateConfig` |
+| `src/hooks/useWeeklyEventFinder.ts` → `updateConfig` | Accept new `blockedInterests` param, send to edge function |
+| `src/components/flows/weekly-event-finder/InterestTagInput.tsx` | Update `onRemoveTag` callback signature to include a "also delete memory" boolean, or keep it simple — the parent handles the dialog |
+| `src/components/flows/weekly-event-finder/TagRemoveDialog.tsx` | **New.** AlertDialog with 3 options: "Remove" (local only), "Remove & Block" (local + blocklist + LIAM delete), "Cancel" |
+| `src/components/flows/weekly-event-finder/EventFinderConfig.tsx` | Wire `TagRemoveDialog`; manage blocklist state; filter blocklist during prefill merge; pass blocklist to `updateConfig` |
+| `src/components/flows/weekly-event-finder/WeeklyEventFinderFlow.tsx` | Pass blocklist through `handleSyncInterests` filter; update `updateConfig` calls to include blockedInterests |
+| `supabase/functions/weekly-event-finder/index.ts` | Accept & persist `blockedInterests` in `update-config` action; filter blocklist during `prefill` action results |
 
-### New type
+### New Component: `TagRemoveDialog.tsx`
+
+Uses existing `AlertDialog` components. Triggered when user taps `X` on a tag chip.
+
+```
+┌─────────────────────────────────┐
+│  Remove "Cooking"?              │
+│                                 │
+│  This will remove it from your  │
+│  interests list.                │
+│                                 │
+│  ☐ Block this topic             │
+│    (won't reappear on sync)     │
+│                                 │
+│  [Cancel]  [Remove]             │
+└─────────────────────────────────┘
+```
+
+- "Remove" → removes tag locally + `addRemovedTag` + `forgetInterestMemory`
+- If "Block this topic" is checked → also adds to `blockedInterests` in config
+- Uses `AlertDialog` from `@/components/ui/alert-dialog`
+
+### Blocklist Filtering Logic
+
+A new utility function in `interestTagUtils.ts`:
 
 ```typescript
-export interface FoundEvent {
-  id: string;
-  eventTitle: string;
-  eventDate: string | null;
-  eventDescription: string | null;
-  eventReason: string | null;
-  eventLink: string | null;
-  processedAt: string;
+export function filterBlockedInterests(tags: string[], blocklist: string | null): string[] {
+  if (!blocklist) return tags;
+  const blocked = new Set(blocklist.split(",").map(b => b.trim().toLowerCase()).filter(Boolean));
+  return tags.filter(t => !blocked.has(t.toLowerCase()));
 }
 ```
 
-### FoundEventCard design
-- Collapsed: title (bold, truncated) + date on right, chevron indicator
-- Expanded: description paragraph, "Why this matches" reason in muted text, link as tappable anchor
-- Uses `bg-card rounded-2xl border border-border` card pattern
-- ChevronDown/ChevronUp toggle, consistent with `PendingEventCard`
+Applied in:
+1. `EventFinderConfig.refreshFromMemories` — filter prefill results
+2. `WeeklyEventFinderFlow.handleSyncInterests` — filter before merge
+3. Edge function `prefill` action — server-side filter before returning
 
-### Edge function upsert change
+### Hook Changes
+
+`updateConfig` signature gains `blockedInterests: string`:
+
 ```typescript
-await sb.from("weekly_event_finder_processed").upsert(
-  {
-    user_id: userId,
-    event_id: eventId,
-    event_title: e.title || e.name || "",
-    event_date: extractDateString(e.when) || extractDateString(e.date) || null,
-    event_description: e.description || null,
-    event_reason: e.reason || null,
-    event_link: e.link || null,
-  },
-  { onConflict: "user_id,event_id" }
-);
+await onUpdateConfig(interests, location, frequency, deliveryMethod, email, phone, blockedInterests);
 ```
 
-### Migration
-```sql
-ALTER TABLE public.weekly_event_finder_processed
-  ADD COLUMN event_date text,
-  ADD COLUMN event_description text,
-  ADD COLUMN event_reason text,
-  ADD COLUMN event_link text;
-```
+`useWeeklyEventFinder.updateConfig` passes it to the edge function and updates local state.
+
+### Edge Function Changes
+
+- `update-config` action: persist `blocked_interests` column
+- `prefill` action: load user's `blocked_interests`, filter returned interests server-side
 
