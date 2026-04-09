@@ -1,47 +1,57 @@
 
 
-## Add SMS Notifications to Bill Due Reminder
+## Add Summary SMS + Due-Date Reminder Texts to Bill Due Reminder
 
 ### Problem
-Bills are detected and displayed but no text messages are sent. The config table lacks a `phone_number` column, the UI has no phone input, and the edge function has no SMS sending logic.
+Currently, each bill triggers an individual SMS during sync. There's no consolidated overview text and no pre-due-date reminder texts (7-day and 1-day).
 
 ### Changes
 
-**1. Database Migration** — Add `phone_number` column to `bill_due_reminder_config`:
+**1. Database Migration** — Add reminder tracking columns to `bill_due_reminder_processed`:
 ```sql
-ALTER TABLE public.bill_due_reminder_config ADD COLUMN phone_number text;
+ALTER TABLE public.bill_due_reminder_processed
+  ADD COLUMN reminder_7d_sent boolean NOT NULL DEFAULT false,
+  ADD COLUMN reminder_1d_sent boolean NOT NULL DEFAULT false;
 ```
 
-**2. `src/components/flows/bill-due-reminder/BillConfig.tsx`** — Add phone number input
-- Add props: `phoneNumber`, `onPhoneChange` (managed by parent or local state)
-- Add `usePhonePrefill` hook for cross-thread phone prefill (same as email-text-alert)
-- Add phone input field before the activate button, matching AlertConfig pattern
-- Disable activate button when phone is empty
-- Pass phone number up via `onActivate(phoneNumber)`
+**2. Edge Function (`supabase/functions/bill-due-reminder/index.ts`)** — Three additions:
 
-**3. `src/hooks/useBillDueReminder.ts`** — Store phone number on activate
-- Update `activate()` to accept `phoneNumber: string` parameter
-- Send `{ action: "activate", phoneNumber }` to the edge function
-- Map `phone_number` from config in `loadConfig`
+**a) Summary SMS on initial sync:**
+In the `manual-sync` action, after processing all new bills, compose one consolidated SMS listing all newly detected bills (biller, amount, due date) and send it to the user's phone. Example:
+```
+Your bills summary:
+• Comcast — $89.99, due Apr 15
+• Electric Co — $120.00, due Apr 20
+```
+Only sent when there are new bills found in that sync run.
 
-**4. `src/types/billDueReminder.ts`** — Add `phoneNumber` to `BillDueReminderConfig`
+**b) Due-date reminder logic (`checkAndSendReminders` helper):**
+- Query all `bill_due_reminder_processed` rows for a user where `due_date` is not null
+- Parse each `due_date` string into a Date (use the LLM-standardized format)
+- Compare to today:
+  - If due date is ≤ 7 days away and `reminder_7d_sent = false` → send SMS: `"Reminder: [Biller] — [Amount] is due in 7 days ([Date])"` → set `reminder_7d_sent = true`
+  - If due date is ≤ 1 day away and `reminder_1d_sent = false` → send SMS: `"Reminder: [Biller] — [Amount] is due tomorrow ([Date])"` → set `reminder_1d_sent = true`
+- Call this helper at the end of `manual-sync` (so users get reminders when they sync)
 
-**5. `src/components/flows/bill-due-reminder/BillDueReminderFlow.tsx`** — Pass phone through activate
-- Update `handleActivate` to pass phone number from BillConfig to `activate()`
+**c) `cron-poll` action:**
+- Add a new `cron-poll` action following the standard pattern (validate `x-cron-secret` or `x-cron-trigger: supabase-internal`)
+- For each active user in `bill_due_reminder_config`, call `checkAndSendReminders`
+- This ensures reminders fire automatically without manual sync
+- Add `CRON_SECRET` env var read (already exists as a Supabase secret)
 
-**6. `supabase/functions/bill-due-reminder/index.ts`** — Two additions:
-- **Activate action**: Save `phone_number` from request body to config table
-- **SMS helper** (`sendSms`): Copy exact pattern from email-text-alert (E.164 normalization, SMS gateway URL, `SMS_API_KEY` header, 502 cold-start retry)
-- **Manual-sync**: After extracting each bill, compose a summary like `"Bill: Comcast — $89.99, due Apr 15"` and call `sendSms(configData.phone_number, summary)`. Only increment `billCount` on successful SMS delivery (matching email-text-alert pattern)
-- Add `SMS_API_KEY` env var read at top (already exists as a Supabase secret)
+**3. Types (`src/types/billDueReminder.ts`)** — Add fields to `ProcessedBill`:
+```typescript
+reminder7dSent: boolean;
+reminder1dSent: boolean;
+```
+
+**4. Hook (`src/hooks/useBillDueReminder.ts`)** — Map the new fields in `loadBills`.
 
 ### Files
 | File | Action |
 |------|--------|
-| DB migration | Add `phone_number text` column |
-| `src/types/billDueReminder.ts` | Add `phoneNumber` field |
-| `src/components/flows/bill-due-reminder/BillConfig.tsx` | Add phone input + prefill |
-| `src/hooks/useBillDueReminder.ts` | Pass phone on activate, map from config |
-| `src/components/flows/bill-due-reminder/BillDueReminderFlow.tsx` | Wire phone through activate |
-| `supabase/functions/bill-due-reminder/index.ts` | Add `sendSms`, send SMS in manual-sync, save phone on activate |
+| DB migration | Add `reminder_7d_sent`, `reminder_1d_sent` booleans |
+| `supabase/functions/bill-due-reminder/index.ts` | Add summary SMS, `checkAndSendReminders`, `cron-poll` action |
+| `src/types/billDueReminder.ts` | Add reminder fields to `ProcessedBill` |
+| `src/hooks/useBillDueReminder.ts` | Map new fields in `loadBills` |
 
