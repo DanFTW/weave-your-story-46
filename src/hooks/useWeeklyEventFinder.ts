@@ -15,6 +15,7 @@ export function useWeeklyEventFinder() {
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [events, setEvents] = useState<FoundEvent[]>([]);
 
   const stats: WeeklyEventFinderStats = {
     eventsFound: config?.eventsFound ?? 0,
