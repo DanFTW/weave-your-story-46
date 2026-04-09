@@ -41,12 +41,17 @@ export function EmailTextAlertFlow() {
     if (!isCheckingGmail && gmailConnected) {
       loadConfig();
     } else if (!isCheckingGmail && !gmailConnected) {
+      sessionStorage.setItem("gmailConnectIntent", "email-text-alert");
       sessionStorage.setItem("returnAfterGmailConnect", "/flow/email-text-alert");
       navigate("/integration/gmail");
     }
   }, [isCheckingGmail, gmailConnected, loadConfig, navigate]);
 
-  const handleBack = () => navigate("/threads");
+  const handleBack = () => {
+    sessionStorage.removeItem("returnAfterGmailConnect");
+    sessionStorage.removeItem("gmailConnectIntent");
+    navigate("/threads");
+  };
 
   const handleActivate = async () => {
     setPhase("activating");
