@@ -15,6 +15,7 @@ export function useEmailReceiptSheet() {
   const [phase, setPhase] = useState<EmailReceiptSheetPhase>("auth-check");
   const [config, setConfig] = useState<EmailReceiptSheetConfig | null>(null);
   const [spreadsheets, setSpreadsheets] = useState<SpreadsheetOption[]>([]);
+  const [expenses, setExpenses] = useState<ProcessedExpense[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
