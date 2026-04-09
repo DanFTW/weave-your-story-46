@@ -392,6 +392,12 @@ export default function FlowPage() {
     return <WeeklyEventFinderFlow />;
   }
 
+  // === BILL DUE REMINDER FLOW RENDER ===
+
+  if (config.isBillDueReminderFlow) {
+    return <BillDueReminderFlow />;
+  }
+
   // === GROCERY SHEET SYNC FLOW RENDER ===
 
   if (config.isGrocerySheetSyncFlow) {
