@@ -99,7 +99,7 @@ export function useBillDueReminder() {
     }
   }, [loadBills]);
 
-  const activate = useCallback(async (): Promise<boolean> => {
+  const activate = useCallback(async (phoneNumber: string): Promise<boolean> => {
     setIsActivating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -109,7 +109,7 @@ export function useBillDueReminder() {
       }
 
       const { error } = await supabase.functions.invoke("bill-due-reminder", {
-        body: { action: "activate" },
+        body: { action: "activate", phoneNumber },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
