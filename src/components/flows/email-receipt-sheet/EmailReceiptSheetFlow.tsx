@@ -54,6 +54,7 @@ export function EmailReceiptSheetFlow() {
       };
       check();
     } else if (!isCheckingGmail && !gmailConnected) {
+      sessionStorage.setItem("gmailConnectIntent", "email-receipt-sheet");
       sessionStorage.setItem("returnAfterGmailConnect", "/flow/email-receipt-sheet");
       navigate("/integration/gmail");
     }
@@ -62,15 +63,26 @@ export function EmailReceiptSheetFlow() {
   // If both connected, load config
   useEffect(() => {
     if (!isCheckingGmail && gmailConnected && !isCheckingSheets && sheetsConnected) {
+      sessionStorage.removeItem("returnAfterGmailConnect");
+      sessionStorage.removeItem("gmailConnectIntent");
+      sessionStorage.removeItem("returnAfterGooglesheetsConnect");
+      sessionStorage.removeItem("googlesheetsConnectIntent");
       loadConfig();
       loadExpenses();
     } else if (!isCheckingGmail && gmailConnected && !isCheckingSheets && !sheetsConnected) {
+      sessionStorage.setItem("googlesheetsConnectIntent", "email-receipt-sheet");
       sessionStorage.setItem("returnAfterGooglesheetsConnect", "/flow/email-receipt-sheet");
       navigate("/integration/googlesheets");
     }
   }, [isCheckingGmail, gmailConnected, isCheckingSheets, sheetsConnected, loadConfig, loadExpenses, navigate]);
 
-  const handleBack = () => navigate("/threads");
+  const handleBack = () => {
+    sessionStorage.removeItem("returnAfterGmailConnect");
+    sessionStorage.removeItem("gmailConnectIntent");
+    sessionStorage.removeItem("returnAfterGooglesheetsConnect");
+    sessionStorage.removeItem("googlesheetsConnectIntent");
+    navigate("/threads");
+  };
 
   const handleActivate = async () => {
     setPhase("activating");
