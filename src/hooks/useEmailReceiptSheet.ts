@@ -349,9 +349,9 @@ export function useEmailReceiptSheet() {
   }, [toast, loadConfig]);
 
   return {
-    phase, setPhase, config, stats, spreadsheets,
+    phase, setPhase, config, stats, spreadsheets, expenses,
     isLoading, isActivating, isSyncing, isLoadingSheets, isCreatingSheet,
-    loadConfig, listSpreadsheets, createSpreadsheet, updateConfig,
-    activate, deactivate, manualSync,
+    loadConfig, loadExpenses, listSpreadsheets, createSpreadsheet, updateConfig,
+    activate, deactivate, manualSync, deleteExpense,
   };
 }
