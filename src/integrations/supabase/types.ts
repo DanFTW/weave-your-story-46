@@ -448,6 +448,8 @@ export type Database = {
           created_at: string
           email_message_id: string
           id: string
+          sender_email: string | null
+          subject: string | null
           summary: string | null
           user_id: string
         }
@@ -455,6 +457,8 @@ export type Database = {
           created_at?: string
           email_message_id: string
           id?: string
+          sender_email?: string | null
+          subject?: string | null
           summary?: string | null
           user_id: string
         }
@@ -462,6 +466,8 @@ export type Database = {
           created_at?: string
           email_message_id?: string
           id?: string
+          sender_email?: string | null
+          subject?: string | null
           summary?: string | null
           user_id?: string
         }

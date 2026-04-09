@@ -1,12 +1,17 @@
-import { Mail, Phone, Pause, RefreshCw, Loader2, Bell } from "lucide-react";
+import { useState } from "react";
+import { Mail, Phone, Pause, RefreshCw, Loader2, Bell, ChevronDown, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { EmailTextAlertStats, EmailTextAlertConfig, SenderRule } from "@/types/emailTextAlert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { EmailTextAlertStats, EmailTextAlertConfig, SenderRule, ProcessedAlert } from "@/types/emailTextAlert";
+import { AlertCard } from "./AlertCard";
 
 interface ActiveMonitoringProps {
   stats: EmailTextAlertStats;
   config: EmailTextAlertConfig;
+  alerts: ProcessedAlert[];
   onPause: () => Promise<boolean>;
   onManualSync: () => Promise<void>;
+  onDeleteAlert: (id: string) => Promise<void>;
   isSyncing: boolean;
 }
 
@@ -24,7 +29,6 @@ function parseSenderRules(senderFilter: string | null): SenderRule[] {
       }
     } catch { /* fallback */ }
   }
-  // Legacy: show raw
   return [];
 }
 
@@ -38,7 +42,9 @@ function formatRulesSummary(config: EmailTextAlertConfig): string {
   return config.senderFilter || "Any sender";
 }
 
-export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, config, alerts, onPause, onManualSync, onDeleteAlert, isSyncing }: ActiveMonitoringProps) {
+  const [alertsOpen, setAlertsOpen] = useState(false);
+
   return (
     <div className="space-y-6">
       {/* Toggle card */}
@@ -88,16 +94,39 @@ export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSynci
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-          <Bell className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-foreground">{stats.alertsSent}</p>
-          <p className="text-sm text-muted-foreground">Alerts sent</p>
-        </div>
-      </div>
+      {/* Alerts history — collapsible */}
+      <Collapsible open={alertsOpen} onOpenChange={setAlertsOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full bg-card rounded-2xl border border-border p-5 flex items-center gap-4 hover:bg-accent/30 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Bell className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold text-foreground text-base">Alerts sent</p>
+              <p className="text-sm text-muted-foreground">{stats.alertsSent} alert{stats.alertsSent !== 1 ? "s" : ""}</p>
+            </div>
+            {alertsOpen ? (
+              <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+
+        <CollapsibleContent>
+          <div className="mt-3 space-y-3">
+            {alerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No alerts yet. Run a sync to check for matching emails.
+              </p>
+            ) : (
+              alerts.map((alert) => (
+                <AlertCard key={alert.id} alert={alert} onDelete={onDeleteAlert} />
+              ))
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Sync now */}
       <button
