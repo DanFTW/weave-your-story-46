@@ -7,6 +7,7 @@ import {
   EmailReceiptSheetConfig,
   EmailReceiptSheetStats,
   SpreadsheetOption,
+  ProcessedExpense,
 } from "@/types/emailReceiptSheet";
 
 export function useEmailReceiptSheet() {
