@@ -263,5 +263,3 @@ export function useWeeklyEventFinder() {
     loadConfig, updateConfig, activate, deactivate, manualSync, prefill, loadEvents,
   };
 }
-  };
-}
