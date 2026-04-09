@@ -47,7 +47,11 @@ export function EmailTextAlertFlow() {
     }
   }, [isCheckingGmail, gmailConnected, loadConfig, navigate]);
 
-  const handleBack = () => navigate("/threads");
+  const handleBack = () => {
+    sessionStorage.removeItem("returnAfterGmailConnect");
+    sessionStorage.removeItem("gmailConnectIntent");
+    navigate("/threads");
+  };
 
   const handleActivate = async () => {
     setPhase("activating");
