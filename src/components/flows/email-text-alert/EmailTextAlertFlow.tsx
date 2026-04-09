@@ -104,8 +104,10 @@ export function EmailTextAlertFlow() {
           <ActiveMonitoring
             stats={stats}
             config={config}
+            alerts={alerts}
             onPause={deactivate}
             onManualSync={manualSync}
+            onDeleteAlert={deleteAlert}
             isSyncing={isSyncing}
           />
         )}
