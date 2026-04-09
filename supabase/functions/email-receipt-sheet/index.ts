@@ -193,6 +193,7 @@ async function appendToSheet(
   rows: string[][],
 ): Promise<boolean> {
   try {
+    console.log(`[ReceiptSheet] BATCH_UPDATE request: connectionId=${connectionId}, spreadsheetId=${spreadsheetId}, rows=${rows.length}`);
     const res = await fetch(
       "https://backend.composio.dev/api/v3/tools/execute/GOOGLESHEETS_BATCH_UPDATE",
       {
@@ -212,10 +213,23 @@ async function appendToSheet(
       },
     );
 
+    const responseText = await res.text();
+    console.log(`[ReceiptSheet] BATCH_UPDATE response status=${res.status}, body=${responseText.slice(0, 1000)}`);
+
     if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[ReceiptSheet] Composio BATCH_UPDATE error ${res.status}:`, errText);
+      console.error(`[ReceiptSheet] BATCH_UPDATE HTTP error ${res.status}:`, responseText);
       return false;
+    }
+
+    // Composio v3 can return 200 with a logical failure
+    try {
+      const responseData = JSON.parse(responseText);
+      if (responseData?.successful === false || responseData?.error) {
+        console.error(`[ReceiptSheet] BATCH_UPDATE logical failure:`, responseText.slice(0, 500));
+        return false;
+      }
+    } catch {
+      // non-JSON 200 — treat as success
     }
 
     console.log(`[ReceiptSheet] Appended ${rows.length} rows to sheet`);
