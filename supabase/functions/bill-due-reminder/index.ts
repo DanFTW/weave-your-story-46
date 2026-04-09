@@ -310,7 +310,8 @@ serve(async (req) => {
   }
 
   try {
-    const { action } = await req.json();
+    const body = await req.json();
+    const { action, phoneNumber } = body;
     const userId = getUserId(req);
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
