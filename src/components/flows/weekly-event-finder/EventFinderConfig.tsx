@@ -5,12 +5,13 @@ import { useInterestSync } from "@/hooks/useInterestSync";
 import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
 import { InterestTagInput } from "./InterestTagInput";
-import { cleanInterestTag, parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
+import { TagRemoveDialog } from "./TagRemoveDialog";
+import { cleanInterestTag, parseAndDeduplicateInterestTags, filterBlockedInterests } from "@/utils/interestTagUtils";
 
 interface EventFinderConfigProps {
   config: WeeklyEventFinderConfig;
   onActivate: () => Promise<void>;
-  onUpdateConfig: (interests: string, location: string, frequency: string, deliveryMethod: string, email: string, phoneNumber: string) => Promise<void>;
+  onUpdateConfig: (interests: string, location: string, frequency: string, deliveryMethod: string, email: string, phoneNumber: string, blockedInterests: string) => Promise<void>;
   isActivating: boolean;
   onPrefill: () => Promise<{ interests: string; location: string } | null>;
 }
@@ -18,7 +19,7 @@ interface EventFinderConfigProps {
 export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActivating, onPrefill }: EventFinderConfigProps) {
   const { syncInterestsToMemory, syncNewInterestTag, syncLocationToMemory, forgetInterestMemory } = useInterestSync();
   const { filterRemoved, addRemovedTag, undoRemoval } = useRemovedInterestTags();
-  const { phone: prefillPhone, isLoading: isPhoneLoading } = usePhonePrefill(config.phoneNumber);
+  const { phone: prefillPhone } = usePhonePrefill(config.phoneNumber);
   const prefillRef = useRef<{ interests: string; location: string }>({ interests: "", location: "" });
 
   const [interestTags, setInterestTags] = useState<string[]>(() =>
@@ -30,6 +31,8 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
   const [email, setEmail] = useState(config.email ?? "");
   const [phoneNumber, setPhoneNumber] = useState(config.phoneNumber ?? "");
   const [isPrefilling, setIsPrefilling] = useState(false);
+  const [blockedInterests, setBlockedInterests] = useState(config.blockedInterests ?? "");
+  const [removeDialogTag, setRemoveDialogTag] = useState<string | null>(null);
 
   useEffect(() => {
     if (prefillPhone && !phoneNumber) setPhoneNumber(prefillPhone);
@@ -41,7 +44,8 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
       const result = await onPrefill();
       if (!result) return;
       if (result.interests) {
-        const memoryTags = filterRemoved(parseAndDeduplicateInterestTags(result.interests));
+        let memoryTags = filterRemoved(parseAndDeduplicateInterestTags(result.interests));
+        memoryTags = filterBlockedInterests(memoryTags, blockedInterests);
         setInterestTags(prev => {
           const lowerSet = new Set(prev.map(t => t.toLowerCase()));
           const newTags = memoryTags.filter(t => !lowerSet.has(t.toLowerCase()));
@@ -56,7 +60,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     } finally {
       setIsPrefilling(false);
     }
-  }, [onPrefill, location, filterRemoved]);
+  }, [onPrefill, location, filterRemoved, blockedInterests]);
 
   useEffect(() => {
     refreshFromMemories();
@@ -74,25 +78,42 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     await syncNewInterestTag(cleaned);
   };
 
-  const handleRemoveTag = (tag: string) => {
+  const handleRemoveTagClick = (tag: string) => {
+    setRemoveDialogTag(tag);
+  };
+
+  const handleRemoveConfirm = async (tag: string, block: boolean) => {
     setInterestTags(prev => prev.filter(t => t !== tag));
     addRemovedTag(tag);
-    forgetInterestMemory(tag); // Fire-and-forget: delete from LIAM
+    forgetInterestMemory(tag);
+
+    if (block) {
+      const currentBlocked = blockedInterests
+        ? blockedInterests.split(",").map(b => b.trim().toLowerCase()).filter(Boolean)
+        : [];
+      if (!currentBlocked.includes(tag.toLowerCase())) {
+        currentBlocked.push(tag.toLowerCase());
+      }
+      const newBlockedStr = currentBlocked.join(",");
+      setBlockedInterests(newBlockedStr);
+
+      const joinedInterests = interestTags.filter(t => t !== tag).join(", ");
+      await onUpdateConfig(joinedInterests, location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim(), newBlockedStr);
+    }
+
+    setRemoveDialogTag(null);
   };
 
   const handleActivate = async () => {
     const joinedInterests = interestTags.join(", ");
-    // Fire-and-forget: sync changed interests/location back to LIAM
     syncInterestsToMemory(joinedInterests, prefillRef.current.interests);
     syncLocationToMemory(location, prefillRef.current.location);
-
-    await onUpdateConfig(joinedInterests, location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim());
+    await onUpdateConfig(joinedInterests, location.trim(), frequency, deliveryMethod, email.trim(), phoneNumber.trim(), blockedInterests);
     await onActivate();
   };
 
   return (
     <div className="space-y-6">
-      {/* How it works */}
       <div className="bg-card rounded-2xl border border-border p-5">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -107,7 +128,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         </ul>
       </div>
 
-      {/* Interests */}
       <div className="space-y-3">
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Heart className="w-4 h-4 text-muted-foreground" />
@@ -128,7 +148,7 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         <InterestTagInput
           tags={interestTags}
           onAddTag={handleAddTag}
-          onRemoveTag={handleRemoveTag}
+          onRemoveTag={handleRemoveTagClick}
           isPrefilling={isPrefilling}
         />
         <p className="text-xs text-muted-foreground">
@@ -136,7 +156,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         </p>
       </div>
 
-      {/* Location */}
       <div className="space-y-3">
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <MapPin className="w-4 h-4 text-muted-foreground" />
@@ -152,7 +171,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         />
       </div>
 
-      {/* Frequency */}
       <div className="space-y-3">
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Clock className="w-4 h-4 text-muted-foreground" />
@@ -175,7 +193,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         </div>
       </div>
 
-      {/* Delivery method */}
       <div className="space-y-3">
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Mail className="w-4 h-4 text-muted-foreground" />
@@ -202,7 +219,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         </div>
       </div>
 
-      {/* Email input (shown only for email delivery) */}
       {deliveryMethod === "email" && (
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -219,7 +235,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         </div>
       )}
 
-      {/* Phone number input (shown only for text delivery) */}
       {deliveryMethod === "text" && (
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -236,7 +251,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
         </div>
       )}
 
-      {/* Activate button */}
       <button
         onClick={handleActivate}
         disabled={!canActivate || isActivating}
@@ -250,6 +264,13 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
           Add your interests, location{deliveryMethod === "email" ? ", and email" : ", and phone number"} to activate
         </p>
       )}
+
+      <TagRemoveDialog
+        tag={removeDialogTag}
+        open={!!removeDialogTag}
+        onOpenChange={(open) => { if (!open) setRemoveDialogTag(null); }}
+        onConfirm={handleRemoveConfirm}
+      />
     </div>
   );
 }

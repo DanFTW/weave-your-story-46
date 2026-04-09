@@ -621,7 +621,7 @@ serve(async (req: Request) => {
       }
 
       case "update-config": {
-        const { interests, location, frequency, deliveryMethod, email, phoneNumber } = params;
+        const { interests, location, frequency, deliveryMethod, email, phoneNumber, blockedInterests } = params;
         await sb
           .from("weekly_event_finder_config")
           .update({
@@ -631,6 +631,7 @@ serve(async (req: Request) => {
             delivery_method: deliveryMethod,
             email,
             phone_number: phoneNumber ?? null,
+            blocked_interests: blockedInterests ?? null,
           })
           .eq("user_id", userId);
 
@@ -641,6 +642,26 @@ serve(async (req: Request) => {
 
       case "prefill": {
         const result = await fetchLiamMemories(userId);
+
+        // Server-side blocklist filtering
+        const { data: cfgRow } = await sb
+          .from("weekly_event_finder_config")
+          .select("blocked_interests")
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        const blocklist = cfgRow?.blocked_interests || "";
+        if (blocklist && result.interests) {
+          const blockedSet = new Set(
+            blocklist.split(",").map((b: string) => b.trim().toLowerCase()).filter(Boolean)
+          );
+          const filtered = result.interests
+            .split(",")
+            .map((t: string) => t.trim())
+            .filter((t: string) => t && !blockedSet.has(t.toLowerCase()));
+          result.interests = filtered.join(", ");
+        }
+
         return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

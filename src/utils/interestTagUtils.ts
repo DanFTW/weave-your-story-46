@@ -66,3 +66,15 @@ export function parseAndDeduplicateInterestTags(raw: string): string[] {
   }
   return result;
 }
+
+/**
+ * Filter tags against a comma-separated blocklist.
+ * Blocked terms never reappear from sync/prefill.
+ */
+export function filterBlockedInterests(tags: string[], blocklist: string | null): string[] {
+  if (!blocklist) return tags;
+  const blocked = new Set(
+    blocklist.split(",").map(b => b.trim().toLowerCase()).filter(Boolean)
+  );
+  return tags.filter(t => !blocked.has(t.toLowerCase()));
+}

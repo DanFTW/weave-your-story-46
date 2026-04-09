@@ -51,6 +51,7 @@ export function useWeeklyEventFinder() {
           deliveryMethod: d.delivery_method ?? "email",
           email: d.email,
           phoneNumber: d.phone_number ?? null,
+          blockedInterests: d.blocked_interests ?? null,
           eventsFound: d.events_found ?? 0,
           createdAt: d.created_at,
           updatedAt: d.updated_at,
@@ -76,6 +77,7 @@ export function useWeeklyEventFinder() {
             deliveryMethod: "email",
             email: null,
             phoneNumber: null,
+            blockedInterests: null,
             eventsFound: 0,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
@@ -129,13 +131,14 @@ export function useWeeklyEventFinder() {
     deliveryMethod: string,
     email: string,
     phoneNumber: string,
+    blockedInterests: string,
   ) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       await supabase.functions.invoke("weekly-event-finder", {
-        body: { action: "update-config", interests, location, frequency, deliveryMethod, email, phoneNumber },
+        body: { action: "update-config", interests, location, frequency, deliveryMethod, email, phoneNumber, blockedInterests },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
@@ -147,6 +150,7 @@ export function useWeeklyEventFinder() {
         deliveryMethod: deliveryMethod as "email" | "text",
         email,
         phoneNumber,
+        blockedInterests: blockedInterests || null,
       } : null);
     } catch {
       toast({ title: "Failed to update config", variant: "destructive" });

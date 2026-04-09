@@ -7,7 +7,7 @@ import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { EventFinderConfig } from "./EventFinderConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
-import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
+import { parseAndDeduplicateInterestTags, filterBlockedInterests } from "@/utils/interestTagUtils";
 import { cn } from "@/lib/utils";
 
 const gradientClasses: Record<string, string> = {
@@ -41,7 +41,8 @@ export function WeeklyEventFinderFlow() {
       const result = await prefill();
       if (!result?.interests) return;
 
-      const memoryTags = filterRemoved(parseAndDeduplicateInterestTags(result.interests));
+      let memoryTags = filterRemoved(parseAndDeduplicateInterestTags(result.interests));
+      memoryTags = filterBlockedInterests(memoryTags, config.blockedInterests);
       const existingTags = config.interests ? parseAndDeduplicateInterestTags(config.interests) : [];
       const lowerSet = new Set(existingTags.map(t => t.toLowerCase()));
       const merged = [...existingTags];
@@ -61,6 +62,7 @@ export function WeeklyEventFinderFlow() {
           config.deliveryMethod,
           config.email ?? "",
           config.phoneNumber ?? "",
+          config.blockedInterests ?? "",
         );
         await loadConfig();
       }

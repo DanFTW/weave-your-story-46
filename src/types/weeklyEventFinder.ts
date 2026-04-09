@@ -14,6 +14,7 @@ export interface WeeklyEventFinderConfig {
   deliveryMethod: "email" | "text";
   email: string | null;
   phoneNumber: string | null;
+  blockedInterests: string | null;
   eventsFound: number;
   createdAt: string;
   updatedAt: string;

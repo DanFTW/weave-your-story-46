@@ -2007,6 +2007,7 @@ export type Database = {
       }
       weekly_event_finder_config: {
         Row: {
+          blocked_interests: string | null
           created_at: string
           delivery_method: string
           email: string | null
@@ -2021,6 +2022,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          blocked_interests?: string | null
           created_at?: string
           delivery_method?: string
           email?: string | null
@@ -2035,6 +2037,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          blocked_interests?: string | null
           created_at?: string
           delivery_method?: string
           email?: string | null
