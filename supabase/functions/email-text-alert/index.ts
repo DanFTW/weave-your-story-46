@@ -13,6 +13,8 @@ const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const SMS_API_KEY = Deno.env.get("SMS_API_KEY")!;
 
+// ── Helpers ──
+
 function getUserId(req: Request): string | null {
   const authHeader = req.headers.get("authorization");
   if (!authHeader) return null;
@@ -29,6 +31,49 @@ function adminClient() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
+/** Robust sender extraction with multiple fallbacks for Composio Gmail payloads */
+function extractSender(email: any): string | null {
+  const raw = email.from ?? email.From ?? email.sender ?? email.Sender ?? null;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  // Nested shapes
+  const nested = email.payload?.headers;
+  if (Array.isArray(nested)) {
+    const fromHeader = nested.find((h: any) => h.name?.toLowerCase() === "from");
+    if (fromHeader?.value) return fromHeader.value;
+  }
+  return null;
+}
+
+/** Robust subject extraction with multiple fallbacks */
+function extractSubject(email: any): string | null {
+  const raw = email.subject ?? email.Subject ?? null;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  // snippet-level subject
+  if (typeof email.snippet?.subject === "string" && email.snippet.subject.trim()) {
+    return email.snippet.subject.trim();
+  }
+  // Nested headers
+  const nested = email.payload?.headers;
+  if (Array.isArray(nested)) {
+    const subjectHeader = nested.find((h: any) => h.name?.toLowerCase() === "subject");
+    if (subjectHeader?.value) return subjectHeader.value;
+  }
+  return null;
+}
+
+/** Extract a stable message ID from various Composio shapes */
+function extractMessageId(email: any): string | null {
+  const id = email.id ?? email.messageId ?? email.message_id ?? null;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** Extract email body for summarization */
+function extractBody(email: any): string {
+  return email.messageText ?? email.body ?? email.snippet ?? "";
+}
+
+// ── Gmail connection ──
+
 async function getGmailConnectionId(sb: any, userId: string): Promise<string | null> {
   const { data } = await sb
     .from("user_integrations")
@@ -39,6 +84,8 @@ async function getGmailConnectionId(sb: any, userId: string): Promise<string | n
     .maybeSingle();
   return data?.composio_connection_id ?? null;
 }
+
+// ── Query builder ──
 
 interface SenderRule {
   email: string;
@@ -97,6 +144,8 @@ function buildGmailQuery(senderFilter: string | null, keywordFilter: string | nu
   return baseQuery ? `${baseQuery} newer_than:7d` : "newer_than:7d";
 }
 
+// ── Gmail fetch ──
+
 async function fetchEmails(connectionId: string, query: string): Promise<any[]> {
   console.log(`[TextAlert] Gmail query: ${query}`);
   try {
@@ -133,6 +182,8 @@ async function fetchEmails(connectionId: string, query: string): Promise<any[]> 
     return [];
   }
 }
+
+// ── AI summarize ──
 
 async function summarizeEmail(emailBody: string): Promise<string> {
   if (!LOVABLE_API_KEY) {
@@ -182,8 +233,9 @@ async function summarizeEmail(emailBody: string): Promise<string> {
   }
 }
 
+// ── SMS ──
+
 async function sendSms(to: string, body: string): Promise<boolean> {
-  // Normalize to E.164: strip non-digits, ensure + prefix
   const digits = to.replace(/\D/g, "");
   const normalized = digits.startsWith("+") ? digits : `+${digits}`;
 
@@ -217,6 +269,8 @@ async function sendSms(to: string, body: string): Promise<boolean> {
     return false;
   }
 }
+
+// ── Main handler ──
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -267,7 +321,6 @@ serve(async (req) => {
 
     // ── MANUAL-SYNC ──
     if (action === "manual-sync") {
-      // 1. Get config
       const { data: configData } = await sb
         .from("email_text_alert_config")
         .select("*")
@@ -281,7 +334,6 @@ serve(async (req) => {
         });
       }
 
-      // 2. Get Gmail connection
       const connectionId = await getGmailConnectionId(sb, userId);
       if (!connectionId) {
         return new Response(JSON.stringify({ error: "Gmail not connected" }), {
@@ -290,11 +342,9 @@ serve(async (req) => {
         });
       }
 
-      // 3. Build query and fetch emails
       const query = buildGmailQuery(configData.sender_filter, configData.keyword_filter);
       const emails = await fetchEmails(connectionId, query);
 
-      // 4. Get already-processed IDs
       const { data: processedRows } = await sb
         .from("email_text_alert_processed")
         .select("email_message_id")
@@ -302,36 +352,30 @@ serve(async (req) => {
 
       const processedIds = new Set((processedRows ?? []).map((r: any) => r.email_message_id));
 
-      // 5. Process new emails
       let alertCount = 0;
       for (const email of emails) {
-        const messageId = email.id ?? email.messageId ?? email.message_id;
+        const messageId = extractMessageId(email);
         if (!messageId || processedIds.has(messageId)) continue;
 
-        const body = email.messageText ?? email.body ?? email.snippet ?? "";
+        const body = extractBody(email);
         if (!body) continue;
 
         const summary = await summarizeEmail(body);
+        const senderEmail = extractSender(email);
+        const emailSubject = extractSubject(email);
 
-        // Extract metadata for history display
-        const senderEmail = email.sender ?? email.from ?? null;
-        const emailSubject = email.subject ?? null;
-
-        // Insert into processed table
         await sb.from("email_text_alert_processed").insert({
           user_id: userId,
           email_message_id: messageId,
           summary,
-          sender_email: typeof senderEmail === "string" ? senderEmail : null,
-          subject: typeof emailSubject === "string" ? emailSubject : null,
+          sender_email: senderEmail,
+          subject: emailSubject,
         });
 
-        // Send SMS alert — only count if delivered
         const sent = await sendSms(configData.phone_number, summary);
         if (sent) alertCount++;
       }
 
-      // 6. Update alerts_sent counter
       if (alertCount > 0) {
         await sb.from("email_text_alert_config").update({
           alerts_sent: (configData.alerts_sent ?? 0) + alertCount,
@@ -339,6 +383,79 @@ serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ processed: emails.length, alerts: alertCount }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── REPAIR-HISTORY ──
+    if (action === "repair-history") {
+      const { data: configData } = await sb
+        .from("email_text_alert_config")
+        .select("*")
+        .eq("user_id", userId)
+        .single();
+
+      if (!configData) {
+        return new Response(JSON.stringify({ error: "Config not found" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Find rows missing metadata
+      const { data: missingRows } = await sb
+        .from("email_text_alert_processed")
+        .select("id, email_message_id")
+        .eq("user_id", userId)
+        .or("sender_email.is.null,subject.is.null");
+
+      if (!missingRows || missingRows.length === 0) {
+        return new Response(JSON.stringify({ repaired: 0 }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const connectionId = await getGmailConnectionId(sb, userId);
+      if (!connectionId) {
+        return new Response(JSON.stringify({ error: "Gmail not connected" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch recent emails to match against
+      const query = buildGmailQuery(configData.sender_filter, configData.keyword_filter);
+      const emails = await fetchEmails(connectionId, query);
+
+      // Build lookup by message ID
+      const emailMap = new Map<string, any>();
+      for (const email of emails) {
+        const mid = extractMessageId(email);
+        if (mid) emailMap.set(mid, email);
+      }
+
+      let repaired = 0;
+      for (const row of missingRows) {
+        const email = emailMap.get(row.email_message_id);
+        if (!email) continue;
+
+        const sender = extractSender(email);
+        const subject = extractSubject(email);
+
+        if (sender || subject) {
+          await sb
+            .from("email_text_alert_processed")
+            .update({
+              sender_email: sender,
+              subject: subject,
+            })
+            .eq("id", row.id);
+          repaired++;
+        }
+      }
+
+      console.log(`[TextAlert] Repaired ${repaired}/${missingRows.length} rows`);
+      return new Response(JSON.stringify({ repaired, total: missingRows.length }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

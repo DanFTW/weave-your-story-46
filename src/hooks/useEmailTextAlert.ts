@@ -190,7 +190,6 @@ export function useEmailTextAlert() {
       setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       setConfig((prev) => prev ? { ...prev, alertsSent: Math.max(0, prev.alertsSent - 1) } : null);
 
-      // Decrement counter in DB
       if (config) {
         await supabase
           .from("email_text_alert_config" as any)
@@ -203,6 +202,34 @@ export function useEmailTextAlert() {
       toast({ title: "Failed to remove alert", variant: "destructive" });
     }
   }, [toast, config]);
+
+  /** Backfill missing sender/subject metadata on legacy alert rows */
+  const repairAlertHistory = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase.functions.invoke("email-text-alert", {
+        body: { action: "repair-history" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        console.error("[repairAlertHistory] Error:", error);
+        return;
+      }
+
+      const result = data as { repaired?: number; total?: number };
+      if (result.repaired && result.repaired > 0) {
+        console.log(`[repairAlertHistory] Repaired ${result.repaired}/${result.total} rows`);
+        // Reload alerts to pick up repaired metadata
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) await loadAlerts(user.id);
+      }
+    } catch (e) {
+      console.error("[repairAlertHistory] Error:", e);
+    }
+  }, [loadAlerts]);
 
   const manualSync = useCallback(async () => {
     setIsSyncing(true);
@@ -227,16 +254,22 @@ export function useEmailTextAlert() {
       });
 
       await loadConfig();
+
+      // Auto-repair legacy rows missing metadata after sync
+      const hasNullMetadata = alerts.some((a) => !a.senderEmail && !a.subject);
+      if (hasNullMetadata) {
+        await repairAlertHistory();
+      }
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
     } finally {
       setIsSyncing(false);
     }
-  }, [toast, loadConfig]);
+  }, [toast, loadConfig, alerts, repairAlertHistory]);
 
   return {
     phase, setPhase, config, stats, alerts,
     isLoading, isActivating, isSyncing,
-    loadConfig, updateConfig, activate, deactivate, deleteAlert, manualSync,
+    loadConfig, updateConfig, activate, deactivate, deleteAlert, manualSync, repairAlertHistory,
   };
 }
