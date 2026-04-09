@@ -1,8 +1,8 @@
+import { useState } from "react";
 import { Receipt, Mail, Zap, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
-import { useState } from "react";
 
 interface BillConfigProps {
   onActivate: (phoneNumber: string) => Promise<void>;
@@ -12,14 +12,9 @@ interface BillConfigProps {
 
 export function BillConfig({ onActivate, isActivating, currentPhone }: BillConfigProps) {
   const { phone, isLoading: phoneLoading } = usePhonePrefill(currentPhone);
-  const [phoneValue, setPhoneValue] = useState(phone);
+  const [phoneValue, setPhoneValue] = useState("");
 
-  // Sync prefill result
-  useState(() => {
-    if (phone && !phoneValue) setPhoneValue(phone);
-  });
-
-  // Keep in sync when prefill resolves
+  // Sync when prefill resolves
   if (phone && !phoneValue) {
     setPhoneValue(phone);
   }
