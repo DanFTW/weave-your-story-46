@@ -149,6 +149,7 @@ export function WeeklyEventFinderFlow() {
           <ActiveMonitoring
             stats={stats}
             config={config}
+            events={events}
             onPause={deactivate}
             onManualSync={manualSync}
             isSyncing={isSyncing}
