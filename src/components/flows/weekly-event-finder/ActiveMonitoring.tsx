@@ -18,6 +18,7 @@ interface ActiveMonitoringProps {
 }
 
 export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
+  const [eventsOpen, setEventsOpen] = useState(false);
   return (
     <div className="space-y-6">
       {/* Toggle card */}
