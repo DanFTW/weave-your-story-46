@@ -86,6 +86,68 @@ export function useEmailReceiptSheet() {
     }
   }, []);
 
+  const loadExpenses = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("email_receipt_sheet_processed" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error("Error loading expenses:", error);
+        return;
+      }
+
+      setExpenses(
+        (data ?? []).map((d: any) => ({
+          id: d.id,
+          vendor: d.vendor,
+          amount: d.amount,
+          dateStr: d.date_str,
+          emailMessageId: d.email_message_id,
+          createdAt: d.created_at,
+        }))
+      );
+    } catch {
+      console.error("Failed to load expenses");
+    }
+  }, []);
+
+  const deleteExpense = useCallback(async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("email_receipt_sheet_processed" as any)
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        toast({ title: "Failed to remove expense", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      setExpenses((prev) => prev.filter((e) => e.id !== id));
+
+      // Decrement rows_posted in config
+      if (config?.id) {
+        const newCount = Math.max(0, (config.rowsPosted ?? 1) - 1);
+        await supabase
+          .from("email_receipt_sheet_config" as any)
+          .update({ rows_posted: newCount })
+          .eq("id", config.id);
+        setConfig((prev) => prev ? { ...prev, rowsPosted: newCount } : null);
+      }
+
+      toast({ title: "Expense removed" });
+    } catch {
+      toast({ title: "Failed to remove expense", variant: "destructive" });
+    }
+  }, [toast, config]);
+
   const listSpreadsheets = useCallback(async () => {
     setIsLoadingSheets(true);
     try {
