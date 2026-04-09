@@ -84,6 +84,7 @@ export function WeeklyEventFinderFlow() {
     if (!isCheckingGmail) {
       // If Gmail not connected, redirect to connect (needed for email delivery)
       if (!gmailConnected) {
+        sessionStorage.setItem("gmailConnectIntent", "weekly-event-finder");
         sessionStorage.setItem("returnAfterGmailConnect", "/flow/weekly-event-finder");
         navigate("/integration/gmail");
       } else {
@@ -92,7 +93,11 @@ export function WeeklyEventFinderFlow() {
     }
   }, [isCheckingGmail, gmailConnected, loadConfig, navigate]);
 
-  const handleBack = () => navigate("/threads");
+  const handleBack = () => {
+    sessionStorage.removeItem("returnAfterGmailConnect");
+    sessionStorage.removeItem("gmailConnectIntent");
+    navigate("/threads");
+  };
 
   const handleActivate = async () => {
     setPhase("activating");
