@@ -1,4 +1,6 @@
-import { Heart, MapPin, Clock, Mail, Phone, Pause, RefreshCw, Loader2, Calendar } from "lucide-react";
+import { useState } from "react";
+import { Heart, MapPin, Clock, Mail, Phone, Pause, RefreshCw, Loader2, Calendar, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
 import { Switch } from "@/components/ui/switch";
 import { WeeklyEventFinderStats, WeeklyEventFinderConfig, FoundEvent } from "@/types/weeklyEventFinder";
