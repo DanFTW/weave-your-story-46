@@ -63,11 +63,12 @@ export function EmailReceiptSheetFlow() {
   useEffect(() => {
     if (!isCheckingGmail && gmailConnected && !isCheckingSheets && sheetsConnected) {
       loadConfig();
+      loadExpenses();
     } else if (!isCheckingGmail && gmailConnected && !isCheckingSheets && !sheetsConnected) {
       sessionStorage.setItem("returnAfterGooglesheetsConnect", "/flow/email-receipt-sheet");
       navigate("/integration/googlesheets");
     }
-  }, [isCheckingGmail, gmailConnected, isCheckingSheets, sheetsConnected, loadConfig, navigate]);
+  }, [isCheckingGmail, gmailConnected, isCheckingSheets, sheetsConnected, loadConfig, loadExpenses, navigate]);
 
   const handleBack = () => navigate("/threads");
 
