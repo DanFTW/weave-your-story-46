@@ -1,22 +1,31 @@
-import { Receipt, FileSpreadsheet, Pause, RefreshCw, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Receipt, FileSpreadsheet, Pause, RefreshCw, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { EmailReceiptSheetStats } from "@/types/emailReceiptSheet";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { EmailReceiptSheetStats, ProcessedExpense } from "@/types/emailReceiptSheet";
+import { ExpenseCard } from "./ExpenseCard";
 
 interface ActiveMonitoringProps {
   stats: EmailReceiptSheetStats;
   sheetName: string;
+  expenses: ProcessedExpense[];
   onPause: () => Promise<boolean>;
   onManualSync: () => Promise<void>;
+  onDeleteExpense: (id: string) => Promise<void>;
   isSyncing: boolean;
 }
 
 export function ActiveMonitoring({
   stats,
   sheetName,
+  expenses,
   onPause,
   onManualSync,
+  onDeleteExpense,
   isSyncing,
 }: ActiveMonitoringProps) {
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   return (
     <div className="space-y-6">
       {/* Toggle card */}
@@ -53,16 +62,40 @@ export function ActiveMonitoring({
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-          <Receipt className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-foreground">{stats.rowsPosted}</p>
-          <p className="text-sm text-muted-foreground">Expenses tracked</p>
-        </div>
-      </div>
+      {/* Collapsible expense history */}
+      <Collapsible open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Receipt className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-2xl font-bold text-foreground">{stats.rowsPosted}</p>
+              <p className="text-sm text-muted-foreground">Expenses tracked</p>
+            </div>
+            {isHistoryOpen ? (
+              <ChevronUp className="w-5 h-5 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-muted-foreground" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-3 pt-3">
+          {expenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No expenses tracked yet
+            </p>
+          ) : (
+            expenses.map((expense) => (
+              <ExpenseCard
+                key={expense.id}
+                expense={expense}
+                onDelete={onDeleteExpense}
+              />
+            ))
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Sync now button */}
       <button

@@ -196,8 +196,10 @@ export function EmailReceiptSheetFlow() {
           <ActiveMonitoring
             stats={stats}
             sheetName={config?.spreadsheetName ?? "Unknown"}
+            expenses={expenses}
             onPause={deactivate}
             onManualSync={manualSync}
+            onDeleteExpense={deleteExpense}
             isSyncing={isSyncing}
           />
         )}
