@@ -77,7 +77,7 @@ export function filterBlockedInterests(tags: string[], blocklist: string | null)
     blocklist.split(",").map(b => b.trim().toLowerCase()).filter(Boolean)
   );
   return tags.filter(t => !blocked.has(t.toLowerCase()));
-    .split(/[,;]/)
+}
     .map(cleanInterestTag)
     .filter(Boolean);
 
