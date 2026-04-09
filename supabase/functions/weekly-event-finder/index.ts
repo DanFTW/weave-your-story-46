@@ -621,7 +621,7 @@ serve(async (req: Request) => {
       }
 
       case "update-config": {
-        const { interests, location, frequency, deliveryMethod, email, phoneNumber } = params;
+        const { interests, location, frequency, deliveryMethod, email, phoneNumber, blockedInterests } = params;
         await sb
           .from("weekly_event_finder_config")
           .update({
@@ -631,6 +631,7 @@ serve(async (req: Request) => {
             delivery_method: deliveryMethod,
             email,
             phone_number: phoneNumber ?? null,
+            blocked_interests: blockedInterests ?? null,
           })
           .eq("user_id", userId);
 
