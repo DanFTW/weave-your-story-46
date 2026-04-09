@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, forwardRef } from "react";
 import { ChevronDown, ChevronUp, Calendar, ExternalLink, Sparkles, Trash2, Loader2 } from "lucide-react";
 import { FoundEvent } from "@/types/weeklyEventFinder";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -8,7 +8,8 @@ interface FoundEventCardProps {
   onDelete?: (id: string) => Promise<void>;
 }
 
-export function FoundEventCard({ event, onDelete }: FoundEventCardProps) {
+export const FoundEventCard = forwardRef<HTMLDivElement, FoundEventCardProps>(
+  function FoundEventCard({ event, onDelete }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
