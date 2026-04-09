@@ -15,6 +15,7 @@ interface ActiveMonitoringProps {
   isSyncing: boolean;
   onSyncInterests: () => Promise<void>;
   isSyncingInterests: boolean;
+  onDeleteEvent: (id: string) => Promise<void>;
 }
 
 export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
