@@ -7,6 +7,7 @@ import {
   EmailReceiptSheetConfig,
   EmailReceiptSheetStats,
   SpreadsheetOption,
+  ProcessedExpense,
 } from "@/types/emailReceiptSheet";
 
 export function useEmailReceiptSheet() {
@@ -14,6 +15,7 @@ export function useEmailReceiptSheet() {
   const [phase, setPhase] = useState<EmailReceiptSheetPhase>("auth-check");
   const [config, setConfig] = useState<EmailReceiptSheetConfig | null>(null);
   const [spreadsheets, setSpreadsheets] = useState<SpreadsheetOption[]>([]);
+  const [expenses, setExpenses] = useState<ProcessedExpense[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -83,6 +85,68 @@ export function useEmailReceiptSheet() {
       setIsLoading(false);
     }
   }, []);
+
+  const loadExpenses = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("email_receipt_sheet_processed" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error("Error loading expenses:", error);
+        return;
+      }
+
+      setExpenses(
+        (data ?? []).map((d: any) => ({
+          id: d.id,
+          vendor: d.vendor,
+          amount: d.amount,
+          dateStr: d.date_str,
+          emailMessageId: d.email_message_id,
+          createdAt: d.created_at,
+        }))
+      );
+    } catch {
+      console.error("Failed to load expenses");
+    }
+  }, []);
+
+  const deleteExpense = useCallback(async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("email_receipt_sheet_processed" as any)
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        toast({ title: "Failed to remove expense", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      setExpenses((prev) => prev.filter((e) => e.id !== id));
+
+      // Decrement rows_posted in config
+      if (config?.id) {
+        const newCount = Math.max(0, (config.rowsPosted ?? 1) - 1);
+        await supabase
+          .from("email_receipt_sheet_config" as any)
+          .update({ rows_posted: newCount })
+          .eq("id", config.id);
+        setConfig((prev) => prev ? { ...prev, rowsPosted: newCount } : null);
+      }
+
+      toast({ title: "Expense removed" });
+    } catch {
+      toast({ title: "Failed to remove expense", variant: "destructive" });
+    }
+  }, [toast, config]);
 
   const listSpreadsheets = useCallback(async () => {
     setIsLoadingSheets(true);
@@ -276,6 +340,7 @@ export function useEmailReceiptSheet() {
       });
 
       await loadConfig();
+      await loadExpenses();
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
     } finally {
@@ -284,9 +349,9 @@ export function useEmailReceiptSheet() {
   }, [toast, loadConfig]);
 
   return {
-    phase, setPhase, config, stats, spreadsheets,
+    phase, setPhase, config, stats, spreadsheets, expenses,
     isLoading, isActivating, isSyncing, isLoadingSheets, isCreatingSheet,
-    loadConfig, listSpreadsheets, createSpreadsheet, updateConfig,
-    activate, deactivate, manualSync,
+    loadConfig, loadExpenses, listSpreadsheets, createSpreadsheet, updateConfig,
+    activate, deactivate, manualSync, deleteExpense,
   };
 }

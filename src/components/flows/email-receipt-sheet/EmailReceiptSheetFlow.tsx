@@ -28,10 +28,10 @@ export function EmailReceiptSheetFlow() {
   const { isConnected: sheetsConnected, checkStatus: checkSheets, disconnect: disconnectSheets, connect: connectSheets, connecting: sheetsConnecting } = useComposio("GOOGLESHEETS");
 
   const {
-    phase, setPhase, config, stats, spreadsheets,
+    phase, setPhase, config, stats, spreadsheets, expenses,
     isLoading, isActivating, isSyncing, isLoadingSheets, isCreatingSheet,
-    loadConfig, listSpreadsheets, createSpreadsheet, updateConfig,
-    activate, deactivate, manualSync,
+    loadConfig, loadExpenses, listSpreadsheets, createSpreadsheet, updateConfig,
+    activate, deactivate, manualSync, deleteExpense,
   } = useEmailReceiptSheet();
 
   // Check Gmail auth first
@@ -63,11 +63,12 @@ export function EmailReceiptSheetFlow() {
   useEffect(() => {
     if (!isCheckingGmail && gmailConnected && !isCheckingSheets && sheetsConnected) {
       loadConfig();
+      loadExpenses();
     } else if (!isCheckingGmail && gmailConnected && !isCheckingSheets && !sheetsConnected) {
       sessionStorage.setItem("returnAfterGooglesheetsConnect", "/flow/email-receipt-sheet");
       navigate("/integration/googlesheets");
     }
-  }, [isCheckingGmail, gmailConnected, isCheckingSheets, sheetsConnected, loadConfig, navigate]);
+  }, [isCheckingGmail, gmailConnected, isCheckingSheets, sheetsConnected, loadConfig, loadExpenses, navigate]);
 
   const handleBack = () => navigate("/threads");
 
@@ -195,8 +196,10 @@ export function EmailReceiptSheetFlow() {
           <ActiveMonitoring
             stats={stats}
             sheetName={config?.spreadsheetName ?? "Unknown"}
+            expenses={expenses}
             onPause={deactivate}
             onManualSync={manualSync}
+            onDeleteExpense={deleteExpense}
             isSyncing={isSyncing}
           />
         )}
