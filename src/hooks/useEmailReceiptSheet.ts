@@ -340,6 +340,7 @@ export function useEmailReceiptSheet() {
       });
 
       await loadConfig();
+      await loadExpenses();
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
     } finally {
