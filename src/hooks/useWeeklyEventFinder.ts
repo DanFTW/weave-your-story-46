@@ -87,6 +87,40 @@ export function useWeeklyEventFinder() {
     }
   }, []);
 
+  const loadEvents = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("weekly_event_finder_processed" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .order("processed_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error("Error loading events:", error);
+        return;
+      }
+
+      if (data) {
+        setEvents((data as any[]).map((d) => ({
+          id: d.id,
+          eventId: d.event_id,
+          eventTitle: d.event_title || "",
+          eventDate: d.event_date ?? null,
+          eventDescription: d.event_description ?? null,
+          eventReason: d.event_reason ?? null,
+          eventLink: d.event_link ?? null,
+          processedAt: d.processed_at,
+        })));
+      }
+    } catch (e) {
+      console.error("Failed to load events:", e);
+    }
+  }, []);
+
   const updateConfig = useCallback(async (
     interests: string,
     location: string,
