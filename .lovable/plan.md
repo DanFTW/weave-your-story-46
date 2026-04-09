@@ -1,39 +1,21 @@
 
 
-## Add Delete Button to Event Cards
+## Fix Delete Button Not Rendering in FoundEventCard
 
-### Overview
-Add a delete button to each `FoundEventCard` that removes the event from the `weekly_event_finder_processed` table and updates the local state and count.
+### Root Cause
+The console shows: "Function components cannot be given refs. Check the render method of `ActiveMonitoring` at FoundEventCard."
 
-### Changes
+Radix's `CollapsibleContent` internally tries to compose refs onto its direct children. `FoundEventCard` is a plain function component without `forwardRef`, so the ref is silently dropped. In some React reconciliation paths this can interfere with the content rendering correctly after the Collapsible animation completes.
 
-**1. `src/hooks/useWeeklyEventFinder.ts`** — Add `deleteEvent` function
-- Delete row from `weekly_event_finder_processed` by ID
-- Remove from local `events` state
-- Decrement `events_found` counter on the config row
-- Update local `config.eventsFound` state
+### Fix
 
-**2. `src/components/flows/weekly-event-finder/FoundEventCard.tsx`** — Add delete button
-- Accept `onDelete: (id: string) => Promise<void>` prop
-- Add a `Trash2` icon button in the expanded `CollapsibleContent` area (next to the "View event" link)
-- Show loading state while deleting
-- Style: muted destructive text button matching existing dismiss patterns (`text-sm text-destructive`)
+**File: `src/components/flows/weekly-event-finder/FoundEventCard.tsx`**
 
-**3. `src/components/flows/weekly-event-finder/ActiveMonitoring.tsx`** — Wire callback
-- Accept `onDeleteEvent` prop, pass it through to each `FoundEventCard`
+Wrap the component with `React.forwardRef` so Radix can attach its ref. This resolves the warning and ensures the full expanded content (including the delete button) renders reliably.
 
-**4. `src/components/flows/weekly-event-finder/WeeklyEventFinderFlow.tsx`** — Pass callback
-- Pass `useWeeklyEventFinder.deleteEvent` to `ActiveMonitoring`
+- Import `forwardRef` from React
+- Convert the component signature to use `forwardRef`, passing the ref to the outer `Collapsible` wrapper div
+- Keep all existing logic and props intact
 
-### Delete Flow
-```text
-User taps Trash icon → deleteEvent(id) called →
-  1. DELETE from weekly_event_finder_processed WHERE id = ?
-  2. UPDATE weekly_event_finder_config SET events_found = events_found - 1
-  3. Remove event from local events[] state
-  4. Decrement local config.eventsFound
-  5. Toast: "Event removed"
-```
-
-No confirmation dialog needed — this is a lightweight dismiss action on non-critical data (matching the simple delete patterns used elsewhere in the app).
+This is a minimal, single-file change. No other files need modification — the wiring from hook → flow → monitoring → card is already correct.
 
