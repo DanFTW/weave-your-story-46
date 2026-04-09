@@ -28,10 +28,10 @@ export function EmailReceiptSheetFlow() {
   const { isConnected: sheetsConnected, checkStatus: checkSheets, disconnect: disconnectSheets, connect: connectSheets, connecting: sheetsConnecting } = useComposio("GOOGLESHEETS");
 
   const {
-    phase, setPhase, config, stats, spreadsheets,
+    phase, setPhase, config, stats, spreadsheets, expenses,
     isLoading, isActivating, isSyncing, isLoadingSheets, isCreatingSheet,
-    loadConfig, listSpreadsheets, createSpreadsheet, updateConfig,
-    activate, deactivate, manualSync,
+    loadConfig, loadExpenses, listSpreadsheets, createSpreadsheet, updateConfig,
+    activate, deactivate, manualSync, deleteExpense,
   } = useEmailReceiptSheet();
 
   // Check Gmail auth first
