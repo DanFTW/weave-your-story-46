@@ -56,6 +56,7 @@ export function useWeeklyEventFinder() {
           updatedAt: d.updated_at,
         });
         setPhase(d.is_active ? "active" : "configure");
+        if (d.is_active) loadEvents();
       } else {
         const { data: newConfig } = await supabase
           .from("weekly_event_finder_config" as any)
