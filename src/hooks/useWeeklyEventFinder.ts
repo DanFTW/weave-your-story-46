@@ -5,6 +5,7 @@ import {
   WeeklyEventFinderPhase,
   WeeklyEventFinderConfig,
   WeeklyEventFinderStats,
+  FoundEvent,
 } from "@/types/weeklyEventFinder";
 
 export function useWeeklyEventFinder() {
@@ -14,6 +15,7 @@ export function useWeeklyEventFinder() {
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [events, setEvents] = useState<FoundEvent[]>([]);
 
   const stats: WeeklyEventFinderStats = {
     eventsFound: config?.eventsFound ?? 0,
@@ -54,6 +56,7 @@ export function useWeeklyEventFinder() {
           updatedAt: d.updated_at,
         });
         setPhase(d.is_active ? "active" : "configure");
+        if (d.is_active) loadEvents();
       } else {
         const { data: newConfig } = await supabase
           .from("weekly_event_finder_config" as any)
@@ -82,6 +85,40 @@ export function useWeeklyEventFinder() {
       }
     } finally {
       setIsLoading(false);
+    }
+  }, []);
+
+  const loadEvents = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("weekly_event_finder_processed" as any)
+        .select("*")
+        .eq("user_id", user.id)
+        .order("processed_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error("Error loading events:", error);
+        return;
+      }
+
+      if (data) {
+        setEvents((data as any[]).map((d) => ({
+          id: d.id,
+          eventId: d.event_id,
+          eventTitle: d.event_title || "",
+          eventDate: d.event_date ?? null,
+          eventDescription: d.event_description ?? null,
+          eventReason: d.event_reason ?? null,
+          eventLink: d.event_link ?? null,
+          processedAt: d.processed_at,
+        })));
+      }
+    } catch (e) {
+      console.error("Failed to load events:", e);
     }
   }, []);
 
@@ -193,6 +230,8 @@ export function useWeeklyEventFinder() {
         description: `Found ${result.eventsFound ?? 0} events — ${result.delivered ?? 0} delivered`,
       });
 
+      await loadEvents();
+
       await loadConfig();
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
@@ -219,8 +258,8 @@ export function useWeeklyEventFinder() {
   }, []);
 
   return {
-    phase, setPhase, config, stats,
+    phase, setPhase, config, stats, events,
     isLoading, isActivating, isSyncing,
-    loadConfig, updateConfig, activate, deactivate, manualSync, prefill,
+    loadConfig, updateConfig, activate, deactivate, manualSync, prefill, loadEvents,
   };
 }

@@ -762,11 +762,20 @@ serve(async (req: Request) => {
           console.warn("[EventFinder] No valid delivery target configured — method:", cfg.delivery_method, "email:", cfg.email, "phone:", cfg.phone_number);
         }
 
-        // Record processed events
+        // Record processed events with full details
         for (const e of newEvents) {
           const eventId = e.title || e.name || JSON.stringify(e);
+          const dateStr = extractDateString(e.when) || extractDateString(e.date) || extractDateString(e.start_date);
           await sb.from("weekly_event_finder_processed").upsert(
-            { user_id: userId, event_id: eventId, event_title: e.title || e.name || "" },
+            {
+              user_id: userId,
+              event_id: eventId,
+              event_title: e.title || e.name || "",
+              event_date: dateStr || null,
+              event_description: e.description || null,
+              event_reason: e.reason || null,
+              event_link: e.link || e.url || e.event_url || null,
+            },
             { onConflict: "user_id,event_id" }
           );
         }
