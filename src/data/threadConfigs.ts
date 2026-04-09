@@ -1326,6 +1326,38 @@ export const threadConfigs: Record<string, ThreadConfig> = {
       },
     ],
   },
+  "bill-due-reminder": {
+    id: "bill-due-reminder",
+    title: "Bill Due Reminder",
+    subtitle: "Never miss a payment",
+    description: "Scans Gmail for bill notifications, invoices, and payment reminders. Extracts biller name, amount due, and due date. Each bill is saved as a memory.",
+    gradient: "orange",
+    icon: Receipt,
+    steps: [
+      {
+        id: "connect",
+        type: "integration",
+        title: "Connect Gmail",
+        description: "Authorize access to scan for bills",
+        iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg",
+      },
+      {
+        id: "configure",
+        type: "setup",
+        title: "Enable Bill Scanner",
+        description: "Toggle bill scanning on/off",
+        icon: Settings,
+      },
+      {
+        id: "active",
+        type: "save",
+        title: "Always-On Scanning",
+        description: "Bills detected automatically",
+        icon: Wifi,
+        badge: "LIVE",
+      },
+    ],
+  },
 };
 
 export function getThreadConfig(threadId: string): ThreadConfig | undefined {
