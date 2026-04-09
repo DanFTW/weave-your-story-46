@@ -123,7 +123,7 @@ export function ActiveMonitoring({ stats, config, events, onPause, onManualSync,
         <CollapsibleContent className="space-y-3 pt-3">
           {events.length > 0 ? (
             events.map((event) => (
-              <FoundEventCard key={event.id} event={event} />
+              <FoundEventCard key={event.id} event={event} onDelete={onDeleteEvent} />
             ))
           ) : (
             <div className="bg-card rounded-2xl border border-border p-5 text-center">

@@ -157,6 +157,7 @@ export function WeeklyEventFinderFlow() {
             isSyncing={isSyncing}
             onSyncInterests={handleSyncInterests}
             isSyncingInterests={isSyncingInterests}
+            onDeleteEvent={deleteEvent}
           />
         )}
       </div>
