@@ -258,8 +258,10 @@ export function useWeeklyEventFinder() {
   }, []);
 
   return {
-    phase, setPhase, config, stats,
+    phase, setPhase, config, stats, events,
     isLoading, isActivating, isSyncing,
-    loadConfig, updateConfig, activate, deactivate, manualSync, prefill,
+    loadConfig, updateConfig, activate, deactivate, manualSync, prefill, loadEvents,
+  };
+}
   };
 }
