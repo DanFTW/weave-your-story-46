@@ -405,12 +405,18 @@ serve(async (req) => {
         }, { onConflict: "user_id,email_message_id" });
 
         // Save to LIAM
+        const memoryContent = `Bill: ${details.billerName || "Unknown"} — ${details.amountDue || "amount unknown"}, due ${details.dueDate || "date unknown"}`;
         if (apiKeys) {
-          const memoryContent = `Bill: ${details.billerName || "Unknown"} — ${details.amountDue || "amount unknown"}, due ${details.dueDate || "date unknown"}`;
           await saveMemoryToLiam(apiKeys.api_key, apiKeys.user_key, apiKeys.private_key, memoryContent, "BILL");
         }
 
-        billCount++;
+        // Send SMS notification
+        if (configData.phone_number) {
+          const sent = await sendSms(configData.phone_number, memoryContent);
+          if (sent) billCount++;
+        } else {
+          billCount++;
+        }
       }
 
       if (billCount > 0) {
