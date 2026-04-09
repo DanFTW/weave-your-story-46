@@ -9,6 +9,7 @@ export interface BillDueReminderConfig {
   userId: string;
   isActive: boolean;
   billsFound: number;
+  phoneNumber: string | null;
   createdAt: string;
   updatedAt: string;
 }

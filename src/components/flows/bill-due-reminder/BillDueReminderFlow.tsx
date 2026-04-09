@@ -53,9 +53,9 @@ export function BillDueReminderFlow() {
     navigate("/threads");
   };
 
-  const handleActivate = async () => {
+  const handleActivate = async (phoneNumber: string) => {
     setPhase("activating");
-    const success = await activate();
+    const success = await activate(phoneNumber);
     if (!success) setPhase("configure");
   };
 
@@ -101,6 +101,7 @@ export function BillDueReminderFlow() {
           <BillConfig
             onActivate={handleActivate}
             isActivating={isActivating}
+            currentPhone={config.phoneNumber}
           />
         )}
         {phase === "active" && config && (

@@ -11,6 +11,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COMPOSIO_API_KEY = Deno.env.get("COMPOSIO_API_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+const SMS_API_KEY = Deno.env.get("SMS_API_KEY")!;
 
 // ── Helpers ──
 
@@ -264,6 +265,43 @@ async function saveMemoryToLiam(
   }
 }
 
+// ── SMS ──
+
+async function sendSms(to: string, body: string): Promise<boolean> {
+  const digits = to.replace(/\D/g, "");
+  const normalized = digits.startsWith("+") ? digits : `+${digits}`;
+
+  const url = "https://weave-fabric-sms.onrender.com/send";
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": SMS_API_KEY,
+  };
+  const payload = JSON.stringify({ to: normalized, body });
+
+  try {
+    let res = await fetch(url, { method: "POST", headers, body: payload });
+
+    // Retry once on 502 (Render cold-start)
+    if (res.status === 502) {
+      console.log("[BillReminder] SMS gateway cold start (502), retrying in 3s...");
+      await new Promise((r) => setTimeout(r, 3000));
+      res = await fetch(url, { method: "POST", headers, body: payload });
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[BillReminder] SMS send failed ${res.status}:`, errText);
+      return false;
+    }
+
+    console.log(`[BillReminder] SMS sent to ${normalized}`);
+    return true;
+  } catch (e) {
+    console.error("[BillReminder] SMS send error:", e);
+    return false;
+  }
+}
+
 // ── Main handler ──
 
 serve(async (req) => {
@@ -272,7 +310,8 @@ serve(async (req) => {
   }
 
   try {
-    const { action } = await req.json();
+    const body = await req.json();
+    const { action, phoneNumber } = body;
     const userId = getUserId(req);
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -285,7 +324,10 @@ serve(async (req) => {
 
     // ── ACTIVATE ──
     if (action === "activate") {
-      await sb.from("bill_due_reminder_config").update({ is_active: true }).eq("user_id", userId);
+      const updatePayload: any = { is_active: true };
+      if (phoneNumber) updatePayload.phone_number = phoneNumber;
+      if (phoneNumber) updatePayload.phone_number = phoneNumber;
+      await sb.from("bill_due_reminder_config").update(updatePayload).eq("user_id", userId);
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -363,12 +405,18 @@ serve(async (req) => {
         }, { onConflict: "user_id,email_message_id" });
 
         // Save to LIAM
+        const memoryContent = `Bill: ${details.billerName || "Unknown"} — ${details.amountDue || "amount unknown"}, due ${details.dueDate || "date unknown"}`;
         if (apiKeys) {
-          const memoryContent = `Bill: ${details.billerName || "Unknown"} — ${details.amountDue || "amount unknown"}, due ${details.dueDate || "date unknown"}`;
           await saveMemoryToLiam(apiKeys.api_key, apiKeys.user_key, apiKeys.private_key, memoryContent, "BILL");
         }
 
-        billCount++;
+        // Send SMS notification
+        if (configData.phone_number) {
+          const sent = await sendSms(configData.phone_number, memoryContent);
+          if (sent) billCount++;
+        } else {
+          billCount++;
+        }
       }
 
       if (billCount > 0) {
