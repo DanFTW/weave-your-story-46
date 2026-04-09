@@ -103,15 +103,25 @@ export function ActiveMonitoring({ stats, config, events, onPause, onManualSync,
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+      {/* Events list */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 px-1">
           <Calendar className="w-5 h-5 text-primary" />
+          <h3 className="font-semibold text-foreground text-base">
+            Events found ({stats.eventsFound})
+          </h3>
         </div>
-        <div>
-          <p className="text-2xl font-bold text-foreground">{stats.eventsFound}</p>
-          <p className="text-sm text-muted-foreground">Events found</p>
-        </div>
+        {events.length > 0 ? (
+          events.map((event) => (
+            <FoundEventCard key={event.id} event={event} />
+          ))
+        ) : (
+          <div className="bg-card rounded-2xl border border-border p-5 text-center">
+            <p className="text-sm text-muted-foreground">
+              No events found yet. Tap "Find events now" to search.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Sync now */}
