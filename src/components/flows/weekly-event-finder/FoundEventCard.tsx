@@ -102,4 +102,4 @@ export const FoundEventCard = forwardRef<HTMLDivElement, FoundEventCardProps>(
       </div>
     </Collapsible>
   );
-}
+});
