@@ -286,7 +286,6 @@ export function EventFinderConfig({ config, onActivate, onUpdateConfig, isActiva
     </div>
   );
 }
-import { WeeklyEventFinderConfig } from "@/types/weeklyEventFinder";
 import { useInterestSync } from "@/hooks/useInterestSync";
 import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { usePhonePrefill } from "@/hooks/usePhonePrefill";
