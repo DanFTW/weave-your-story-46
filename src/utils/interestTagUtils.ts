@@ -78,18 +78,3 @@ export function filterBlockedInterests(tags: string[], blocklist: string | null)
   );
   return tags.filter(t => !blocked.has(t.toLowerCase()));
 }
-    .map(cleanInterestTag)
-    .filter(Boolean);
-
-  // Case-insensitive dedup, preserving first occurrence
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const tag of tags) {
-    const key = tag.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(tag);
-    }
-  }
-  return result;
-}
