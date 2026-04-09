@@ -26,7 +26,7 @@ export function WeeklyEventFinderFlow() {
   const { isConnected: gmailConnected, checkStatus: checkGmail } = useComposio("GMAIL");
 
   const {
-    phase, setPhase, config, stats,
+    phase, setPhase, config, stats, events,
     isLoading, isActivating, isSyncing,
     loadConfig, updateConfig, activate, deactivate, manualSync, prefill,
   } = useWeeklyEventFinder();
