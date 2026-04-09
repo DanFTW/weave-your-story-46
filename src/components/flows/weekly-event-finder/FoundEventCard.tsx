@@ -26,7 +26,7 @@ export const FoundEventCard = forwardRef<HTMLDivElement, FoundEventCardProps>(
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <div ref={ref} className="bg-card rounded-2xl border border-border overflow-hidden">
         <CollapsibleTrigger asChild>
           <button className="w-full p-4 flex items-center gap-3 text-left hover:bg-accent/30 transition-colors">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
