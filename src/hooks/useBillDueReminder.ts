@@ -40,6 +40,8 @@ export function useBillDueReminder() {
           dueDate: d.due_date ?? null,
           subject: d.subject ?? null,
           createdAt: d.created_at,
+          reminder7dSent: d.reminder_7d_sent ?? false,
+          reminder1dSent: d.reminder_1d_sent ?? false,
         }))
       );
     }
