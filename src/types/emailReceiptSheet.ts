@@ -26,3 +26,12 @@ export interface SpreadsheetOption {
   id: string;
   name: string;
 }
+
+export interface ProcessedExpense {
+  id: string;
+  vendor: string | null;
+  amount: string | null;
+  dateStr: string | null;
+  emailMessageId: string;
+  createdAt: string;
+}
