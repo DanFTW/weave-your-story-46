@@ -25,3 +25,12 @@ export interface EmailTextAlertStats {
   alertsSent: number;
   isActive: boolean;
 }
+
+export interface ProcessedAlert {
+  id: string;
+  emailMessageId: string;
+  senderEmail: string | null;
+  subject: string | null;
+  summary: string | null;
+  createdAt: string;
+}

@@ -313,11 +313,17 @@ serve(async (req) => {
 
         const summary = await summarizeEmail(body);
 
+        // Extract metadata for history display
+        const senderEmail = email.sender ?? email.from ?? null;
+        const emailSubject = email.subject ?? null;
+
         // Insert into processed table
         await sb.from("email_text_alert_processed").insert({
           user_id: userId,
           email_message_id: messageId,
           summary,
+          sender_email: typeof senderEmail === "string" ? senderEmail : null,
+          subject: typeof emailSubject === "string" ? emailSubject : null,
         });
 
         // Send SMS alert — only count if delivered
