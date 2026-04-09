@@ -23,3 +23,14 @@ export interface WeeklyEventFinderStats {
   eventsFound: number;
   isActive: boolean;
 }
+
+export interface FoundEvent {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: string | null;
+  eventDescription: string | null;
+  eventReason: string | null;
+  eventLink: string | null;
+  processedAt: string;
+}
