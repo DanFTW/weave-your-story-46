@@ -7,6 +7,7 @@ import { FoundEventCard } from "./FoundEventCard";
 interface ActiveMonitoringProps {
   stats: WeeklyEventFinderStats;
   config: WeeklyEventFinderConfig;
+  events: FoundEvent[];
   onPause: () => Promise<boolean>;
   onManualSync: () => Promise<void>;
   isSyncing: boolean;
@@ -14,7 +15,7 @@ interface ActiveMonitoringProps {
   isSyncingInterests: boolean;
 }
 
-export function ActiveMonitoring({ stats, config, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
+export function ActiveMonitoring({ stats, config, events, onPause, onManualSync, isSyncing, onSyncInterests, isSyncingInterests }: ActiveMonitoringProps) {
   return (
     <div className="space-y-6">
       {/* Toggle card */}
