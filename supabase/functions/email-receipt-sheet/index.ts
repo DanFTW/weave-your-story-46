@@ -600,11 +600,15 @@ serve(async (req) => {
 
       // Extract message IDs and bodies
       const candidates = emails
-        .map((e: any) => ({
-          messageId: e.id ?? e.messageId ?? e.message_id ?? "",
-          body: e.messageText ?? e.body ?? e.snippet ?? e.text ?? e.content ?? e.data ?? "",
-          subject: e.subject ?? "",
-        }))
+        .map((e: any) => {
+          const snippetBody = typeof e.snippet === "object" && e.snippet !== null ? (e.snippet.body ?? e.snippet.text ?? "") : (e.snippet ?? "");
+          const snippetSubject = typeof e.snippet === "object" && e.snippet !== null ? (e.snippet.subject ?? "") : "";
+          const body = e.messageText ?? e.body ?? snippetBody ?? e.text ?? e.content ?? e.data ?? "";
+          const subject = e.subject ?? e.Subject ?? snippetSubject ?? "";
+          const from = e.From ?? e.from ?? e.sender ?? "";
+          console.log(`[ReceiptSheet] Raw email ${e.id ?? e.messageId ?? "?"}: body length=${body.length}, subject="${subject}", from="${from}"`);
+          return { messageId: e.id ?? e.messageId ?? e.message_id ?? "", body, subject };
+        })
         .filter((e: any) => e.messageId && !processedIds.has(e.messageId));
 
       console.log(`[ReceiptSheet] ${candidates.length} unprocessed emails to check`);
