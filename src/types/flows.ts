@@ -63,6 +63,7 @@ export interface FlowConfig {
   isEmailReceiptSheetFlow?: boolean; // If true, uses Email Receipt to Spreadsheet UI
   isEmailTextAlertFlow?: boolean; // If true, uses Email to Text Alert UI
   isWeeklyEventFinderFlow?: boolean; // If true, uses Weekly Event Finder UI
+  isBillDueReminderFlow?: boolean; // If true, uses Bill Due Reminder UI
 }
 
 // Single data entry (e.g., one family member)
