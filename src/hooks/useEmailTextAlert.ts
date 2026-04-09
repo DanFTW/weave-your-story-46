@@ -5,12 +5,14 @@ import {
   EmailTextAlertPhase,
   EmailTextAlertConfig,
   EmailTextAlertStats,
+  ProcessedAlert,
 } from "@/types/emailTextAlert";
 
 export function useEmailTextAlert() {
   const { toast } = useToast();
   const [phase, setPhase] = useState<EmailTextAlertPhase>("auth-check");
   const [config, setConfig] = useState<EmailTextAlertConfig | null>(null);
+  const [alerts, setAlerts] = useState<ProcessedAlert[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -19,6 +21,28 @@ export function useEmailTextAlert() {
     alertsSent: config?.alertsSent ?? 0,
     isActive: config?.isActive ?? false,
   };
+
+  const loadAlerts = useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from("email_text_alert_processed" as any)
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (data) {
+      setAlerts(
+        (data as any[]).map((d) => ({
+          id: d.id,
+          emailMessageId: d.email_message_id,
+          senderEmail: d.sender_email ?? null,
+          subject: d.subject ?? null,
+          summary: d.summary ?? null,
+          createdAt: d.created_at,
+        }))
+      );
+    }
+  }, []);
 
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
@@ -51,6 +75,7 @@ export function useEmailTextAlert() {
           updatedAt: d.updated_at,
         });
         setPhase(d.is_active ? "active" : "configure");
+        await loadAlerts(user.id);
       } else {
         const { data: newConfig } = await supabase
           .from("email_text_alert_config" as any)
@@ -77,7 +102,7 @@ export function useEmailTextAlert() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadAlerts]);
 
   const updateConfig = useCallback(async (senderFilter: string, keywordFilter: string, phoneNumber: string) => {
     try {
@@ -150,6 +175,35 @@ export function useEmailTextAlert() {
     }
   }, [toast]);
 
+  const deleteAlert = useCallback(async (alertId: string) => {
+    try {
+      const { error } = await supabase
+        .from("email_text_alert_processed" as any)
+        .delete()
+        .eq("id", alertId);
+
+      if (error) {
+        toast({ title: "Failed to remove alert", variant: "destructive" });
+        return;
+      }
+
+      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+      setConfig((prev) => prev ? { ...prev, alertsSent: Math.max(0, prev.alertsSent - 1) } : null);
+
+      // Decrement counter in DB
+      if (config) {
+        await supabase
+          .from("email_text_alert_config" as any)
+          .update({ alerts_sent: Math.max(0, (config.alertsSent ?? 1) - 1) })
+          .eq("id", config.id);
+      }
+
+      toast({ title: "Alert removed" });
+    } catch {
+      toast({ title: "Failed to remove alert", variant: "destructive" });
+    }
+  }, [toast, config]);
+
   const manualSync = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -181,8 +235,8 @@ export function useEmailTextAlert() {
   }, [toast, loadConfig]);
 
   return {
-    phase, setPhase, config, stats,
+    phase, setPhase, config, stats, alerts,
     isLoading, isActivating, isSyncing,
-    loadConfig, updateConfig, activate, deactivate, manualSync,
+    loadConfig, updateConfig, activate, deactivate, deleteAlert, manualSync,
   };
 }

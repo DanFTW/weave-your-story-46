@@ -23,9 +23,9 @@ export function EmailTextAlertFlow() {
   const { isConnected: gmailConnected, checkStatus: checkGmail } = useComposio("GMAIL");
 
   const {
-    phase, setPhase, config, stats,
+    phase, setPhase, config, stats, alerts,
     isLoading, isActivating, isSyncing,
-    loadConfig, updateConfig, activate, deactivate, manualSync,
+    loadConfig, updateConfig, activate, deactivate, deleteAlert, manualSync,
   } = useEmailTextAlert();
 
   useEffect(() => {
