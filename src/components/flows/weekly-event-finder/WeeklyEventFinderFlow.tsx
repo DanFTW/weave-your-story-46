@@ -7,7 +7,7 @@ import { useRemovedInterestTags } from "@/hooks/useRemovedInterestTags";
 import { EventFinderConfig } from "./EventFinderConfig";
 import { ActiveMonitoring } from "./ActiveMonitoring";
 import { ActivatingScreen } from "./ActivatingScreen";
-import { parseAndDeduplicateInterestTags } from "@/utils/interestTagUtils";
+import { parseAndDeduplicateInterestTags, filterBlockedInterests } from "@/utils/interestTagUtils";
 import { cn } from "@/lib/utils";
 
 const gradientClasses: Record<string, string> = {
