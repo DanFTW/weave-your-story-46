@@ -77,6 +77,7 @@ export function useWeeklyEventFinder() {
             deliveryMethod: "email",
             email: null,
             phoneNumber: null,
+            blockedInterests: null,
             eventsFound: 0,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
