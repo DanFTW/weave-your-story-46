@@ -28,7 +28,7 @@ export function WeeklyEventFinderFlow() {
   const {
     phase, setPhase, config, stats, events,
     isLoading, isActivating, isSyncing,
-    loadConfig, updateConfig, activate, deactivate, manualSync, prefill,
+    loadConfig, updateConfig, activate, deactivate, manualSync, prefill, deleteEvent,
   } = useWeeklyEventFinder();
 
   const { filterRemoved } = useRemovedInterestTags();
