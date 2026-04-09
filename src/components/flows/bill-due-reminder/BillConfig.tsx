@@ -12,12 +12,12 @@ interface BillConfigProps {
 
 export function BillConfig({ onActivate, isActivating, currentPhone }: BillConfigProps) {
   const { phone, isLoading: phoneLoading } = usePhonePrefill(currentPhone);
-  const [phoneValue, setPhoneValue] = useState("");
+  const [phoneValue, setPhoneValue] = useState(phone || "");
 
   // Sync when prefill resolves
-  if (phone && !phoneValue) {
-    setPhoneValue(phone);
-  }
+  useEffect(() => {
+    if (phone && !phoneValue) setPhoneValue(phone);
+  }, [phone]);
 
   return (
     <div className="space-y-6">
