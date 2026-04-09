@@ -41,6 +41,7 @@ export function EmailTextAlertFlow() {
     if (!isCheckingGmail && gmailConnected) {
       loadConfig();
     } else if (!isCheckingGmail && !gmailConnected) {
+      sessionStorage.setItem("gmailConnectIntent", "email-text-alert");
       sessionStorage.setItem("returnAfterGmailConnect", "/flow/email-text-alert");
       navigate("/integration/gmail");
     }
