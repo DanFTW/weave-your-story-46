@@ -1,21 +1,25 @@
 
-Pure synthesis from prior audits. No new file reads needed — I have the inventory, root causes, Coinbase slug walkthrough, and direction-mismatch findings from the four prior audits in conversation history.
+User wants live Composio API testing against Coinbase auth config `ac_8qxtj5vBqSnf` with three specific slugs, then a rebuild estimate. This is research — no production code changes. But it does require running live API calls, which needs `code--exec` (default mode capability).
 
-## Plan: Shane Ground-Truth Thread List
+Plan:
+1. Read existing Coinbase code (`coinbase-trades-poll/index.ts`) to find the right user/connection ID under `ac_8qxtj5vBqSnf` and reuse the Composio v3 execute pattern.
+2. Query DB for an active connected account under that auth config to get a `connectionId`.
+3. Once approved, run three live Composio v3 tool executions via `code--exec` against `https://backend.composio.dev/api/v3/tools/execute/{slug}` with `COMPOSIO_API_KEY` and the connection ID for: `COINBASE_LIST_WALLETS`, `COINBASE_LIST_ASSETS`, `COINBASE_GET_SUPPORTED_NETWORKS`.
+4. Capture exact response shape, success flag, real-data check for each.
+5. Synthesize rebuild scope + honest hour estimate based on what those calls actually return.
 
-### Approach
-Bundle the 38 threads into ~21 integration-grouped entries (grab + continuous merged per Shane's framing). For each: name, what it does, my testing claim (I'll mark all as "needs your confirmation" — I cannot know what the user personally tested), known problems with root cause, confidence rating.
+No production file edits. Output is a research report.
 
-### Critical caveat I must flag upfront
-I do not have visibility into which threads the user has personally tested with real accounts. I'll structure column 3 as "evidence in code/telemetry" + a "your call" placeholder so the user can fill in account counts. This is the honest move — fabricating test counts would burn them in front of Shane.
+## Steps once approved
+1. `code--view supabase/functions/coinbase-trades-poll/index.ts` — confirm exact execute payload shape and headers
+2. `supabase--read_query` — find one connected account under `ac_8qxtj5vBqSnf` (composio_connection_id from `user_integrations` where toolkit_slug='coinbase')
+3. Three parallel `code--exec curl` calls to `https://backend.composio.dev/api/v3/tools/execute/{SLUG}` with `x-api-key: $COMPOSIO_API_KEY`, body `{"connected_account_id": "...", "arguments": {}}`
+4. For each, record: HTTP status, `successful` flag, `data` shape, error if any
+5. Write final report with:
+   - Per-slug results table (auth success, response shape, real data y/n)
+   - Rebuild scope: replace `coinbase-trades-poll` with `coinbase-wallets-grab` + `coinbase-wallets-watch`, new tables, new UI flow components, cron entry
+   - Honest hour breakdown by component
+   - Risk callouts (Composio coverage gaps surfaced by the live test)
 
-### Output structure
-1. **Per-integration table** (~21 rows): Integration | Thread(s) | What it does (grab + continuous) | Telemetry evidence | Known problems + root cause | Confidence
-2. **Your 4–5 hero threads** — the most defensible by code maturity, telemetry, and PRD alignment
-3. **Cut / deprioritize list** — with one-line reason each
-4. **Coinbase deep dive** — every slug attempted, return shape, failure reason, three root causes consolidated
-
-Confidence scale: 🟢 rock solid · 🟡 works with known bugs · 🟠 partial · 🔴 broken
-
-### Length
-~400 lines. Single response, no code changes.
+## Output
+Single markdown report, ~250-400 lines. No code changes to `src/` or production edge functions. May write a throwaway test script to `/tmp/` only.
