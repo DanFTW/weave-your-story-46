@@ -1,57 +1,29 @@
 
+The user sent "b" which is ambiguous. They're viewing the plan file. I'll interpret this as a request to proceed with the audit using inferred migration status (option b from my prior plan), since that's the only "b" option I offered.
 
-## Add Summary SMS + Due-Date Reminder Texts to Bill Due Reminder
+Proceeding with the audit plan as previously outlined — no further clarification needed.
 
-### Problem
-Currently, each bill triggers an individual SMS during sync. There's no consolidated overview text and no pre-due-date reminder texts (7-day and 1-day).
+## Plan: Full Thread Status Audit (Inferred Migration Mode)
 
-### Changes
+### Approach
+Generate a comprehensive per-thread status table grouped by integration. Migration-status section will use commit recency as a proxy ("candidates for migration") since I have no access to the upstream `weavefabric` repo.
 
-**1. Database Migration** — Add reminder tracking columns to `bill_due_reminder_processed`:
-```sql
-ALTER TABLE public.bill_due_reminder_processed
-  ADD COLUMN reminder_7d_sent boolean NOT NULL DEFAULT false,
-  ADD COLUMN reminder_1d_sent boolean NOT NULL DEFAULT false;
-```
+### Data sources I'll query (read-only, in plan execution)
+1. `src/data/threads.ts` — canonical 38-thread list
+2. `supabase/functions/*/index.ts` — trigger registration logic, slugs, polling vs webhook
+3. `stat` on each edge function file → last modified date
+4. Supabase queries:
+   - `SELECT integration_id, COUNT(*), COUNT(*) FILTER (WHERE status='connected') FROM user_integrations GROUP BY integration_id` → OAuth completion proof
+   - Per-thread config tables: `SELECT COUNT(*), SUM(<tracked_counter>) FROM <thread>_config WHERE is_active=true` → real memory writes
+   - `*_processed` tables row counts → confirmed memory writes
 
-**2. Edge Function (`supabase/functions/bill-due-reminder/index.ts`)** — Three additions:
+### Output structure
+For each integration group (Gmail, Google Workspace, Spotify, Discord, Slack, Twitter, Instagram, Facebook, YouTube, LinkedIn, HubSpot, Trello, Todoist, Fireflies, Coinbase, Manual):
 
-**a) Summary SMS on initial sync:**
-In the `manual-sync` action, after processing all new bills, compose one consolidated SMS listing all newly detected bills (biller, amount, due date) and send it to the user's phone. Example:
-```
-Your bills summary:
-• Comcast — $89.99, due Apr 15
-• Electric Co — $120.00, due Apr 20
-```
-Only sent when there are new bills found in that sync run.
+| Thread | Type | Toolkit slug | Auth Config ID | Trigger/webhook | OAuth wired | Trigger registered | Memories written | Last modified | Issues |
 
-**b) Due-date reminder logic (`checkAndSendReminders` helper):**
-- Query all `bill_due_reminder_processed` rows for a user where `due_date` is not null
-- Parse each `due_date` string into a Date (use the LLM-standardized format)
-- Compare to today:
-  - If due date is ≤ 7 days away and `reminder_7d_sent = false` → send SMS: `"Reminder: [Biller] — [Amount] is due in 7 days ([Date])"` → set `reminder_7d_sent = true`
-  - If due date is ≤ 1 day away and `reminder_1d_sent = false` → send SMS: `"Reminder: [Biller] — [Amount] is due tomorrow ([Date])"` → set `reminder_1d_sent = true`
-- Call this helper at the end of `manual-sync` (so users get reminders when they sync)
+Then a final **"Migration candidates (inferred)"** section listing threads modified in the last ~30 days in this remix — flagged as likely not yet in upstream `weavefabric` main. Clearly labeled as inference, not confirmed.
 
-**c) `cron-poll` action:**
-- Add a new `cron-poll` action following the standard pattern (validate `x-cron-secret` or `x-cron-trigger: supabase-internal`)
-- For each active user in `bill_due_reminder_config`, call `checkAndSendReminders`
-- This ensures reminders fire automatically without manual sync
-- Add `CRON_SECRET` env var read (already exists as a Supabase secret)
-
-**3. Types (`src/types/billDueReminder.ts`)** — Add fields to `ProcessedBill`:
-```typescript
-reminder7dSent: boolean;
-reminder1dSent: boolean;
-```
-
-**4. Hook (`src/hooks/useBillDueReminder.ts`)** — Map the new fields in `loadBills`.
-
-### Files
-| File | Action |
-|------|--------|
-| DB migration | Add `reminder_7d_sent`, `reminder_1d_sent` booleans |
-| `supabase/functions/bill-due-reminder/index.ts` | Add summary SMS, `checkAndSendReminders`, `cron-poll` action |
-| `src/types/billDueReminder.ts` | Add reminder fields to `ProcessedBill` |
-| `src/hooks/useBillDueReminder.ts` | Map new fields in `loadBills` |
-
+### Estimated output
+~400 lines of structured markdown tables + ~20-line migration section.
+No code changes. Pure read/audit.
