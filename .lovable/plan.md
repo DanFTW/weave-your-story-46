@@ -1,41 +1,55 @@
 
-This is a pure research/audit request — no code changes. The user wants every PRD user story (across ~21 integrations) classified into one of four buckets: ✅ built & working, 🔧 built but broken (root cause), ⚙️ partial, ❌ not built — plus a "direction mismatch" flag.
+Pure research/synthesis task — no code changes. I have all the data from the four prior audits. This is a packaging exercise: convert technical findings into Shane-ready talking points + dispositions + effort estimates + prioritization.
 
-I already have most of the data from the prior three audits. What's new here is the **PRD-filtered scope** and the **per-user-story granularity** (not per-thread). Many PRD stories don't map 1:1 to existing threads — e.g., Gmail "semantic search thread" doesn't exist as a thread, only as the email-dump on-demand search; Instagram "native share extension" is a mobile share-target feature that I need to verify exists; iOS MusicKit / Apple Health / CalendarKit / Eventbrite / Google Contacts / OneDrive may be entirely absent.
+## Plan: Shane Prep Pack
 
-### What I need to verify (read-only)
-1. `src/data/threads.ts` — confirmed inventory (38 items), already known
-2. Search for evidence of:
-   - **Instagram stories sync** — likely ❌ (constraint memory says unsupported)
-   - **Native share extension** — search for `share-target`, Despia share intent, manifest share_target
-   - **Gmail semantic search thread** (recurring, not on-demand) — vs `email-dump` (on-demand). Likely ⚙️ partial
-   - **Google Contacts** — search for `googlecontacts`, `GOOGLE_CONTACTS_*`
-   - **Eventbrite** — search for `eventbrite`
-   - **OneDrive** — search for `onedrive`
-   - **iOS MusicKit / CalendarKit / Apple Health** — search for `musickit`, `healthkit`, `calendarkit`, despia native bridges
-   - **Twitter bookmarks** — vs likes (twitter-sync covers likes/retweets/replies — bookmarks may be missing)
-   - **Facebook friends life updates** — distinct from page posts / own posts
-   - **YouTube watch history** — youtube-sync claims it; verify
-   - **Spotify "previous songs" grab + liked songs grab** — spotify-music-finder is a different feature (AI playlist builder); the PRD asks for raw liked-song dumps. Likely **direction mismatch**
-   - **Discord per-channel thread without trigger word** — discord-tracker covers it; verify
-   - **Slack per-channel without trigger word** — slack-messages-sync covers it; verify
-   - **Coinbase wallet changes with interval** — current is trades; PRD asks for wallet listing + balance changes. Possible direction mismatch
-3. Quick file searches to confirm presence/absence — no DB queries needed since prior audits established memory-write telemetry.
+### Approach
+No new file reads needed — synthesize from prior audit outputs (PRD scope, root causes, status table, direction mismatches). One small verification pass to sanity-check effort estimates against codebase complexity for the top 10 items.
 
 ### Output structure
-For each of the 21 integrations, a sub-table:
+Single deliverable, ~500–700 lines of markdown, organized as:
 
-| User Story | Status | Notes / Root Cause / Direction Mismatch |
-|---|---|---|
+**Section 1 — Per-story table (46 rows), grouped by integration**
 
-Status icons: ✅ working · 🔧 broken (root cause) · ⚙️ partial · ❌ not built · ⚠️ direction mismatch
+| Story | Talking point (1 line, plain English) | Disposition | Effort (hrs) |
 
-End with:
-- **Summary scoreboard** (counts per bucket across all stories)
-- **Direction mismatches** (Spotify Music Finder vs liked-songs grab, Coinbase trades vs wallet listing, possibly others)
-- **Biggest gaps** (Eventbrite, Google Contacts, OneDrive, Apple Health, iOS MusicKit, Native share extension, Instagram stories)
+Dispositions (fixed vocabulary):
+- 🟢 Ship as-is
+- 🟡 Finish partial
+- 🔴 Rebuild (direction mismatch)
+- 🔧 Fix known bug
+- ⭐ Not started, prioritize
+- ⏸ Deprioritize (platform limit)
 
-### Investigation steps before writing the report
-A handful of parallel `code--search_files` calls to confirm presence/absence of: share-target manifest, googlecontacts, eventbrite, onedrive, musickit, healthkit, twitter bookmarks, youtube watch history endpoint, facebook friends API. ~5–8 search calls + 2–3 file reads. No DB queries (already done). No code changes.
+Effort: blank for 🟢; hours for everything else (rough t-shirt buckets: 4 / 8 / 16 / 24 / 40 / 80).
 
-Output: ~300–450 line markdown report.
+**Section 2 — Top 10 prioritized list**
+Ranked by PRD impact ÷ effort. Each row: rank, story, why it wins, hours, expected outcome.
+
+**Section 3 — Direction-mismatch rebuild specs**
+For each of the 4 mismatches (Spotify Music Finder, Calendar Event Sync, plus any others surfaced):
+- What it does today (1 line)
+- What PRD requires (1 line)
+- Rebuild scope (3–5 bullets)
+- Rough effort + reuse opportunities
+
+**Section 4 — Shane's anticipated questions**
+~10–12 likely product/engineering questions with one-line answers:
+- "Why are we polling Twitter when the Free tier rate-limits us?"
+- "Can we ship Instagram stories at all this quarter?"
+- "What's the cost of cutting the iOS native bridges from scope?"
+- "Why does Spotify Music Finder push instead of pull?"
+- "How long to ship the top 10?"
+- "Which integrations should we deprecate publicly vs hide?"
+- "What's the LIAM API throughput ceiling for bulk grabs?"
+- "Are we blocked on any vendor (Composio, Despia, Apify)?"
+- "Which stories need design vs engineering only?"
+- "What's the migration story to weavefabric main?"
+
+### What I will NOT do
+- No code changes
+- No new DB queries (all telemetry already captured)
+- No new file reads beyond a quick spot-check of 2–3 hooks to validate effort buckets
+
+### Estimated length
+~600 lines. Single markdown response, no code blocks except the tables.
