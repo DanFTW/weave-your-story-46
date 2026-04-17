@@ -1,25 +1,24 @@
 
-User wants live Composio API testing against Coinbase auth config `ac_8qxtj5vBqSnf` with three specific slugs, then a rebuild estimate. This is research — no production code changes. But it does require running live API calls, which needs `code--exec` (default mode capability).
+User is calling out that the previous audit was wrong — Composio actually exposes ~28 Coinbase tools. Need to re-run diagnostic correctly.
 
 Plan:
-1. Read existing Coinbase code (`coinbase-trades-poll/index.ts`) to find the right user/connection ID under `ac_8qxtj5vBqSnf` and reuse the Composio v3 execute pattern.
-2. Query DB for an active connected account under that auth config to get a `connectionId`.
-3. Once approved, run three live Composio v3 tool executions via `code--exec` against `https://backend.composio.dev/api/v3/tools/execute/{slug}` with `COMPOSIO_API_KEY` and the connection ID for: `COINBASE_LIST_WALLETS`, `COINBASE_LIST_ASSETS`, `COINBASE_GET_SUPPORTED_NETWORKS`.
-4. Capture exact response shape, success flag, real-data check for each.
-5. Synthesize rebuild scope + honest hour estimate based on what those calls actually return.
+1. Query Composio's tool listing endpoint correctly: `GET https://backend.composio.dev/api/v3/tools?toolkit_slug=coinbase` (or `&toolkits=coinbase`) with `x-api-key` header. Confirm full count + exact slug casing.
+2. Live-execute 6 slugs against connection `ca_N6QTt3ZhkatV` under auth config `ac_8qxtj5vBqSnf` via `POST /api/v3/tools/execute/{slug}` with `{connected_account_id, arguments}`.
+   - COINBASE_LIST_WALLETS — no args
+   - COINBASE_LIST_ASSETS — no args
+   - COINBASE_GET_SUPPORTED_NETWORKS — no args
+   - COINBASE_LIST_CURRENCIES — no args
+   - COINBASE_GET_ASSET_DETAILS — needs asset_id (pull one from LIST_ASSETS result, or try "BTC")
+   - COINBASE_LIST_WRAPPED_ASSETS — no args
+3. For each: capture HTTP status, `successful` flag, error_code/message, response_data shape (top-level keys, array length).
+4. Rebuild estimate based on what actually returned real data.
 
-No production file edits. Output is a research report.
+Requires: code--exec (live curl with COMPOSIO_API_KEY env), and reading existing coinbase-trades-poll/index.ts to mirror exact request shape. No production edits.
 
-## Steps once approved
-1. `code--view supabase/functions/coinbase-trades-poll/index.ts` — confirm exact execute payload shape and headers
-2. `supabase--read_query` — find one connected account under `ac_8qxtj5vBqSnf` (composio_connection_id from `user_integrations` where toolkit_slug='coinbase')
-3. Three parallel `code--exec curl` calls to `https://backend.composio.dev/api/v3/tools/execute/{SLUG}` with `x-api-key: $COMPOSIO_API_KEY`, body `{"connected_account_id": "...", "arguments": {}}`
-4. For each, record: HTTP status, `successful` flag, `data` shape, error if any
-5. Write final report with:
-   - Per-slug results table (auth success, response shape, real data y/n)
-   - Rebuild scope: replace `coinbase-trades-poll` with `coinbase-wallets-grab` + `coinbase-wallets-watch`, new tables, new UI flow components, cron entry
-   - Honest hour breakdown by component
-   - Risk callouts (Composio coverage gaps surfaced by the live test)
+Output: ~200-line markdown report with the corrected tool count, per-slug results table, and a revised honest hour estimate that may be lower than the prior 32hr if Composio actually covers wallets cleanly.
 
-## Output
-Single markdown report, ~250-400 lines. No code changes to `src/` or production edge functions. May write a throwaway test script to `/tmp/` only.
+Steps once approved:
+1. `code--view supabase/functions/coinbase-trades-poll/index.ts` lines 80-115 (confirm execute call shape)
+2. Parallel `code--exec`: (a) list tools, (b-g) six execute calls
+3. If LIST_ASSETS returns IDs, re-run GET_ASSET_DETAILS with a real asset_id
+4. Write report
